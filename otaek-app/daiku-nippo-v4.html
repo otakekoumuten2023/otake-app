@@ -1,0 +1,1906 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="大竹日報"/>
+<meta name="theme-color" content="#1a1a16"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<link rel="manifest" id="pwa-manifest"/>
+<title>大竹工務店 日報</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Noto Sans JP',sans-serif;background:#111110;min-height:100vh;display:flex;justify-content:center}
+#app{width:100%;max-width:430px;min-height:100vh;background:#1a1a16;display:flex;flex-direction:column}
+
+/* ヘッダー */
+#header{background:#222220;padding:14px 16px 10px;border-bottom:1px solid #2e2e28}
+.h-title{color:#e8d5a3;font-size:17px;font-weight:700}
+.h-sub{color:#555;font-size:10px;margin-top:1px}
+.stat-row{display:flex;gap:6px;margin-top:10px}
+.stat{flex:1;background:#161614;border-radius:9px;padding:7px 8px;border:1px solid #2e2e28;text-align:center}
+.stat-num{font-size:15px;font-weight:700;color:#c8962a}
+.stat-num.blue{color:#70a8e8}.stat-num.green{color:#70c870}.stat-num.purple{color:#c870e8}
+.stat-label{color:#555;font-size:8px;margin-top:1px}
+
+/* コンテンツ */
+#content{flex:1;overflow-y:auto;padding-bottom:80px}
+.section-label{color:#444;font-size:9px;font-weight:700;letter-spacing:2px;padding:12px 16px 4px}
+
+/* カード */
+.card{background:#222220;margin:5px 12px;border-radius:12px;padding:13px 14px;border:1px solid #2e2e28}
+.card-row{display:flex;justify-content:space-between;align-items:center}
+
+/* 日報カード */
+.nippo-card{background:#222220;margin:5px 12px;border-radius:13px;padding:14px;border:1px solid #2e2e28;cursor:pointer;transition:opacity .15s}
+.nippo-card:active{opacity:.7}
+.nippo-date{color:#e8d5a3;font-size:14px;font-weight:700}
+.nippo-job{color:#c8962a;font-size:12px;margin-top:2px;font-weight:600}
+.nippo-meta{color:#666;font-size:10px;margin-top:4px}
+.nippo-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.nippo-chip{border-radius:7px;padding:3px 9px;font-size:10px;font-weight:600}
+.chip-worker{background:#1a2a3a;color:#70a8e8}
+.chip-kouji{background:#2a1a3a;color:#c870e8}
+.chip-ninku{background:#3a2a10;color:#e8b050}
+.chip-zairyo{background:#1a3a1a;color:#70c870}
+.nippo-summary{margin-top:10px;padding-top:10px;border-top:1px solid #2e2e28;display:flex;justify-content:space-between}
+.nippo-sum-item{text-align:center}
+.nippo-sum-val{color:#c8962a;font-size:14px;font-weight:700}
+.nippo-sum-label{color:#555;font-size:9px;margin-top:1px}
+
+/* フィルター */
+.filter-row{display:flex;gap:5px;padding:8px 12px 2px;overflow-x:auto;scrollbar-width:none}
+.filter-row::-webkit-scrollbar{display:none}
+.filter-chip{flex-shrink:0;border:none;border-radius:18px;padding:5px 11px;font-size:10px;cursor:pointer;font-family:inherit}
+
+/* 集計バナー */
+.summary-banner{background:linear-gradient(135deg,#2a2210 0%,#1e1c10 100%);margin:10px 12px;border-radius:14px;padding:14px 16px;border:1px solid #3a3218}
+.sb-title{color:#888;font-size:10px;letter-spacing:1px;margin-bottom:10px}
+.sb-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sb-cell{background:#1a1810;border-radius:10px;padding:10px 12px;border:1px solid #2e2a18}
+.sb-label{color:#666;font-size:9px;margin-bottom:4px}
+.sb-val{font-size:15px;font-weight:700;color:#c8962a}
+.sb-unit{font-size:10px;color:#888;margin-left:2px}
+
+/* 分析タブ */
+.analysis-card{background:#222220;margin:6px 12px;border-radius:12px;padding:14px;border:1px solid #2e2e28}
+.analysis-title{color:#e8d5a3;font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.bar-item{margin-bottom:10px}
+.bar-label-row{display:flex;justify-content:space-between;margin-bottom:3px}
+.bar-label{color:#888;font-size:11px}
+.bar-val{color:#c8962a;font-size:11px;font-weight:700}
+.bar-track{background:#161614;border-radius:4px;height:6px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#c8962a,#e8b050);transition:width .5s ease}
+.bar-fill.blue{background:linear-gradient(90deg,#4a7ac8,#70a8e8)}
+.bar-fill.purple{background:linear-gradient(90deg,#8a50c8,#c870e8)}
+.bar-fill.green{background:linear-gradient(90deg,#4a9a4a,#70c870)}
+
+/* 工事別テーブル */
+.job-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:4px}
+.job-table th{color:#555;font-size:9px;padding:5px 6px;text-align:left;border-bottom:1px solid #2e2e28;font-weight:600}
+.job-table td{color:#e8d5a3;padding:7px 6px;border-bottom:1px solid #1e1e1a}
+.job-table tr:last-child td{border-bottom:none}
+.td-num{text-align:right;color:#c8962a;font-weight:700}
+.td-small{color:#666;font-size:9px}
+
+/* ボタン */
+.btn-sm{background:#2e2e28;color:#c8c8b0;border:none;border-radius:7px;padding:5px 9px;font-size:10px;cursor:pointer;font-family:inherit}
+.btn-full{width:100%;background:#c8962a;color:#1a1a18;border:none;border-radius:9px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px}
+.btn-cancel{flex:1;background:#2e2e28;color:#666;border:none;border-radius:9px;padding:11px;font-size:13px;cursor:pointer;font-family:inherit}
+.btn-confirm{flex:1;color:#1a1a18;border:none;border-radius:9px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-confirm.gold{background:#e8b050}
+.btn-confirm.green{background:#70c870}
+.btn-confirm.blue{background:#5a9ae8}
+.btn-confirm.red{background:#e87050}
+.btn-row{display:flex;gap:7px;margin-top:6px}
+
+/* FAB */
+#fab{position:fixed;bottom:70px;right:calc(50% - 198px);background:#c8962a;color:#1a1a18;border:none;border-radius:50%;width:46px;height:46px;font-size:22px;cursor:pointer;box-shadow:0 4px 14px #c8962a66;display:flex;align-items:center;justify-content:center;z-index:50;font-family:inherit}
+
+/* タブバー */
+#tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#222220;border-top:1px solid #2e2e28;display:flex;z-index:50}
+.tab-btn{flex:1;padding:8px 0 6px;background:none;border:none;color:#444;font-size:9px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;font-family:inherit}
+.tab-btn.active{color:#c8962a;font-weight:700}
+.tab-icon{font-size:17px}
+
+/* モーダル */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:100;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#222220;width:100%;max-width:430px;border-radius:18px 18px 0 0;padding:20px 16px 34px;border:1px solid #2e2e28;max-height:90vh;overflow-y:auto}
+.sheet-title{font-size:15px;font-weight:700;margin-bottom:3px;color:#e8d5a3}
+.sheet-desc{color:#555;font-size:10px;margin-bottom:14px}
+.form-label{color:#666;font-size:10px;margin-bottom:3px;display:block}
+.form-input{width:100%;background:#161614;border:1px solid #2e2e28;border-radius:7px;padding:9px 10px;color:#e8d5a3;font-size:12px;margin-bottom:9px;outline:none;font-family:inherit}
+.form-select{width:100%;background:#161614;border:1px solid #2e2e28;border-radius:7px;padding:9px 10px;color:#e8d5a3;font-size:12px;margin-bottom:9px;outline:none;font-family:inherit;appearance:none;-webkit-appearance:none}
+.form-row{display:flex;gap:7px}.form-row>div{flex:1}
+.form-textarea{width:100%;background:#161614;border:1px solid #2e2e28;border-radius:7px;padding:9px 10px;color:#e8d5a3;font-size:12px;margin-bottom:9px;outline:none;font-family:inherit;resize:none;min-height:60px}
+
+/* 工種チップセレクター */
+.kouji-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:9px}
+.kouji-chip{border:1px solid #2e2e28;border-radius:8px;padding:8px;text-align:center;cursor:pointer;font-size:11px;color:#888;background:#161614;transition:all .15s;font-family:inherit}
+.kouji-chip.selected{border-color:#c8962a;background:#3a2a10;color:#c8962a;font-weight:700}
+
+/* 使用材料リスト */
+.material-list{margin-bottom:9px}
+.material-row{display:flex;flex-direction:column;gap:5px;margin-bottom:8px;background:#161614;border:1px solid #2e2e28;border-radius:10px;padding:9px 11px}
+.material-row-top{display:flex;align-items:center;gap:6px}
+.material-name{flex:1;color:#e8d5a3;font-size:11px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.material-qty{width:50px;background:transparent;border:none;border-bottom:1px solid #3a3a30;color:#c8962a;font-size:11px;font-weight:700;text-align:right;outline:none;font-family:inherit;padding:2px 0}
+.material-unit{color:#666;font-size:10px;min-width:20px}
+.material-del{background:none;border:none;color:#555;font-size:14px;cursor:pointer;padding:2px 4px}
+.mat-inv-row{display:flex;gap:4px;align-items:center}
+.mat-inv-btn{border:none;border-radius:6px;padding:3px 8px;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+.mat-inv-btn.use{background:#3a2a10;color:#e8b050;border:1px solid #4a3a20}
+.mat-inv-btn.out{background:#1a2a3a;color:#70a8e8;border:1px solid #2a3a4a}
+.mat-inv-btn.memo{background:#1e1e1a;color:#555;border:1px solid #2e2e28}
+.mat-inv-btn.active-use{background:#e8b050;color:#1a1a16}
+.mat-inv-btn.active-out{background:#70a8e8;color:#1a1a16}
+.mat-inv-btn.active-memo{background:#3a3a30;color:#c8c8b0}
+.mat-inv-stock{color:#555;font-size:9px;margin-left:auto}
+.mat-inv-stock.low{color:#e87050}
+
+/* 材料検索・選択UI */
+.mat-search-wrap{background:#161614;border:1px solid #2e2e28;border-radius:10px;padding:10px 11px;margin-bottom:9px}
+.mat-search-input{width:100%;background:#1a1a18;border:1px solid #2e2e28;border-radius:7px;padding:7px 10px;color:#e8d5a3;font-size:12px;outline:none;font-family:inherit;margin-bottom:7px}
+.mat-loc-tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-bottom:7px}
+.mat-loc-tabs::-webkit-scrollbar{display:none}
+.mat-loc-tab{flex-shrink:0;border:none;border-radius:6px;padding:4px 9px;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;background:#1e1e1a;color:#555}
+.mat-loc-tab.active{background:#3a3218;color:#c8962a}
+.mat-item-list{max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.mat-item-btn{background:#1e1e1a;border:1px solid #2e2e28;border-radius:7px;padding:7px 10px;cursor:pointer;font-family:inherit;text-align:left;display:flex;justify-content:space-between;align-items:center;transition:opacity .15s}
+.mat-item-btn:active{opacity:.7}
+.mat-item-name{color:#e8d5a3;font-size:11px;font-weight:600}
+.mat-item-sub{color:#555;font-size:9px;margin-top:1px}
+.mat-item-stock{color:#c8962a;font-size:10px;font-weight:700}
+
+/* 作業者リスト */
+.worker-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+.worker-chip{border:1px solid #2e2e28;border-radius:18px;padding:5px 12px;font-size:11px;cursor:pointer;color:#888;background:#161614;transition:all .15s;font-family:inherit;display:flex;align-items:center;gap:4px}
+.worker-chip.selected{border-color:#70a8e8;background:#1a2a3a;color:#70a8e8;font-weight:700}
+
+/* データ管理タブ */
+.data-section{margin:8px 12px}
+.data-card{background:#222220;border-radius:12px;padding:14px;border:1px solid #2e2e28;margin-bottom:10px}
+.data-card-title{color:#e8d5a3;font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.data-btn-row{display:flex;flex-direction:column;gap:8px}
+.data-btn{width:100%;border:none;border-radius:9px;padding:12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px}
+.data-btn.blue{background:#1a2a3a;color:#70a8e8;border:1px solid #2a3a4a}
+.data-btn.green{background:#1a3a1a;color:#70c870;border:1px solid #2a4a2a}
+.data-btn.gold{background:#3a2a10;color:#e8b050;border:1px solid #4a3a20}
+.data-btn.red{background:#3a1a1a;color:#e87050;border:1px solid #4a2a2a}
+.data-btn.purple{background:#2a1a3a;color:#c870e8;border:1px solid #3a2a4a}
+.export-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.export-btn{border:none;border-radius:9px;padding:12px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:4px}
+.export-btn .e-icon{font-size:20px}
+.eb-nippo{background:#3a2a10;color:#e8b050;border:1px solid #4a3a20}
+.eb-kouji{background:#2a1a3a;color:#c870e8;border:1px solid #3a2a4a}
+.eb-worker{background:#1a2a3a;color:#70a8e8;border:1px solid #2a3a4a}
+.eb-backup{background:#1a3a1a;color:#70c870;border:1px solid #2a4a2a}
+
+/* 連携ステータス */
+.sync-banner{background:#1a2a1a;border:1px solid #2a4a2a;margin:6px 12px;border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
+.sync-ok{color:#70c870;font-size:10px;font-weight:700}
+.sync-ng{color:#e87050;font-size:10px;font-weight:700}
+
+.empty-msg{color:#444;text-align:center;padding:28px;font-size:12px}
+.period-btns{display:flex;gap:5px;margin-bottom:10px}
+.period-btn{flex:1;border:1px solid #2e2e28;background:#161614;color:#666;border-radius:7px;padding:5px;font-size:10px;cursor:pointer;font-family:inherit}
+.period-btn.active{background:#3a3218;color:#c8962a;border-color:#c8962a44;font-weight:700}
+
+.divider{height:1px;background:#2e2e28;margin:8px 0}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e1e1a}
+.info-label{color:#666;font-size:11px}
+.info-val{color:#e8d5a3;font-size:11px;font-weight:600}
+
+/* 人工入力 */
+.ninku-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#161614;border:1px solid #2e2e28;border-radius:8px;padding:8px 10px}
+.ninku-name{flex:1;color:#70a8e8;font-size:11px}
+.ninku-input{width:60px;background:transparent;border:none;border-bottom:1px solid #3a3a30;color:#e8b050;font-size:13px;font-weight:700;text-align:right;outline:none;font-family:inherit}
+.ninku-unit{color:#666;font-size:10px}
+
+.badge-red{background:#e8705022;color:#e87050;font-size:9px;border-radius:5px;padding:2px 7px;font-weight:700}
+.badge-green{background:#70c87022;color:#70c870;font-size:9px;border-radius:5px;padding:2px 7px;font-weight:700}
+.badge-gold{background:#c8962a22;color:#c8962a;font-size:9px;border-radius:5px;padding:2px 7px;font-weight:700}
+
+/* カレンダー */
+.cal-wrap{background:#222220;margin:6px 12px;border-radius:13px;padding:14px;border:1px solid #2e2e28}
+.cal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.cal-title{color:#e8d5a3;font-size:13px;font-weight:700}
+.cal-nav{background:none;border:none;color:#888;font-size:18px;cursor:pointer;padding:2px 8px;border-radius:6px}
+.cal-nav:active{background:#2e2e28}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-dow{color:#555;font-size:9px;text-align:center;padding:3px 0;font-weight:700}
+.cal-dow.sun{color:#e87050}.cal-dow.sat{color:#70a8e8}
+.cal-day{aspect-ratio:1;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;transition:opacity .15s}
+.cal-day:active{opacity:.7}
+.cal-day-num{font-size:11px;font-weight:600;line-height:1}
+.cal-day.other-month .cal-day-num{color:#333}
+.cal-day.today-cell{background:#3a3218;border:1px solid #c8962a55}
+.cal-day.today-cell .cal-day-num{color:#c8962a;font-weight:700}
+.cal-day.has-nippo .cal-day-num{color:#e8d5a3}
+.cal-day.weekend-sun .cal-day-num{color:#e87050}
+.cal-day.weekend-sat .cal-day-num{color:#70a8e8}
+.cal-day.missing-day{background:#3a1a1044}
+.cal-dot-wrap{display:flex;gap:1px;margin-top:2px;min-height:6px;justify-content:center}
+.cal-dot{width:5px;height:5px;border-radius:50%}
+.cal-dot-nippo{background:#c8962a}
+.cal-dot-missing{background:#e8705066;width:5px;height:5px;border-radius:50%}
+.cal-legend{display:flex;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid #2e2e28;flex-wrap:wrap}
+.cal-legend-item{display:flex;align-items:center;gap:4px;font-size:9px;color:#666}
+
+/* 工種カテゴリ */
+.kouji-cat-label{color:#555;font-size:9px;font-weight:700;letter-spacing:1px;margin:8px 0 4px;padding-left:2px}
+.kouji-chip.jimu{border-color:#2a3a4a}
+.kouji-chip.jimu.selected{border-color:#70a8e8;background:#1a2a3a;color:#70a8e8}
+.kouji-chip.keiei{border-color:#3a2a4a}
+.kouji-chip.keiei.selected{border-color:#c870e8;background:#2a1a3a;color:#c870e8}
+.kouji-chip.priv{border-color:#1a3a2a}
+.kouji-chip.priv.selected{border-color:#70c8a0;background:#1a3a2a;color:#70c8a0}
+.kouji-chip.mtg{border-color:#3a3a1a}
+.kouji-chip.mtg.selected{border-color:#e8e050;background:#3a3a10;color:#e8e050}
+
+/* 工事台帳 */
+.job-card{background:#222220;margin:5px 12px;border-radius:13px;padding:14px;border:1px solid #2e2e28;cursor:pointer;transition:opacity .15s}
+.job-card:active{opacity:.7}
+.job-card.active-job{border-color:#c8962a55}
+.job-card.done-job{border-color:#2e2e2888;opacity:.7}
+.job-code{color:#555;font-size:9px;font-weight:700;letter-spacing:1px}
+.job-name-lg{color:#e8d5a3;font-size:14px;font-weight:700;margin-top:2px}
+.job-client{color:#888;font-size:10px;margin-top:2px}
+.job-kpi-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px}
+.job-kpi{background:#161614;border-radius:8px;padding:8px;text-align:center;border:1px solid #2e2e28}
+.job-kpi-val{font-size:13px;font-weight:700;color:#c8962a}
+.job-kpi-label{color:#555;font-size:8px;margin-top:2px}
+.job-kpi-val.over{color:#e87050}
+.job-kpi-val.ok{color:#70c870}
+.progress-wrap{margin-top:10px}
+.progress-label{display:flex;justify-content:space-between;margin-bottom:4px}
+.progress-track{background:#161614;border-radius:4px;height:6px;overflow:hidden;border:1px solid #2e2e28}
+.progress-fill{height:100%;border-radius:4px;transition:width .5s ease}
+.progress-fill.ok{background:linear-gradient(90deg,#4a9a4a,#70c870)}
+.progress-fill.warn{background:linear-gradient(90deg,#c8962a,#e8b050)}
+.progress-fill.over{background:linear-gradient(90deg,#c84a2a,#e87050)}
+.status-badge{display:inline-block;font-size:9px;border-radius:5px;padding:2px 8px;font-weight:700}
+.sb-active{background:#c8962a22;color:#c8962a}
+.sb-done{background:#70c87022;color:#70c870}
+.sb-plan{background:#2e2e28;color:#666}
+.kouji-est-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #1e1e1a}
+.kouji-est-row:last-child{border-bottom:none}
+.kouji-est-name{color:#888;font-size:11px}
+.kouji-est-nums{display:flex;gap:12px;align-items:center}
+.kouji-est-val{font-size:11px;font-weight:700}
+.kouji-est-actual{color:#70a8e8}
+.kouji-est-plan{color:#666}
+.kouji-est-diff.plus{color:#e87050;font-size:10px}
+.kouji-est-diff.minus{color:#70c870;font-size:10px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div><div class="h-title">📋 大竹工務店 日報</div><div class="h-sub" id="today-date"></div></div>
+      <div id="sync-status" style="background:#1a3a1a;border-radius:9px;padding:4px 9px;border:1px solid #2a5a2a44;text-align:right;cursor:pointer" onclick="trySyncInventory()">
+        <div id="sync-label" style="color:#70c870;font-size:10px;font-weight:700">🔗 在庫連携</div>
+        <div style="color:#555;font-size:8px" id="sync-detail">タップで更新</div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-num" id="s-today">0</div><div class="stat-label">今日の日報</div></div>
+      <div class="stat"><div class="stat-num blue" id="s-month">0</div><div class="stat-label">今月の件数</div></div>
+      <div class="stat"><div class="stat-num" id="s-ninku">0.0</div><div class="stat-label">今月の人工</div></div>
+      <div class="stat"><div class="stat-num green" id="s-jobs">0</div><div class="stat-label">工事件数</div></div>
+    </div>
+  </div>
+  <div id="content"></div>
+  <button id="fab" onclick="openNewNippo()">＋</button>
+  <div id="tabbar">
+    <button class="tab-btn active" onclick="switchTab('ホーム')" id="tab-ホーム"><span class="tab-icon">🏠</span>ホーム</button>
+    <button class="tab-btn" onclick="switchTab('日報')" id="tab-日報"><span class="tab-icon">📋</span>日報</button>
+    <button class="tab-btn" onclick="switchTab('台帳')" id="tab-台帳"><span class="tab-icon">🏗️</span>台帳</button>
+    <button class="tab-btn" onclick="switchTab('分析')" id="tab-分析"><span class="tab-icon">📊</span>分析</button>
+    <button class="tab-btn" onclick="switchTab('マスタ')" id="tab-マスタ"><span class="tab-icon">⚙️</span>マスタ</button>
+  </div>
+</div>
+<div id="modal-container"></div>
+
+<script>
+// ========== データ ==========
+const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
+let nippos   = JSON.parse(localStorage.getItem('nip_nippos')||'[]');
+let workers  = JSON.parse(localStorage.getItem('nip_workers')||'null') || defaultWorkers();
+let jobs     = JSON.parse(localStorage.getItem('nip_jobs')||'null') || [];
+let invItems = JSON.parse(localStorage.getItem('dk_items')||'null') || []; // 在庫PWAと共有
+let currentTab = 'ホーム';
+let nippoFilter = 'all';
+let nippoPeriod = 'month';
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let calView = 'month'; // 'month' | 'halfyear' | 'year'
+
+function defaultWorkers(){
+  return [{id:'w1',name:'大竹'},{id:'w2',name:'職人A'},{id:'w3',name:'職人B'}];
+}
+
+const KOUJI_TYPES = [
+  // 現場工事
+  {id:'kiso',   label:'基礎工事',   icon:'🏗️', cat:'現場'},
+  {id:'mokuko', label:'木工・大工', icon:'🪚', cat:'現場'},
+  {id:'yane',   label:'屋根工事',   icon:'🏠', cat:'現場'},
+  {id:'gaiheki',label:'外壁工事',   icon:'🧱', cat:'現場'},
+  {id:'sakan',  label:'左官工事',   icon:'🪣', cat:'現場'},
+  {id:'tosou',  label:'塗装工事',   icon:'🎨', cat:'現場'},
+  {id:'tobi',   label:'とび・土工', icon:'⛏️', cat:'現場'},
+  {id:'haikan', label:'配管工事',   icon:'🔧', cat:'現場'},
+  {id:'denki',  label:'電気工事',   icon:'⚡', cat:'現場'},
+  {id:'sash',   label:'サッシ・建具',icon:'🚪', cat:'現場'},
+  {id:'naibu',  label:'内部仕上げ', icon:'🏡', cat:'現場'},
+  {id:'kaitai', label:'解体・撤去', icon:'🔨', cat:'現場'},
+  // 事務
+  {id:'jimu_shoruikeirens', label:'書類関連作業', icon:'📄', cat:'事務'},
+  {id:'jimu_hacchu',        label:'発注・手配',   icon:'📞', cat:'事務'},
+  // 経営
+  {id:'keiei_zeirishi',     label:'税理関連',     icon:'🧾', cat:'経営'},
+  {id:'keiei_shikinn',      label:'資金関連',     icon:'💰', cat:'経営'},
+  {id:'keiei_keikaku',      label:'計画',         icon:'📈', cat:'経営'},
+  // プライベート
+  {id:'priv_kyuyo',   label:'休養',     icon:'😴', cat:'プライベート'},
+  {id:'priv_kenkyu',  label:'学習・研究',icon:'📚', cat:'プライベート'},
+  {id:'priv_kensetsu',label:'自宅・家族',icon:'🏡', cat:'プライベート'},
+  {id:'priv_other',   label:'その他',   icon:'🌿', cat:'プライベート'},
+  // 打合せ
+  {id:'mtg_uchiawase',label:'打合せ',   icon:'🤝', cat:'打合せ'},
+  {id:'mtg_presen',   label:'プレゼン', icon:'🖥️', cat:'打合せ'},
+  {id:'mtg_other',    label:'その他',   icon:'💬', cat:'打合せ'},
+];
+
+function save(){
+  localStorage.setItem('nip_nippos', JSON.stringify(nippos));
+  localStorage.setItem('nip_workers', JSON.stringify(workers));
+  localStorage.setItem('nip_jobs', JSON.stringify(jobs));
+}
+
+function today(){ return new Date().toISOString().slice(0,10); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ========== 在庫PWAとの連携 ==========
+function trySyncInventory(){
+  const raw = localStorage.getItem('dk_items');
+  if(raw){
+    invItems = JSON.parse(raw);
+    document.getElementById('sync-label').textContent = '🔗 在庫連携済';
+    document.getElementById('sync-detail').textContent = `${invItems.length}品目`;
+    document.getElementById('sync-status').style.background = '#1a3a1a';
+    document.getElementById('sync-status').style.borderColor = '#2a5a2a44';
+  } else {
+    document.getElementById('sync-label').textContent = '⚠️ 在庫未連携';
+    document.getElementById('sync-detail').textContent = '在庫PWAを開いてから';
+    document.getElementById('sync-status').style.background = '#3a1a10';
+    document.getElementById('sync-status').style.borderColor = '#5a2a1044';
+  }
+}
+
+// ========== 集計ユーティリティ ==========
+function totalNinkuForMonth(y, m){
+  return nippos.filter(n=>{
+    const d=new Date(n.date);
+    return d.getFullYear()===y && d.getMonth()===m;
+  }).reduce((s,n)=>{
+    return s + Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0);
+  },0);
+}
+function nippoPeriodFilter(n){
+  const d=new Date(n.date), now=new Date();
+  if(nippoPeriod==='today') return n.date===today();
+  if(nippoPeriod==='week'){const w=new Date(now);w.setDate(w.getDate()-7);return d>=w;}
+  if(nippoPeriod==='month') return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
+  return true;
+}
+function getUniqueJobs(){
+  const jobIds = [...new Set(nippos.map(n=>n.jobCode).filter(Boolean))];
+  return jobIds.map(id=>{
+    const j = jobs.find(x=>x.id===id);
+    return j || {id, name: id};
+  });
+}
+function getNinkuByKouji(){
+  const map = {};
+  nippos.forEach(n=>{
+    const ninku = Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0);
+    (n.koujiTypes||[]).forEach(k=>{
+      map[k] = (map[k]||0) + ninku;
+    });
+  });
+  return Object.entries(map).sort((a,b)=>b[1]-a[1]);
+}
+function getNinkuByWorker(){
+  const map = {};
+  nippos.forEach(n=>{
+    Object.entries(n.workers||{}).forEach(([wid, val])=>{
+      map[wid] = (map[wid]||0) + (parseFloat(val)||0);
+    });
+  });
+  return Object.entries(map).sort((a,b)=>b[1]-a[1]);
+}
+function getNinkuByJob(){
+  const map = {};
+  nippos.forEach(n=>{
+    const key = n.jobCode || n.jobName || '未設定';
+    const ninku = Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0);
+    if(!map[key]) map[key] = {name: n.jobName||n.jobCode||'未設定', ninku:0, days:0};
+    map[key].ninku += ninku;
+    map[key].days += 1;
+  });
+  return Object.entries(map).sort((a,b)=>b[1].ninku-a[1].ninku);
+}
+
+// ========== ヘッダー更新 ==========
+function updateHeader(){
+  document.getElementById('today-date').textContent = new Date().toLocaleDateString('ja-JP') + ' · 工事日報管理';
+  const now = new Date();
+  const todayNippos = nippos.filter(n=>n.date===today());
+  const monthNippos = nippos.filter(n=>{
+    const d=new Date(n.date);
+    return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
+  });
+  const monthNinku = totalNinkuForMonth(now.getFullYear(), now.getMonth());
+  const uniqueJobs = new Set(nippos.filter(n=>n.jobCode||n.jobName).map(n=>n.jobCode||n.jobName));
+  document.getElementById('s-today').textContent = todayNippos.length;
+  document.getElementById('s-month').textContent = monthNippos.length;
+  document.getElementById('s-ninku').textContent = monthNinku.toFixed(1);
+  document.getElementById('s-jobs').textContent = uniqueJobs.size;
+}
+
+// ========== タブ ==========
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  render();
+}
+
+// ========== メインレンダー ==========
+function render(){
+  updateHeader();
+  const c = document.getElementById('content');
+  if(currentTab==='ホーム') c.innerHTML = renderHome();
+  else if(currentTab==='日報') c.innerHTML = renderNippoList();
+  else if(currentTab==='台帳') c.innerHTML = renderDaichou();
+  else if(currentTab==='分析') c.innerHTML = renderAnalysis();
+  else if(currentTab==='マスタ') c.innerHTML = renderMaster();
+}
+
+// ========== カレンダー ==========
+function renderCalendar(){
+  const now = new Date();
+  const todayStr = today();
+  const MONTHS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+  // 表示切り替えボタン
+  const viewBtns = [
+    {key:'month', label:'月'},
+    {key:'halfyear', label:'半年'},
+    {key:'year', label:'年間'},
+  ].map(v=>`<button onclick="calView='${v.key}';render()" style="border:none;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;${calView===v.key?'background:#c8962a;color:#1a1a16;':'background:#2a2a28;color:#888;'}">${v.label}</button>`).join('');
+
+  // 月単位のカレンダーHTML生成関数
+  function renderMonthGrid(y, m){
+    const firstDay = new Date(y, m, 1);
+    const lastDay  = new Date(y, m+1, 0);
+    const startDow = firstDay.getDay();
+    const nippoByDate = {};
+    nippos.forEach(n=>{
+      const d = new Date(n.date);
+      if(d.getFullYear()===y && d.getMonth()===m){
+        nippoByDate[n.date] = (nippoByDate[n.date]||0) + 1;
+      }
+    });
+    function isMissingDay(d){
+      const dt = new Date(y,m,d);
+      const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      if(dt > now) return false;
+      if(dt.getDay()===0) return false;
+      return !nippoByDate[ds];
+    }
+    let cells = '';
+    for(let i=0;i<startDow;i++) cells+=`<div class="cal-day other-month"><span class="cal-day-num"></span></div>`;
+    for(let d=1;d<=lastDay.getDate();d++){
+      const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dow=new Date(y,m,d).getDay();
+      const isToday=dateStr===todayStr;
+      const count=nippoByDate[dateStr]||0;
+      const missing=isMissingDay(d);
+      let cls='cal-day';
+      if(isToday) cls+=' today-cell';
+      if(count>0) cls+=' has-nippo';
+      if(missing) cls+=' missing-day';
+      if(dow===0) cls+=' weekend-sun';
+      if(dow===6) cls+=' weekend-sat';
+      let dots='';
+      if(count>0) dots=Array(Math.min(count,3)).fill('<div class="cal-dot cal-dot-nippo"></div>').join('');
+      else if(missing) dots='<div class="cal-dot cal-dot-missing"></div>';
+      cells+=`<div class="${cls}" onclick="onCalDayClick('${dateStr}')"><span class="cal-day-num">${d}</span><div class="cal-dot-wrap">${dots}</div></div>`;
+    }
+    let missingCount=0;
+    for(let d=1;d<=lastDay.getDate();d++) if(isMissingDay(d)) missingCount++;
+    return `<div style="margin-bottom:12px">
+      <div style="color:#e8d5a3;font-size:11px;font-weight:700;text-align:center;margin-bottom:6px">${MONTHS[m]}${missingCount>0?` <span style="color:#e87050;font-size:9px">⚠️${missingCount}日漏れ</span>`:''}</div>
+      <div class="cal-grid">
+        <div class="cal-dow sun">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div><div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow sat">土</div>
+        ${cells}
+      </div>
+    </div>`;
+  }
+
+  // 表示内容を決定
+  let content = '';
+  let navPrev = '', navNext = '', navTitle = '';
+
+  if(calView === 'month'){
+    content = renderMonthGrid(calYear, calMonth);
+    navTitle = `${calYear}年 ${MONTHS[calMonth]}`;
+    navPrev = `calPrev()`;
+    navNext = `calNext()`;
+  } else if(calView === 'halfyear'){
+    // 今月を含む直近6ヶ月
+    const months = [];
+    for(let i=5; i>=0; i--){
+      let y=calYear, m=calMonth-i;
+      if(m<0){m+=12;y--;}
+      months.push({y,m});
+    }
+    content = months.map(({y,m})=>renderMonthGrid(y,m)).join('');
+    navTitle = `${months[0].y}年${MONTHS[months[0].m]}〜${MONTHS[months[5].m]}`;
+    navPrev = `calYear=${months[0].y};calMonth=${months[0].m};render()`;
+    navNext = `calYear=${months[5].y};calMonth=Math.min(${months[5].m}+6,11);render()`;
+  } else if(calView === 'year'){
+    // 年間（1〜12月）
+    const months = Array.from({length:12},(_,i)=>({y:calYear,m:i}));
+    content = months.map(({y,m})=>renderMonthGrid(y,m)).join('');
+    navTitle = `${calYear}年 年間`;
+    navPrev = `calYear--;render()`;
+    navNext = `calYear++;render()`;
+  }
+
+  return `<div class="cal-wrap">
+    <div class="cal-header">
+      <button class="cal-nav" onclick="${navPrev}">‹</button>
+      <div>
+        <div class="cal-title" style="font-size:13px">${navTitle}</div>
+        <div style="display:flex;gap:4px;justify-content:center;margin-top:4px">${viewBtns}</div>
+      </div>
+      <button class="cal-nav" onclick="${navNext}">›</button>
+    </div>
+    <div style="max-height:60vh;overflow-y:auto;padding-right:2px">${content}</div>
+    <div class="cal-legend">
+      <div class="cal-legend-item"><div class="cal-dot cal-dot-nippo"></div>日報あり</div>
+      <div class="cal-legend-item"><div class="cal-dot cal-dot-missing"></div>漏れ候補</div>
+    </div>
+  </div>`;
+}
+
+function calPrev(){
+  if(calView==='year'){ calYear--; }
+  else if(calView==='halfyear'){ if(calMonth<6){calYear--;calMonth+=6;}else calMonth-=6; }
+  else { if(calMonth===0){calYear--;calMonth=11;}else calMonth--; }
+  render();
+}
+function calNext(){
+  if(calView==='year'){ calYear++; }
+  else if(calView==='halfyear'){ if(calMonth>=6){calYear++;calMonth-=6;}else calMonth+=6; }
+  else { if(calMonth===11){calYear++;calMonth=0;}else calMonth++; }
+  render();
+}
+
+function onCalDayClick(dateStr){
+  // その日の日報一覧を表示、なければ新規入力
+  const list = nippos.filter(n=>n.date===dateStr);
+  if(list.length===0){
+    if(confirm(`${dateStr} の日報がありません。新規入力しますか？`)){
+      openNewNippo(dateStr);
+    }
+  } else if(list.length===1){
+    showNippoDetail(list[0].id);
+  } else {
+    // 複数ある場合は一覧モーダル
+    showModal(`<div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-title">${dateStr} の日報（${list.length}件）</div>
+      ${list.map(n=>`<div onclick="closeModalForce();showNippoDetail('${n.id}')" style="background:#161614;border:1px solid #2e2e28;border-radius:9px;padding:10px 12px;margin-bottom:6px;cursor:pointer">
+        <div style="color:#c8962a;font-size:12px;font-weight:700">${esc(n.jobName||'工事名未設定')}</div>
+        <div style="color:#888;font-size:10px;margin-top:2px">${Object.values(n.workers||{}).reduce((s,v)=>s+(parseFloat(v)||0),0).toFixed(1)}人工</div>
+      </div>`).join('')}
+      <button class="btn-cancel" style="width:100%;margin-top:6px" onclick="closeModalForce()">閉じる</button>
+    </div>`);
+  }
+}
+
+// ========== ホームタブ ==========
+function renderHome(){
+  const now = new Date();
+  const mn = totalNinkuForMonth(now.getFullYear(), now.getMonth());
+  const todayList = nippos.filter(n=>n.date===today());
+
+  const syncHtml = invItems.length>0
+    ? `<div class="sync-banner"><div><div class="sync-ok">🔗 在庫管理PWAと連携中</div><div style="color:#555;font-size:10px;margin-top:2px">${invItems.length}品目が参照可能</div></div><button class="btn-sm" onclick="trySyncInventory()">更新</button></div>`
+    : `<div class="sync-banner" style="background:#2a1a10;border-color:#4a2a1044"><div><div class="sync-ng">⚠️ 在庫PWAと未連携</div><div style="color:#555;font-size:10px;margin-top:2px">在庫管理PWAと同じブラウザで開いてください</div></div><button class="btn-sm" onclick="trySyncInventory()">接続</button></div>`;
+
+  // 今月の集計
+  const monthNippos = nippos.filter(n=>{
+    const d=new Date(n.date);
+    return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
+  });
+  const matUsed = {};
+  monthNippos.forEach(n=>(n.materials||[]).forEach(m=>{
+    matUsed[m.name] = (matUsed[m.name]||0) + (parseFloat(m.qty)||0);
+  }));
+  const topMat = Object.entries(matUsed).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  const todayHtml = todayList.length===0
+    ? `<div style="color:#444;font-size:12px;text-align:center;padding:16px">今日の日報はまだありません<br><button class="btn-sm" style="margin-top:8px;background:#3a2a10;color:#c8962a;border:1px solid #4a3a20" onclick="openNewNippo()">＋ 日報を入力する</button></div>`
+    : todayList.map(n=>nippoCardHtml(n,true)).join('');
+
+  const quickBtns = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:0 12px 12px">
+      <button onclick="openNewNippo()" style="background:#3a2a10;color:#e8b050;border:1px solid #4a3a20;border-radius:11px;padding:14px 8px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <span style="font-size:22px">📝</span><span style="font-size:11px;font-weight:700">日報を入力</span><span style="font-size:9px;opacity:.7">本日の作業</span>
+      </button>
+      <button onclick="switchTab('分析')" style="background:#1a2a3a;color:#70a8e8;border:1px solid #2a3a4a;border-radius:11px;padding:14px 8px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <span style="font-size:22px">📊</span><span style="font-size:11px;font-weight:700">分析を見る</span><span style="font-size:9px;opacity:.7">人工・工種集計</span>
+      </button>
+    </div>`;
+
+  return `
+    ${syncHtml}
+    ${quickBtns}
+    <div class="summary-banner">
+      <div class="sb-title">TODAY ${now.toLocaleDateString('ja-JP',{month:'long',day:'numeric'})}</div>
+      <div class="sb-grid">
+        <div class="sb-cell"><div class="sb-label">今月の総人工</div><div class="sb-val">${mn.toFixed(1)}<span class="sb-unit">人工</span></div></div>
+        <div class="sb-cell"><div class="sb-label">今月の日報件数</div><div class="sb-val">${monthNippos.length}<span class="sb-unit">件</span></div></div>
+        <div class="sb-cell"><div class="sb-label">稼働工事数</div><div class="sb-val">${new Set(monthNippos.map(n=>n.jobCode||n.jobName)).size}<span class="sb-unit">件</span></div></div>
+        <div class="sb-cell"><div class="sb-label">材料使用種類</div><div class="sb-val">${Object.keys(matUsed).length}<span class="sb-unit">品目</span></div></div>
+      </div>
+    </div>
+    <div class="section-label">📅 日報カレンダー</div>
+    ${renderCalendar()}
+    <div class="section-label">TODAY · 本日の日報</div>
+    ${todayHtml}
+    ${topMat.length>0?`<div class="section-label">今月の主な使用材料</div><div class="card">${topMat.map(([name,qty])=>`<div class="info-row"><span class="info-label">${esc(name)}</span><span class="info-val">${qty}</span></div>`).join('')}</div>`:''}
+  `;
+}
+
+// ========== 日報カードHTML ==========
+function nippoCardHtml(n, compact=false){
+  const ninku = Object.entries(n.workers||{}).reduce((s,[wid,v])=>s+(parseFloat(v)||0), 0);
+  const workerChips = Object.entries(n.workers||{}).filter(([,v])=>parseFloat(v)>0).map(([wid,v])=>{
+    const w = workers.find(x=>x.id===wid);
+    return `<span class="nippo-chip chip-worker">${esc(w?.name||wid)} ${v}人工</span>`;
+  }).join('');
+  const koujiChips = (n.koujiTypes||[]).map(k=>{
+    const kt = KOUJI_TYPES.find(x=>x.id===k);
+    return `<span class="nippo-chip chip-kouji">${kt?.icon||''} ${kt?.label||k}</span>`;
+  }).join('');
+  const matCount = (n.materials||[]).filter(m=>parseFloat(m.qty)>0).length;
+  return `
+    <div class="nippo-card" onclick="showNippoDetail('${n.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div class="nippo-date">${esc(n.date)}</div>
+          <div class="nippo-job">${esc(n.jobName||'工事名未設定')}</div>
+          ${n.jobCode?`<div style="color:#555;font-size:9px;margin-top:1px">工事コード: ${esc(n.jobCode)}</div>`:''}
+        </div>
+        <div style="text-align:right">
+          <div style="color:#c8962a;font-size:16px;font-weight:700">${ninku.toFixed(1)}</div>
+          <div style="color:#555;font-size:9px">人工</div>
+        </div>
+      </div>
+      <div class="nippo-chips">${workerChips}${koujiChips}${matCount>0?`<span class="nippo-chip chip-zairyo">🪵 材料 ${matCount}品目</span>`:''}</div>
+      ${n.memo?`<div style="color:#666;font-size:10px;margin-top:6px;padding-top:6px;border-top:1px solid #2e2e28">📝 ${esc(n.memo)}</div>`:''}
+    </div>`;
+}
+
+// ========== 日報一覧タブ ==========
+function renderNippoList(){
+  const periodBtns = [
+    {key:'today',label:'今日'},
+    {key:'week',label:'今週'},
+    {key:'month',label:'今月'},
+    {key:'all',label:'全期間'},
+  ].map(p=>`<button class="period-btn${nippoPeriod===p.key?' active':''}" onclick="nippoPeriod='${p.key}';render()">${p.label}</button>`).join('');
+
+  const filtered = [...nippos].filter(nippoPeriodFilter).sort((a,b)=>b.date.localeCompare(a.date));
+  const totalNinku = filtered.reduce((s,n)=>s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0),0);
+
+  const cards = filtered.length===0
+    ? '<div class="empty-msg">この期間の日報はありません<br><button class="btn-sm" style="margin-top:8px" onclick="openNewNippo()">＋ 新規入力</button></div>'
+    : filtered.map(n=>nippoCardHtml(n)).join('');
+
+  return `
+    <div style="padding:8px 12px 2px"><div class="period-btns">${periodBtns}</div></div>
+    <div style="padding:4px 14px 4px;display:flex;justify-content:space-between;align-items:center">
+      <div style="color:#444;font-size:9px;font-weight:700;letter-spacing:2px">${filtered.length}件</div>
+      <div style="color:#c8962a;font-size:11px;font-weight:700">合計 ${totalNinku.toFixed(1)} 人工</div>
+    </div>
+    ${cards}`;
+}
+
+// ========== 分析タブ ==========
+function renderAnalysis(){
+  const now = new Date();
+
+  // 工種別人工
+  const koujiNinku = getNinkuByKouji();
+  const maxKouji = koujiNinku[0]?.[1]||1;
+  const koujiHtml = koujiNinku.length===0
+    ? '<div style="color:#444;font-size:11px;text-align:center;padding:12px">データなし</div>'
+    : koujiNinku.slice(0,8).map(([k,v])=>{
+        const kt = KOUJI_TYPES.find(x=>x.id===k);
+        const pct = Math.round(v/maxKouji*100);
+        return `<div class="bar-item">
+          <div class="bar-label-row"><span class="bar-label">${kt?.icon||''} ${kt?.label||k}</span><span class="bar-val">${v.toFixed(1)} 人工</span></div>
+          <div class="bar-track"><div class="bar-fill purple" style="width:${pct}%"></div></div>
+        </div>`;
+      }).join('');
+
+  // 作業者別人工
+  const workerNinku = getNinkuByWorker();
+  const maxWorker = workerNinku[0]?.[1]||1;
+  const workerHtml = workerNinku.length===0
+    ? '<div style="color:#444;font-size:11px;text-align:center;padding:12px">データなし</div>'
+    : workerNinku.map(([wid,v])=>{
+        const w = workers.find(x=>x.id===wid);
+        const pct = Math.round(v/maxWorker*100);
+        return `<div class="bar-item">
+          <div class="bar-label-row"><span class="bar-label">👷 ${esc(w?.name||wid)}</span><span class="bar-val">${v.toFixed(1)} 人工</span></div>
+          <div class="bar-track"><div class="bar-fill blue" style="width:${pct}%"></div></div>
+        </div>`;
+      }).join('');
+
+  // 工事別人工テーブル
+  const jobNinku = getNinkuByJob();
+  const jobRows = jobNinku.length===0
+    ? '<tr><td colspan="3" style="color:#444;text-align:center;padding:12px">データなし</td></tr>'
+    : jobNinku.map(([,j])=>`<tr>
+        <td>${esc(j.name)}</td>
+        <td class="td-num">${j.ninku.toFixed(1)}</td>
+        <td class="td-num td-small">${j.days}日</td>
+      </tr>`).join('');
+
+  // 月別推移（直近6ヶ月）
+  const months6 = [];
+  for(let i=5;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const y=d.getFullYear(), m=d.getMonth();
+    const v=totalNinkuForMonth(y,m);
+    months6.push({label:`${m+1}月`, val:v});
+  }
+  const maxMonth = Math.max(...months6.map(x=>x.val))||1;
+  const monthHtml = months6.map(x=>{
+    const pct = Math.round(x.val/maxMonth*100);
+    return `<div class="bar-item">
+      <div class="bar-label-row"><span class="bar-label">${x.label}</span><span class="bar-val">${x.val.toFixed(1)}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="analysis-card">
+      <div class="analysis-title">📅 月別人工推移（直近6ヶ月）</div>
+      ${monthHtml}
+    </div>
+    <div class="analysis-card">
+      <div class="analysis-title">🏗️ 工種別人工（累計）</div>
+      ${koujiHtml}
+    </div>
+    <div class="analysis-card">
+      <div class="analysis-title">👷 作業者別人工（累計）</div>
+      ${workerHtml}
+    </div>
+    <div class="analysis-card">
+      <div class="analysis-title">🏠 工事別人工一覧</div>
+      <table class="job-table">
+        <tr><th>工事名</th><th style="text-align:right">人工計</th><th style="text-align:right">日数</th></tr>
+        ${jobRows}
+      </table>
+    </div>`;
+}
+
+// ========== マスタタブ ==========
+function renderMaster(){
+  const workerRows = workers.map(w=>`
+    <div class="info-row">
+      <span class="info-val">👷 ${esc(w.name)}</span>
+      <div style="display:flex;gap:5px">
+        <button class="btn-sm" onclick="editWorker('${w.id}')">編集</button>
+        <button class="btn-sm" style="color:#e87050" onclick="deleteWorker('${w.id}')">削除</button>
+      </div>
+    </div>`).join('');
+
+  const jobRows = jobs.map(j=>`
+    <div class="info-row">
+      <div>
+        <div class="info-val">${esc(j.name)}</div>
+        <div style="color:#555;font-size:10px">${esc(j.code||'')} ${esc(j.client||'')}</div>
+      </div>
+      <div style="display:flex;gap:5px">
+        <button class="btn-sm" onclick="editJob('${j.id}')">編集</button>
+        <button class="btn-sm" style="color:#e87050" onclick="deleteJob('${j.id}')">削除</button>
+      </div>
+    </div>`).join('');
+
+  return `
+    <div class="data-section">
+      <div class="data-card">
+        <div class="data-card-title">📊 データ出力</div>
+        <div class="export-grid">
+          <button class="export-btn eb-nippo" onclick="exportNippoExcel()">
+            <span class="e-icon">📋</span>日報一覧<span style="font-size:9px;opacity:.7">月別シート</span>
+          </button>
+          <button class="export-btn eb-kouji" onclick="exportKoujiExcel()">
+            <span class="e-icon">🏗️</span>工種集計<span style="font-size:9px;opacity:.7">人工分析</span>
+          </button>
+          <button class="export-btn eb-worker" onclick="exportWorkerExcel()">
+            <span class="e-icon">👷</span>作業者集計<span style="font-size:9px;opacity:.7">人工集計</span>
+          </button>
+          <button class="export-btn eb-backup" onclick="exportBackupJSON()">
+            <span class="e-icon">💾</span>バックアップ<span style="font-size:9px;opacity:.7">JSON保存</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="data-card">
+        <div class="data-card-title">👷 作業者マスタ</div>
+        ${workerRows || '<div class="empty-msg">作業者が登録されていません</div>'}
+        <button class="btn-full" style="margin-top:8px" onclick="addWorkerModal()">＋ 作業者を追加</button>
+      </div>
+
+      <div class="data-card">
+        <div class="data-card-title">🏗️ 工事台帳</div>
+        <div style="color:#888;font-size:11px;margin-bottom:10px">工事の登録・編集は台帳タブから行います</div>
+        <button class="btn-full" onclick="switchTab('台帳')">🏗️ 工事台帳を開く</button>
+      </div>
+
+      <div class="data-card">
+        <div class="data-card-title">🛠️ データ管理</div>
+        <div class="data-btn-row">
+          <button class="data-btn" style="background:#1a3a2a;color:#70e8a0;border:1px solid #2a4a3a" onclick="loadFromSheetManual()">🔄 スプレッドシートから読み込む</button>
+          <button class="data-btn green" onclick="saveToGoogleDrive()">☁️ スプレッドシートに同期</button>
+          <button class="data-btn blue" onclick="importBackupJSON()">📂 バックアップから復元</button>
+          <button class="data-btn red" onclick="confirmReset()">🗑️ 日報データを初期化</button>
+        </div>
+        <div style="color:#444;font-size:10px;text-align:center;padding:8px 0">日報${nippos.length}件 / 作業者${workers.length}名 / 工事${jobs.length}件</div>
+      </div>
+    </div>`;
+}
+
+// ========== 日報入力モーダル ==========
+function openNewNippo(preDate){
+  const d = preDate || today();
+  openNippoModal(null, d);
+}
+
+function openNippoModal(nippoId, preDate){
+  const n = nippoId ? nippos.find(x=>x.id===nippoId) : null;
+  const date = n?.date || preDate || today();
+
+  // 作業者チェックボックス
+  const workerInputs = workers.map(w=>{
+    const val = n?.workers?.[w.id] || '';
+    return `<div class="ninku-row">
+      <span class="ninku-name">👷 ${esc(w.name)}</span>
+      <input class="ninku-input" type="number" step="0.5" min="0" max="3" id="nk-${w.id}" value="${val}" placeholder="0"/>
+      <span class="ninku-unit">人工</span>
+    </div>`;
+  }).join('');
+
+  // 工種選択
+  const koujiSelected = n?.koujiTypes || [];
+
+  // 工事選択
+  const jobOpts = `<option value="">-- 選択してください --</option>` +
+    jobs.map(j=>`<option value="${j.id}"${n?.jobCode===j.id?' selected':''}>${esc(j.code?j.code+' ':'')}${esc(j.name)}</option>`).join('') +
+    `<option value="__custom__"${!n?.jobCode&&n?.jobName?' selected':''}>＋ 直接入力</option>`;
+
+  // 材料リスト
+  const mats = n?.materials || [];
+  const matListId = 'mat-list-'+Date.now();
+
+  const invOpts = invItems.length > 0
+    ? invItems.map(i=>`<option value="${esc(i.name)}">${esc(i.stockId||'')} ${esc(i.name)}</option>`).join('')
+    : '<option value="">在庫PWAを先に開いてください</option>';
+
+  showModal(`<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-title">📝 日報入力</div>
+    <div class="sheet-desc">作業内容・人工・材料を記録します</div>
+
+    <label class="form-label">作業日</label>
+    <input class="form-input" type="date" id="nip-date" value="${date}"/>
+
+    <label class="form-label">工事名（マスタから選択 or 直接入力）</label>
+    <select class="form-select" id="nip-job-sel" onchange="onJobSelChange()">${jobOpts}</select>
+    <input class="form-input" type="text" id="nip-job-name" placeholder="工事名を入力" value="${n?.jobName||''}" style="${!n?.jobCode&&n?.jobName?'':'display:none'}"/>
+    <input class="form-input" type="text" id="nip-job-code" placeholder="工事コード（例: 2025-001）" value="${n?.jobCode||''}" style="display:none"/>
+
+    <label class="form-label">工種（複数選択可）</label>
+    <div id="kouji-grid">
+      ${['現場','事務','経営','打合せ','プライベート'].map(cat=>{
+        const types = KOUJI_TYPES.filter(k=>k.cat===cat);
+        const catColor = cat==='事務'?'#70a8e8':cat==='経営'?'#c870e8':cat==='プライベート'?'#70c8a0':cat==='打合せ'?'#e8e050':'#c8962a';
+        const catIcon  = cat==='事務'?'📎':cat==='経営'?'💼':cat==='プライベート'?'🌿':cat==='打合せ'?'🤝':'🔨';
+        const chipCls  = cat==='事務'?'jimu':cat==='経営'?'keiei':cat==='プライベート'?'priv':cat==='打合せ'?'mtg':'';
+        return `<div class="kouji-cat-label" style="color:${catColor}">${catIcon} ${cat}</div>
+        <div class="kouji-grid">
+          ${types.map(k=>`
+            <button class="kouji-chip ${chipCls}${koujiSelected.includes(k.id)?' selected':''}"
+              onclick="toggleKouji(this,'${k.id}')" data-id="${k.id}">
+              ${k.icon} ${k.label}
+            </button>`).join('')}
+        </div>`;
+      }).join('')}
+    </div>
+
+    <label class="form-label">作業者・人工数</label>
+    ${workerInputs}
+
+    <label class="form-label">使用材料</label>
+    <div id="${matListId}" class="material-list">
+      ${mats.map((m,i)=>matRowHtml(matListId, i, m.name, m.qty, m.unit, m.invAction||'memo', m.invItemId||'', m.invLocId||'')).join('')}
+    </div>
+
+    <!-- 材料検索・選択UI -->
+    <div class="mat-search-wrap">
+      <div style="color:#666;font-size:10px;margin-bottom:6px">🔍 在庫から選択して追加</div>
+      <input class="mat-search-input" type="text" id="mat-search" placeholder="品名で検索..." oninput="renderMatItems('${matListId}')"/>
+      <div class="mat-loc-tabs" id="mat-loc-tabs">
+        <button class="mat-loc-tab active" data-loc="" onclick="selectMatLoc(this,'${matListId}')">すべて</button>
+        ${(()=>{
+          const locs=JSON.parse(localStorage.getItem('dk_loc')||'[]');
+          return locs.map(l=>`<button class="mat-loc-tab" data-loc="${l.id}" onclick="selectMatLoc(this,'${matListId}')">${l.icon} ${esc(l.name)}</button>`).join('');
+        })()}
+      </div>
+      <div class="mat-item-list" id="mat-item-list-${matListId}"></div>
+    </div>
+
+    <!-- 手入力 -->
+    <div style="display:flex;gap:6px;margin-bottom:9px">
+      <input class="form-input" type="text" id="mat-custom" placeholder="材料名を直接入力（在庫外）" style="flex:1;margin-bottom:0"/>
+      <button class="btn-sm" onclick="addMatCustom('${matListId}')" style="white-space:nowrap">追加</button>
+    </div>
+
+    <label class="form-label">メモ・特記事項</label>
+    <textarea class="form-textarea" id="nip-memo" placeholder="作業内容の詳細、気づき等">${n?.memo||''}</textarea>
+
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModalForce()">キャンセル</button>
+      <button class="btn-confirm gold" onclick="saveNippo('${nippoId||''}','${matListId}')">保存する</button>
+    </div>
+    ${nippoId?`<button style="width:100%;margin-top:8px;background:#3a1a1a;color:#e87050;border:1px solid #4a2a2a;border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit" onclick="deleteNippo('${nippoId}')">🗑️ この日報を削除する</button>`:''}
+  </div>`);
+  initMatSearch(matListId);
+}
+
+function matRowHtml(listId, idx, name, qty, unit, invAction, invItemId, invLocId){
+  invAction = invAction || 'memo';
+  invItemId = invItemId || '';
+  invLocId  = invLocId  || '';
+
+  // 在庫品目を特定して在庫数を表示
+  const invItem = invItems.find(i=>i.id==invItemId || i.name===name);
+  let stockInfo = '';
+  if(invItem){
+    const locs = JSON.parse(localStorage.getItem('dk_loc')||'[]');
+    const stockParts = locs.filter(l=>(invItem.stocks?.[l.id]||0)>0)
+      .map(l=>`${l.name}:${invItem.stocks[l.id]}${invItem.unit}`);
+    if(stockParts.length>0){
+      const total = Object.values(invItem.stocks||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
+      stockInfo = `在庫: ${total}${invItem.unit}`;
+    }
+  }
+
+  const isInvItem = !!invItem;
+  const btnUse  = `mat-inv-btn use${invAction==='use'?' active-use':''}`;
+  const btnOut  = `mat-inv-btn out${invAction==='out'?' active-out':''}`;
+  const btnMemo = `mat-inv-btn memo${invAction==='memo'?' active-memo':''}`;
+
+  return `<div class="material-row" id="mat-row-${listId}-${idx}" data-inv-item-id="${invItemId}" data-inv-loc-id="${invLocId}" data-inv-action="${invAction}">
+    <div class="material-row-top">
+      <span class="material-name" title="${esc(name)}">${esc(name)}</span>
+      <input class="material-qty" type="number" step="1" min="0" value="${qty||1}" placeholder="数量"/>
+      <span class="material-unit">${esc(unit||'本')}</span>
+      <button class="material-del" onclick="this.closest('.material-row').remove()">✕</button>
+    </div>
+    ${isInvItem ? `
+    <div class="mat-inv-row">
+      <span style="color:#555;font-size:9px">在庫へ:</span>
+      <button class="${btnUse}" onclick="setMatAction(this,'use')">🪚 使用</button>
+      <button class="${btnOut}" onclick="setMatAction(this,'out')">📤 出庫</button>
+      <button class="${btnMemo}" onclick="setMatAction(this,'memo')">📝 メモのみ</button>
+      <span class="mat-inv-stock${stockInfo.includes('0')?'':''}">${stockInfo}</span>
+    </div>` : `<div style="color:#444;font-size:9px">📝 メモのみ（在庫外品目）</div>`}
+  </div>`;
+}
+
+function setMatAction(btn, action){
+  const row = btn.closest('.material-row');
+  row.dataset.invAction = action;
+  row.querySelectorAll('.mat-inv-btn').forEach(b=>{
+    b.classList.remove('active-use','active-out','active-memo');
+  });
+  if(action==='use') btn.classList.add('active-use');
+  else if(action==='out') btn.classList.add('active-out');
+  else btn.classList.add('active-memo');
+}
+
+// 材料検索・場所フィルター
+let _matLocFilter = '';
+function selectMatLoc(btn, listId){
+  document.querySelectorAll('.mat-loc-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  _matLocFilter = btn.dataset.loc || '';
+  renderMatItems(listId);
+}
+
+function renderMatItems(listId){
+  const el = document.getElementById('mat-item-list-'+listId);
+  if(!el) return;
+  const q = (document.getElementById('mat-search')?.value||'').trim().toLowerCase();
+  const locs = JSON.parse(localStorage.getItem('dk_loc')||'[]');
+
+  let filtered = invItems;
+  if(_matLocFilter) filtered = filtered.filter(i=>(i.stocks?.[_matLocFilter]||0)>0);
+  if(q) filtered = filtered.filter(i=>i.name.toLowerCase().includes(q)||(i.stockId||'').toLowerCase().includes(q));
+
+  if(filtered.length===0){
+    el.innerHTML = `<div style="color:#444;font-size:11px;text-align:center;padding:10px">${invItems.length===0?'在庫PWAと連携してください':'該当なし'}</div>`;
+    return;
+  }
+
+  el.innerHTML = filtered.slice(0,30).map(item=>{
+    const stockParts = locs.filter(l=>(item.stocks?.[l.id]||0)>0)
+      .map(l=>`${l.icon}${l.name}: ${item.stocks[l.id]}${item.unit}`);
+    const total = Object.values(item.stocks||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
+    // デフォルト場所：フィルター中ならその場所、なければ在庫が一番多い場所
+    const defaultLocId = _matLocFilter ||
+      (locs.sort((a,b)=>(item.stocks?.[b.id]||0)-(item.stocks?.[a.id]||0))[0]?.id||'');
+    return `<button class="mat-item-btn" onclick="addMatFromInv('${listId}','${item.id}','${defaultLocId}')">
+      <div>
+        <div class="mat-item-name">${esc(item.name)}</div>
+        <div class="mat-item-sub">${esc(item.stockId||'')} ${esc(item.category||'')} · ${stockParts.slice(0,2).join(' / ')||'在庫なし'}</div>
+      </div>
+      <div class="mat-item-stock">${total}${item.unit}</div>
+    </button>`;
+  }).join('');
+}
+
+function addMatFromInv(listId, itemId, locId){
+  const item = invItems.find(i=>i.id==itemId);
+  if(!item) return;
+  const list = document.getElementById(listId);
+  if(!list) return;
+  const idx = Date.now();
+  const div = document.createElement('div');
+  div.innerHTML = matRowHtml(listId, idx, item.name, 1, item.unit, 'use', itemId, locId);
+  list.appendChild(div.firstElementChild);
+  // 検索をリセット
+  const searchEl = document.getElementById('mat-search');
+  if(searchEl) searchEl.value='';
+  renderMatItems(listId);
+}
+
+function addMatCustom(listId){
+  const inp = document.getElementById('mat-custom');
+  if(!inp?.value.trim()) return;
+  const list = document.getElementById(listId);
+  if(!list) return;
+  const idx = Date.now();
+  const div = document.createElement('div');
+  div.innerHTML = matRowHtml(listId, idx, inp.value.trim(), 1, '個', 'memo', '', '');
+  list.appendChild(div.firstElementChild);
+  inp.value='';
+}
+
+// モーダルを開いたら材料リストを描画
+function initMatSearch(listId){
+  _matLocFilter = '';
+  setTimeout(()=>renderMatItems(listId), 50);
+}
+
+function toggleKouji(el, kid){
+  el.classList.toggle('selected');
+}
+
+function onJobSelChange(){
+  const sel = document.getElementById('nip-job-sel');
+  const nameInp = document.getElementById('nip-job-name');
+  const codeInp = document.getElementById('nip-job-code');
+  if(sel.value==='__custom__'){
+    nameInp.style.display='';
+    codeInp.style.display='none';
+  } else if(sel.value){
+    nameInp.style.display='none';
+    codeInp.style.display='none';
+  } else {
+    nameInp.style.display='none';
+    codeInp.style.display='none';
+  }
+}
+
+function saveNippo(existingId, matListId){
+  const date = document.getElementById('nip-date').value;
+  if(!date){ alert('作業日を入力してください'); return; }
+
+  // 工事
+  const jobSel = document.getElementById('nip-job-sel').value;
+  let jobCode='', jobName='';
+  if(jobSel==='__custom__'){
+    jobName = document.getElementById('nip-job-name').value.trim();
+    jobCode = document.getElementById('nip-job-code')?.value.trim() || '';
+  } else if(jobSel){
+    const j = jobs.find(x=>x.id===jobSel);
+    jobCode = j?.id||jobSel;
+    jobName = j?.name||jobSel;
+  }
+
+  // 工種
+  const koujiTypes = [...document.querySelectorAll('#kouji-grid .kouji-chip.selected')].map(el=>el.dataset.id);
+
+  // 人工
+  const workerMap = {};
+  workers.forEach(w=>{
+    const v = parseFloat(document.getElementById('nk-'+w.id)?.value)||0;
+    if(v>0) workerMap[w.id] = v;
+  });
+
+  // 材料
+  const matList = document.getElementById(matListId);
+  const materials = [];
+  if(matList){
+    matList.querySelectorAll('.material-row').forEach(row=>{
+      const name      = row.querySelector('.material-name')?.textContent?.trim();
+      const qty       = parseFloat(row.querySelector('.material-qty')?.value)||0;
+      const unit      = row.querySelector('.material-unit')?.textContent?.trim()||'本';
+      const invAction = row.dataset.invAction || 'memo';
+      const invItemId = row.dataset.invItemId || '';
+      const invLocId  = row.dataset.invLocId  || '';
+      if(name) materials.push({name, qty, unit, invAction, invItemId, invLocId});
+    });
+  }
+
+  const memo = document.getElementById('nip-memo')?.value.trim()||'';
+
+  const record = {
+    id: existingId || ('nip-'+Date.now()),
+    date, jobCode, jobName, koujiTypes,
+    workers: workerMap, materials, memo,
+    createdAt: existingId ? (nippos.find(x=>x.id===existingId)?.createdAt||new Date().toISOString()) : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  if(existingId){
+    const idx = nippos.findIndex(x=>x.id===existingId);
+    if(idx>=0) nippos[idx]=record; else nippos.unshift(record);
+  } else {
+    nippos.unshift(record);
+  }
+
+  save();
+
+  // 在庫PWAへの反映（localStorage経由）
+  applyMaterialsToInventory(materials, record.date, record.jobName||record.jobCode||'');
+
+  closeModalForce();
+  render();
+}
+
+// ========== 在庫PWAへの反映 ==========
+function applyMaterialsToInventory(materials, date, jobName){
+  const invMats = materials.filter(m=>m.invAction!=='memo' && m.invItemId && m.qty>0);
+  if(invMats.length===0) return;
+
+  try{
+    const rawItems = localStorage.getItem('dk_items');
+    const rawHist  = localStorage.getItem('dk_hist');
+    const rawLocs  = localStorage.getItem('dk_loc');
+    if(!rawItems) return;
+
+    const invItemsStore = JSON.parse(rawItems);
+    const invHistStore  = JSON.parse(rawHist||'[]');
+    const invLocsStore  = JSON.parse(rawLocs||'[]');
+
+    let updated = 0;
+    invMats.forEach(m=>{
+      const item = invItemsStore.find(i=>i.id==m.invItemId || i.name===m.name);
+      if(!item) return;
+
+      const locId = m.invLocId || Object.keys(item.stocks||{}).find(lid=>(item.stocks[lid]||0)>0) || '';
+      const loc   = invLocsStore.find(l=>l.id===locId);
+      const currentStock = parseFloat(item.stocks?.[locId]||0);
+
+      if(m.invAction==='use'||m.invAction==='out'){
+        if(currentStock < m.qty){
+          console.warn(`在庫不足: ${item.name} (現在${currentStock}、使用${m.qty})`);
+          // 在庫不足でも記録だけ残す（マイナスにはしない）
+          item.stocks[locId] = Math.max(0, currentStock - m.qty);
+        } else {
+          item.stocks[locId] = currentStock - m.qty;
+        }
+      }
+
+      // 履歴に追記
+      invHistStore.unshift({
+        id: Date.now() + Math.random(),
+        date,
+        type: m.invAction==='out' ? 'out' : 'use',
+        itemId: item.id,
+        itemName: item.name,
+        stockId: item.stockId||'',
+        qty: m.qty,
+        locName: loc?.name||'',
+        destName: '',
+        jobName: jobName,
+        supplier: '',
+        memo: '日報より自動反映',
+        unitPrice: item.basePrice||0,
+      });
+      updated++;
+    });
+
+    localStorage.setItem('dk_items', JSON.stringify(invItemsStore));
+    localStorage.setItem('dk_hist',  JSON.stringify(invHistStore));
+
+    // 在庫PWAのinvItemsも更新
+    invItems = invItemsStore;
+
+    if(updated>0) console.log(`在庫に${updated}品目反映しました`);
+  } catch(e){
+    console.error('在庫反映エラー:', e);
+  }
+}
+
+function deleteNippo(nid){
+  if(!confirm('この日報を削除しますか？')) return;
+  nippos = nippos.filter(x=>x.id!==nid);
+  save(); closeModalForce(); render();
+}
+
+// ========== 日報詳細 ==========
+function showNippoDetail(nid){
+  const n = nippos.find(x=>x.id===nid);
+  if(!n) return;
+  const ninku = Object.entries(n.workers||{}).reduce((s,[,v])=>s+(parseFloat(v)||0),0);
+  const workerRows = Object.entries(n.workers||{}).map(([wid,v])=>{
+    const w = workers.find(x=>x.id===wid);
+    return `<div class="info-row"><span class="info-label">👷 ${esc(w?.name||wid)}</span><span class="info-val">${v} 人工</span></div>`;
+  }).join('');
+  const koujiRows = (n.koujiTypes||[]).map(k=>{
+    const kt = KOUJI_TYPES.find(x=>x.id===k);
+    return `<span class="nippo-chip chip-kouji" style="margin:2px">${kt?.icon||''} ${kt?.label||k}</span>`;
+  }).join('');
+  const matRows = (n.materials||[]).filter(m=>parseFloat(m.qty)>0).map(m=>{
+    const actionLabel = m.invAction==='use'?'🪚 使用':m.invAction==='out'?'📤 出庫':'📝 メモ';
+    const actionColor = m.invAction==='use'?'#e8b050':m.invAction==='out'?'#70a8e8':'#555';
+    return `<div class="info-row">
+      <span class="info-label">🪵 ${esc(m.name)}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="color:${actionColor};font-size:9px;font-weight:700">${actionLabel}</span>
+        <span class="info-val">${m.qty} ${esc(m.unit)}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  showModal(`<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-title">📋 日報詳細</div>
+    <div class="sheet-desc">${esc(n.date)}</div>
+    <div class="info-row"><span class="info-label">工事名</span><span class="info-val">${esc(n.jobName||'未設定')}</span></div>
+    ${n.jobCode?`<div class="info-row"><span class="info-label">工事コード</span><span class="info-val">${esc(n.jobCode)}</span></div>`:''}
+    <div class="info-row"><span class="info-label">合計人工</span><span class="info-val" style="color:#c8962a;font-size:14px">${ninku.toFixed(1)} 人工</span></div>
+    ${workerRows}
+    ${koujiRows?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">${koujiRows}</div>`:''}
+    ${matRows?`<div class="divider"></div><div style="color:#555;font-size:9px;padding:4px 0">使用材料</div>${matRows}`:''}
+    ${n.memo?`<div class="divider"></div><div style="color:#888;font-size:11px;line-height:1.6">${esc(n.memo)}</div>`:''}
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn-cancel" onclick="closeModalForce()">閉じる</button>
+      <button class="btn-confirm blue" onclick="closeModalForce();openNippoModal('${nid}')">✏️ 編集</button>
+    </div>
+  </div>`);
+}
+
+// ========== 作業者マスタ ==========
+function addWorkerModal(id){
+  const w = id ? workers.find(x=>x.id===id) : null;
+  showModal(`<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-title">${w?'作業者を編集':'作業者を追加'}</div>
+    <label class="form-label">名前</label>
+    <input class="form-input" type="text" id="wk-name" value="${esc(w?.name||'')}"/>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModalForce()">キャンセル</button>
+      <button class="btn-confirm green" onclick="saveWorker('${id||''}')">保存する</button>
+    </div>
+  </div>`);
+}
+function editWorker(id){ addWorkerModal(id); }
+function saveWorker(id){
+  const name = document.getElementById('wk-name').value.trim();
+  if(!name){ alert('名前を入力してください'); return; }
+  if(id){
+    const w = workers.find(x=>x.id===id);
+    if(w) w.name=name;
+  } else {
+    workers.push({id:'w-'+Date.now(), name});
+  }
+  save(); closeModalForce(); render();
+}
+function deleteWorker(id){
+  if(!confirm('この作業者を削除しますか？')) return;
+  workers = workers.filter(x=>x.id!==id);
+  save(); closeModalForce(); render();
+}
+
+// ========== 工事台帳レンダリング ==========
+function getJobActual(jobId){
+  // jobIdまたはjobNameで日報を絞り込み
+  const j = jobs.find(x=>x.id===jobId);
+  const related = nippos.filter(n=>n.jobCode===jobId || (j && n.jobName===j.name));
+  const totalNinku = related.reduce((s,n)=>s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0),0);
+  const koujiMap = {};
+  related.forEach(n=>{
+    const ninku = Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0);
+    (n.koujiTypes||[]).forEach(k=>{ koujiMap[k]=(koujiMap[k]||0)+ninku; });
+  });
+  const matMap = {};
+  related.forEach(n=>(n.materials||[]).forEach(m=>{
+    matMap[m.name]=(matMap[m.name]||0)+(parseFloat(m.qty)||0);
+  }));
+  return {totalNinku, koujiMap, matMap, days: related.length};
+}
+
+function jobStatusBadge(j){
+  const s = j.status||'active';
+  if(s==='done')   return '<span class="status-badge sb-done">✅ 完工</span>';
+  if(s==='plan')   return '<span class="status-badge sb-plan">📅 予定</span>';
+  return '<span class="status-badge sb-active">🔨 施工中</span>';
+}
+
+function renderDaichou(){
+  const statusFilter = window._daichouFilter || 'all';
+  const filtered = jobs.filter(j=>{
+    if(statusFilter==='all') return true;
+    return (j.status||'active')===statusFilter;
+  }).sort((a,b)=>{
+    // 施工中→予定→完工の順
+    const order={active:0,plan:1,done:2};
+    return (order[a.status||'active']||0)-(order[b.status||'active']||0);
+  });
+
+  const filterBtns = [
+    {key:'all',label:'すべて'},
+    {key:'active',label:'🔨 施工中'},
+    {key:'plan',label:'📅 予定'},
+    {key:'done',label:'✅ 完工'},
+  ].map(f=>`<button class="filter-chip" style="${statusFilter===f.key?'background:#3a3218;color:#c8962a;font-weight:700':'background:#161614;color:#666'}" onclick="window._daichouFilter='${f.key}';render()">${f.label}</button>`).join('');
+
+  const cards = filtered.length===0
+    ? `<div class="empty-msg">工事がありません<br><button class="btn-sm" style="margin-top:8px" onclick="addJobModal()">＋ 工事を追加</button></div>`
+    : filtered.map(j=>{
+        const actual = getJobActual(j.id);
+        const estNinku = parseFloat(j.estNinkuTotal)||0;
+        const pct = estNinku>0 ? Math.min(Math.round(actual.totalNinku/estNinku*100),120) : 0;
+        const fillCls = pct>=100?'over':pct>=80?'warn':'ok';
+        const ninkuCls = pct>=100?'over':pct>=80?'':' ok';
+        const uriageNum = parseFloat(j.uriage)||0;
+        return `<div class="job-card ${j.status==='done'?'done-job':'active-job'}" onclick="showJobDetail('${j.id}')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              ${j.code?`<div class="job-code">${esc(j.code)}</div>`:''}
+              <div class="job-name-lg">${esc(j.name)}</div>
+              ${j.client?`<div class="job-client">施主: ${esc(j.client)}</div>`:''}
+            </div>
+            <div style="text-align:right">${jobStatusBadge(j)}</div>
+          </div>
+          <div class="job-kpi-row">
+            <div class="job-kpi">
+              <div class="job-kpi-val${ninkuCls}">${actual.totalNinku.toFixed(1)}</div>
+              <div class="job-kpi-label">実績人工</div>
+            </div>
+            <div class="job-kpi">
+              <div class="job-kpi-val" style="color:#666">${estNinku>0?estNinku.toFixed(1):'—'}</div>
+              <div class="job-kpi-label">見積人工</div>
+            </div>
+            <div class="job-kpi">
+              <div class="job-kpi-val" style="color:#70a8e8">${actual.days}</div>
+              <div class="job-kpi-label">日報件数</div>
+            </div>
+          </div>
+          ${estNinku>0?`
+          <div class="progress-wrap">
+            <div class="progress-label">
+              <span style="color:#555;font-size:9px">人工消化率</span>
+              <span style="font-size:10px;font-weight:700;color:${pct>=100?'#e87050':pct>=80?'#c8962a':'#70c870'}">${pct}%</span>
+            </div>
+            <div class="progress-track"><div class="progress-fill ${fillCls}" style="width:${Math.min(pct,100)}%"></div></div>
+          </div>`:''}
+          ${j.kikanStart||j.kikanEnd?`<div style="color:#555;font-size:9px;margin-top:6px">📅 ${esc(j.kikanStart||'?')} 〜 ${esc(j.kikanEnd||'?')}</div>`:''}
+        </div>`;
+      }).join('');
+
+  return `
+    <div class="filter-row">${filterBtns}</div>
+    <div style="padding:4px 14px 2px;display:flex;justify-content:space-between;align-items:center">
+      <div style="color:#444;font-size:9px;font-weight:700;letter-spacing:2px">${filtered.length}件</div>
+      <button class="btn-sm" onclick="addJobModal()" style="background:#3a2a10;color:#c8962a;border:1px solid #4a3a20">＋ 新規工事</button>
+    </div>
+    ${cards}`;
+}
+
+// ========== 工事詳細 ==========
+function showJobDetail(jobId){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  const actual = getJobActual(jobId);
+  const estNinku = parseFloat(j.estNinkuTotal)||0;
+  const pct = estNinku>0?Math.min(Math.round(actual.totalNinku/estNinku*100),120):0;
+  const fillCls = pct>=100?'over':pct>=80?'warn':'ok';
+
+  // 工種別見積vs実績
+  const koujiRows = KOUJI_TYPES.filter(kt=>{
+    const est = parseFloat(j.estNinkuByKouji?.[kt.id])||0;
+    const act = actual.koujiMap[kt.id]||0;
+    return est>0||act>0;
+  }).map(kt=>{
+    const est = parseFloat(j.estNinkuByKouji?.[kt.id])||0;
+    const act = actual.koujiMap[kt.id]||0;
+    const diff = act-est;
+    const diffHtml = est>0
+      ? `<span class="kouji-est-diff ${diff>0?'plus':'minus'}">${diff>0?'+':''}${diff.toFixed(1)}</span>`
+      : '';
+    return `<div class="kouji-est-row">
+      <span class="kouji-est-name">${kt.icon} ${kt.label}</span>
+      <div class="kouji-est-nums">
+        <span class="kouji-est-val kouji-est-plan">${est>0?est.toFixed(1)+'見':''}</span>
+        <span class="kouji-est-val kouji-est-actual">${act.toFixed(1)}実</span>
+        ${diffHtml}
+      </div>
+    </div>`;
+  }).join('');
+
+  // 使用材料トップ5
+  const topMat = Object.entries(actual.matMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const matRows = topMat.map(([name,qty])=>
+    `<div class="info-row"><span class="info-label">🪵 ${esc(name)}</span><span class="info-val">${qty}</span></div>`
+  ).join('');
+
+  // 財務情報
+  const uriage = parseFloat(j.uriage)||0;
+  const genka  = parseFloat(j.genka)||0;
+  const arari  = uriage-genka;
+  const arariRate = uriage>0?Math.round(arari/uriage*100):0;
+
+  showModal(`<div class="sheet" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+      <div>
+        <div class="sheet-title">${esc(j.name)}</div>
+        ${j.code?`<div style="color:#555;font-size:10px">${esc(j.code)}</div>`:''}
+      </div>
+      ${jobStatusBadge(j)}
+    </div>
+    <div class="sheet-desc">${j.client?'施主: '+esc(j.client):''}${j.address?' · '+esc(j.address):''}</div>
+
+    <!-- 人工サマリー -->
+    <div style="background:#161614;border-radius:10px;padding:12px;border:1px solid #2e2e28;margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+        <div><div style="color:#c8962a;font-size:18px;font-weight:700">${actual.totalNinku.toFixed(1)}</div><div style="color:#555;font-size:9px">実績人工</div></div>
+        <div><div style="color:#666;font-size:18px;font-weight:700">${estNinku>0?estNinku.toFixed(1):'—'}</div><div style="color:#555;font-size:9px">見積人工</div></div>
+        <div><div style="color:${pct>=100?'#e87050':'#70c870'};font-size:18px;font-weight:700">${estNinku>0?pct+'%':'—'}</div><div style="color:#555;font-size:9px">消化率</div></div>
+      </div>
+      ${estNinku>0?`<div class="progress-track" style="margin-top:10px"><div class="progress-fill ${fillCls}" style="width:${Math.min(pct,100)}%"></div></div>`:''}
+    </div>
+
+    <!-- 工種別 -->
+    ${koujiRows?`<div style="color:#555;font-size:9px;padding:4px 0 2px;letter-spacing:1px">工種別 見積 vs 実績</div>${koujiRows}<div class="divider" style="margin:8px 0"></div>`:''}
+
+    <!-- 財務 -->
+    ${uriage>0?`
+    <div style="background:#1a1810;border-radius:10px;padding:12px;border:1px solid #2e2a18;margin-bottom:10px">
+      <div style="color:#888;font-size:9px;margin-bottom:8px;letter-spacing:1px">財務情報</div>
+      <div class="info-row"><span class="info-label">請負金額（税抜）</span><span class="info-val" style="color:#c8962a">¥${uriage.toLocaleString()}</span></div>
+      ${genka>0?`<div class="info-row"><span class="info-label">原価（業者等）</span><span class="info-val" style="color:#e87050">¥${genka.toLocaleString()}</span></div>`:''}
+      ${genka>0?`<div class="info-row"><span class="info-label">粗利</span><span class="info-val" style="color:#70c870">¥${arari.toLocaleString()}（${arariRate}%）</span></div>`:''}
+    </div>`:''}
+
+    <!-- 使用材料 -->
+    ${matRows?`<div style="color:#555;font-size:9px;padding:4px 0 2px;letter-spacing:1px">使用材料（日報累計）</div>${matRows}<div class="divider" style="margin:8px 0"></div>`:''}
+
+    <!-- 工期 -->
+    ${j.kikanStart||j.kikanEnd?`<div class="info-row"><span class="info-label">工期</span><span class="info-val">${esc(j.kikanStart||'?')} 〜 ${esc(j.kikanEnd||'?')}</span></div>`:''}
+    ${j.memo?`<div style="color:#888;font-size:11px;margin-top:6px;line-height:1.6">${esc(j.memo)}</div>`:''}
+
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn-cancel" onclick="closeModalForce()">閉じる</button>
+      <button class="btn-confirm blue" onclick="closeModalForce();addJobModal('${jobId}')">✏️ 編集</button>
+    </div>
+  </div>`);
+}
+
+// ========== 工事台帳 追加・編集モーダル ==========
+function addJobModal(id){
+  const j = id ? jobs.find(x=>x.id===id) : null;
+
+  // 工種別見積人工の入力フィールド
+  const koujiEstInputs = KOUJI_TYPES.map(kt=>{
+    const val = j?.estNinkuByKouji?.[kt.id]||'';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="color:#888;font-size:11px;flex:1">${kt.icon} ${kt.label}</span>
+      <input style="width:60px;background:#161614;border:none;border-bottom:1px solid #3a3a30;color:#e8b050;font-size:12px;text-align:right;outline:none;font-family:inherit;padding:2px 0"
+        type="number" step="0.5" min="0" id="est-${kt.id}" value="${val}" placeholder="0"/>
+      <span style="color:#555;font-size:10px">人工</span>
+    </div>`;
+  }).join('');
+
+  const statusOpts = [
+    {v:'plan', l:'📅 予定（着工前）'},
+    {v:'active',l:'🔨 施工中'},
+    {v:'done',  l:'✅ 完工'},
+  ].map(o=>`<option value="${o.v}"${(j?.status||'active')===o.v?' selected':''}>${o.l}</option>`).join('');
+
+  showModal(`<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-title">${j?'工事台帳を編集':'新規工事を登録'}</div>
+    <div class="sheet-desc">基本情報・見積人工・財務情報を入力</div>
+
+    <div style="color:#c8962a;font-size:10px;font-weight:700;margin-bottom:6px">📋 基本情報</div>
+    <label class="form-label">工事コード（例: 2025-001）</label>
+    <input class="form-input" type="text" id="jb-code" value="${esc(j?.code||'')}"/>
+    <label class="form-label">工事名 *</label>
+    <input class="form-input" type="text" id="jb-name" value="${esc(j?.name||'')}"/>
+    <label class="form-label">施主・発注者</label>
+    <input class="form-input" type="text" id="jb-client" value="${esc(j?.client||'')}"/>
+    <label class="form-label">現場住所</label>
+    <input class="form-input" type="text" id="jb-addr" value="${esc(j?.address||'')}"/>
+    <label class="form-label">ステータス</label>
+    <select class="form-select" id="jb-status">${statusOpts}</select>
+    <div class="form-row">
+      <div><label class="form-label">着工日</label><input class="form-input" type="date" id="jb-start" value="${esc(j?.kikanStart||'')}"/></div>
+      <div><label class="form-label">完工予定日</label><input class="form-input" type="date" id="jb-end" value="${esc(j?.kikanEnd||'')}"/></div>
+    </div>
+
+    <div style="color:#c8962a;font-size:10px;font-weight:700;margin:4px 0 8px">💴 財務情報</div>
+    <div class="form-row">
+      <div><label class="form-label">請負金額（税抜）</label><input class="form-input" type="number" id="jb-uriage" value="${j?.uriage||''}" placeholder="0"/></div>
+      <div><label class="form-label">原価予算（税抜）</label><input class="form-input" type="number" id="jb-genka" value="${j?.genka||''}" placeholder="0"/></div>
+    </div>
+
+    <div style="color:#c8962a;font-size:10px;font-weight:700;margin:4px 0 8px">👷 見積人工</div>
+    <label class="form-label">合計見積人工（工種別の合計が自動入力されます）</label>
+    <input class="form-input" type="number" step="0.5" id="jb-est-total" value="${j?.estNinkuTotal||''}" placeholder="例: 25"/>
+    <div style="color:#555;font-size:10px;margin:-4px 0 8px">▼ 工種別に内訳を入力（任意）</div>
+    <div style="background:#161614;border-radius:8px;padding:10px 12px;border:1px solid #2e2e28;margin-bottom:9px" id="kouji-est-wrap">
+      ${koujiEstInputs}
+    </div>
+    <button class="btn-sm" style="width:100%;margin-bottom:9px" onclick="calcTotalEst()">↑ 工種別合計を自動計算</button>
+
+    <label class="form-label">メモ</label>
+    <textarea class="form-textarea" id="jb-memo">${esc(j?.memo||'')}</textarea>
+
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModalForce()">キャンセル</button>
+      <button class="btn-confirm green" onclick="saveJob('${id||''}')">保存する</button>
+    </div>
+    ${id?`<button style="width:100%;margin-top:8px;background:#3a1a1a;color:#e87050;border:1px solid #4a2a2a;border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit" onclick="deleteJob('${id}')">🗑️ この工事を削除する</button>`:''}
+  </div>`);
+}
+
+function calcTotalEst(){
+  let total = 0;
+  KOUJI_TYPES.forEach(kt=>{
+    total += parseFloat(document.getElementById('est-'+kt.id)?.value)||0;
+  });
+  const el = document.getElementById('jb-est-total');
+  if(el) el.value = total > 0 ? total.toFixed(1) : '';
+}
+
+function editJob(id){ addJobModal(id); }
+
+function saveJob(id){
+  const code   = document.getElementById('jb-code').value.trim();
+  const name   = document.getElementById('jb-name').value.trim();
+  const client = document.getElementById('jb-client').value.trim();
+  const addr   = document.getElementById('jb-addr').value.trim();
+  const status = document.getElementById('jb-status').value;
+  const start  = document.getElementById('jb-start').value;
+  const end    = document.getElementById('jb-end').value;
+  const uriage = document.getElementById('jb-uriage').value;
+  const genka  = document.getElementById('jb-genka').value;
+  const estTotal = document.getElementById('jb-est-total').value;
+  const memo   = document.getElementById('jb-memo').value.trim();
+
+  if(!name){ alert('工事名を入力してください'); return; }
+
+  // 工種別見積人工
+  const estNinkuByKouji = {};
+  KOUJI_TYPES.forEach(kt=>{
+    const v = parseFloat(document.getElementById('est-'+kt.id)?.value)||0;
+    if(v>0) estNinkuByKouji[kt.id] = v;
+  });
+
+  const record = {
+    id: id || ('job-'+Date.now()),
+    code, name, client, address: addr, status,
+    kikanStart: start, kikanEnd: end,
+    uriage: parseFloat(uriage)||0,
+    genka: parseFloat(genka)||0,
+    estNinkuTotal: parseFloat(estTotal)||0,
+    estNinkuByKouji, memo,
+    updatedAt: new Date().toISOString(),
+  };
+  if(!id) record.createdAt = new Date().toISOString();
+
+  if(id){
+    const idx = jobs.findIndex(x=>x.id===id);
+    if(idx>=0) jobs[idx]=record; else jobs.push(record);
+  } else {
+    jobs.unshift(record);
+  }
+  save(); closeModalForce(); render();
+}
+
+function deleteJob(id){
+  if(!confirm('この工事を削除しますか？\n日報データは残ります。')) return;
+  jobs = jobs.filter(x=>x.id!==id);
+  save(); closeModalForce(); render();
+}
+
+// ========== Excel出力 ==========
+function exportNippoExcel(){
+  if(nippos.length===0){ alert('日報データがありません'); return; }
+  const wb = XLSX.utils.book_new();
+  const now = new Date();
+  const year = now.getFullYear();
+  const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+  // 年間サマリー
+  const sumRows = [
+    [`大竹工務店 ${year}年 日報サマリー`],[`出力日: ${now.toLocaleDateString('ja-JP')}`],[''],
+    ['月','日報件数','合計人工','稼働工事数'],
+  ];
+  months.forEach((mn,mi)=>{
+    const mnips = nippos.filter(n=>{const d=new Date(n.date);return d.getFullYear()===year&&d.getMonth()===mi;});
+    const totNinku = mnips.reduce((s,n)=>s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0),0);
+    sumRows.push([mn, mnips.length, totNinku, new Set(mnips.map(n=>n.jobCode||n.jobName).filter(Boolean)).size]);
+  });
+  const wsSummary = XLSX.utils.aoa_to_sheet(sumRows);
+  wsSummary['!cols']=[{wch:6},{wch:8},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, wsSummary, `${year}年サマリー`);
+
+  // 月別シート
+  months.forEach((mn,mi)=>{
+    const mnips = nippos.filter(n=>{const d=new Date(n.date);return d.getFullYear()===year&&d.getMonth()===mi;}).sort((a,b)=>a.date.localeCompare(b.date));
+    const rows = [
+      [`大竹工務店 ${year}年${mn} 日報一覧`],[`出力日: ${now.toLocaleDateString('ja-JP')}`],[''],
+      ['作業日','工事コード','工事名','工種','合計人工',...workers.map(w=>w.name+'（人工）'),'使用材料','メモ'],
+    ];
+    mnips.forEach(n=>{
+      const ninku = Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0);
+      const koujiLabel = (n.koujiTypes||[]).map(k=>KOUJI_TYPES.find(x=>x.id===k)?.label||k).join('・');
+      const matLabel = (n.materials||[]).filter(m=>parseFloat(m.qty)>0).map(m=>`${m.name}×${m.qty}`).join('、');
+      rows.push([
+        n.date, n.jobCode||'', n.jobName||'',
+        koujiLabel, ninku,
+        ...workers.map(w=>parseFloat(n.workers?.[w.id])||0),
+        matLabel, n.memo||''
+      ]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:10},{wch:10},{wch:20},{wch:20},{wch:8},...workers.map(()=>({wch:10})),{wch:30},{wch:30}];
+    XLSX.utils.book_append_sheet(wb, ws, `${year}年${mn}`);
+  });
+
+  XLSX.writeFile(wb, `大竹工務店_日報_${year}年.xlsx`);
+}
+
+function exportKoujiExcel(){
+  const wb = XLSX.utils.book_new();
+  const rows = [
+    ['大竹工務店 工種別人工集計'],[`出力日: ${new Date().toLocaleDateString('ja-JP')}`],[''],
+    ['工種','合計人工'],
+  ];
+  getNinkuByKouji().forEach(([k,v])=>{
+    const kt = KOUJI_TYPES.find(x=>x.id===k);
+    rows.push([kt?.label||k, v]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:16},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws, '工種別人工');
+  XLSX.writeFile(wb, `大竹工務店_工種別人工_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function exportWorkerExcel(){
+  const wb = XLSX.utils.book_new();
+  const rows = [
+    ['大竹工務店 作業者別人工集計'],[`出力日: ${new Date().toLocaleDateString('ja-JP')}`],[''],
+    ['作業者','合計人工'],
+  ];
+  getNinkuByWorker().forEach(([wid,v])=>{
+    const w = workers.find(x=>x.id===wid);
+    rows.push([w?.name||wid, v]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws, '作業者別人工');
+  XLSX.writeFile(wb, `大竹工務店_作業者別人工_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function exportBackupJSON(){
+  const data={nippos,workers,jobs,exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`大竹工務店_日報バックアップ_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();URL.revokeObjectURL(a.href);
+}
+
+function importBackupJSON(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json';
+  inp.onchange=e=>{
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(data.nippos){
+          nippos=data.nippos;
+          if(data.workers) workers=data.workers;
+          if(data.jobs) jobs=data.jobs;
+          save();render();alert('復元しました');
+        } else { alert('形式が正しくありません'); }
+      }catch(ex){ alert('読み込みエラー: '+ex.message); }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
+function confirmReset(){
+  showModal(`<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-title" style="color:#e87050">⚠️ 日報データを初期化しますか？</div>
+    <div class="sheet-desc" style="color:#e87050">すべての日報・工事マスタが削除されます。<br>作業者マスタは残ります。<br>この操作は取り消せません。</div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModalForce()">キャンセル</button>
+      <button class="btn-confirm red" onclick="doReset()">初期化する</button>
+    </div>
+  </div>`);
+}
+function doReset(){
+  nippos=[];jobs=[];save();closeModalForce();render();
+}
+
+// ========== モーダル共通 ==========
+function showModal(html){document.getElementById('modal-container').innerHTML=`<div class="overlay" id="modal-overlay" onclick="closeModal(event)">${html}</div>`;}
+function closeModal(e){if(!e||e.target.id==='modal-overlay')closeModalForce();}
+function closeModalForce(){document.getElementById('modal-container').innerHTML='';}
+
+// ========== 初期化 ==========
+trySyncInventory();
+render();
+
+// ========== PWA対応 ==========
+function setupPWA(){
+  const iconSvg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="100" fill="#222220"/><rect x="50" y="50" width="412" height="412" rx="70" fill="#2a2a24"/><text x="256" y="230" text-anchor="middle" font-size="180" fill="#c8962a">📋</text><text x="256" y="360" text-anchor="middle" font-size="64" font-family="sans-serif" fill="#e8d5a3" font-weight="bold">日報</text><text x="256" y="420" text-anchor="middle" font-size="34" font-family="sans-serif" fill="#888">大竹工務店</text></svg>`;
+  const iconB64='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(iconSvg)));
+  ['apple-touch-icon','shortcut icon'].forEach(rel=>{
+    const l=document.createElement('link');l.rel=rel;l.href=iconB64;document.head.appendChild(l);
+  });
+  const manifest={
+    name:'大竹工務店 日報',short_name:'大竹日報',
+    description:'大竹工務店の工事日報アプリ',
+    start_url:location.pathname||'/',
+    scope:location.pathname.replace(/\/[^\/]*$/,'/')||'/',
+    display:'standalone',background_color:'#1a1a16',theme_color:'#c8962a',
+    orientation:'portrait-primary',lang:'ja',
+    icons:[
+      {src:iconB64,sizes:'192x192',type:'image/svg+xml',purpose:'any'},
+      {src:iconB64,sizes:'512x512',type:'image/svg+xml',purpose:'any'},
+    ]
+  };
+  try{
+    const mBlob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+    const mUrl=URL.createObjectURL(mBlob);
+    const ml=document.getElementById('pwa-manifest');
+    if(ml){ml.href=mUrl;ml.type='application/manifest+json';}
+  }catch(e){}
+  if('serviceWorker' in navigator && location.protocol === 'https:'){
+    const swCode=[
+      "const C='daiku-nippo-v1';",
+      "self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.add(self.registration.scope)).then(()=>self.skipWaiting()).catch(()=>self.skipWaiting())));",
+      "self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));",
+      "self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const req=new Request(e.request.url,{method:e.request.method,headers:e.request.headers,mode:e.request.mode==='navigate'?'navigate':'cors',credentials:e.request.credentials,redirect:e.request.redirect});e.respondWith(caches.match(req).then(r=>r||fetch(req).then(res=>{if(res.ok){const clone=res.clone();caches.open(C).then(c=>c.put(req,clone));}return res;}).catch(()=>caches.match(req))));});",
+    ].join('\n');
+    try{
+      const swBlob=new Blob([swCode],{type:'application/javascript'});
+      const swUrl=URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swUrl,{scope:'./'}).catch(()=>{});
+    }catch(e){}
+  }
+}
+setupPWA();
+
+
+// ===== 起動時スプレッドシートから読み込み =====
+async function loadFromSheet(){
+  try{
+    const res = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
+    const data = await res.json();
+    if(data.status==='ok'){
+      if(data.nippos&&data.nippos.length>0){
+        nippos=data.nippos;
+        localStorage.setItem('nip_nippos',JSON.stringify(nippos));
+      }
+      if(data.jobs&&data.jobs.length>0){
+        jobs=data.jobs;
+        localStorage.setItem('nip_jobs',JSON.stringify(jobs));
+      }
+      if(data.workers&&data.workers.length>0){
+        workers=data.workers;
+        localStorage.setItem('nip_workers',JSON.stringify(workers));
+      }
+      render();
+      console.log('日報データをスプレッドシートから読み込みました');
+    }
+  }catch(e){
+    console.log('スプレッドシート読み込みエラー:',e);
+  }
+}
+// ===== GASから手動読み込み =====
+async function loadFromSheetManual(){
+  const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
+  if(btn){ btn.textContent = '🔄 読み込み中...'; btn.disabled = true; }
+  try{
+    const res = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
+    const data = await res.json();
+    if(data.status==='ok'){
+      if(data.nippos&&data.nippos.length>0){
+        nippos=data.nippos;
+        localStorage.setItem('nip_nippos',JSON.stringify(nippos));
+      }
+      if(data.jobs&&data.jobs.length>0){
+        jobs=data.jobs;
+        localStorage.setItem('nip_jobs',JSON.stringify(jobs));
+      }
+      if(data.workers&&data.workers.length>0){
+        workers=data.workers;
+        localStorage.setItem('nip_workers',JSON.stringify(workers));
+      }
+      render();
+      alert('✅ 読み込み完了\n日報:'+nippos.length+'件 / 工事:'+jobs.length+'件');
+    } else {
+      alert('❌ 読み込み失敗');
+    }
+  }catch(e){
+    alert('❌ エラー: '+e.message);
+  }finally{
+    if(btn){ btn.textContent = '🔄 スプレッドシートから読み込む'; btn.disabled = false; }
+  }
+}
+// ===== Googleスプレッドシート同期 =====
+function saveToGoogleDrive(){
+  const data = {
+    type: 'nippo',
+    nippos: nippos,
+    jobs: jobs,
+    workers: workers
+  };
+  fetch(GAS_URL, {
+    method:'POST', mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(()=>{
+    alert('✅ 日報・工事台帳データをGoogleスプレッドシートに同期しました\n日報:'+nippos.length+'件 / 工事:'+jobs.length+'件');
+  }).catch(err=>{
+    alert('同期エラー: '+err.message);
+  });
+}
+
+loadFromSheet();
+</script>
+</body>
+</html>
