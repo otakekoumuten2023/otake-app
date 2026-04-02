@@ -867,9 +867,11 @@ function renderMaster(){
       <div class="data-card">
         <div class="data-card-title">🛠️ データ管理</div>
         <div class="data-btn-row">
+          <button class="data-btn" style="background:#1a3a2a;color:#70c870;border:1px solid #2a4a3a" onclick="saveToGoogleDrive()">☁️ スプレッドシートに同期（追記・安全）</button>
+          <button class="data-btn" style="background:#2a1a0a;color:#f0a030;border:1px solid #5a3a10" onclick="saveWithOverwrite()">⚠️ 削除を反映して同期（自動バックアップ付き）</button>
           <button class="data-btn" style="background:#1a3a2a;color:#70e8a0;border:1px solid #2a4a3a" onclick="loadFromSheetManual()">🔄 スプレッドシートから読み込む</button>
-          <button class="data-btn green" onclick="saveToGoogleDrive()">☁️ スプレッドシートに同期</button>
           <button class="data-btn blue" onclick="importBackupJSON()">📂 バックアップから復元</button>
+          <button class="data-btn" style="background:#2a1a3a;color:#e8b050;border:1px solid #4a3a10" onclick="removeDuplicateNippos()">🔄 重複日報を削除（同じIDを統合）</button>
           <button class="data-btn red" onclick="confirmReset()">🗑️ 日報データを初期化</button>
         </div>
         <div style="color:#444;font-size:10px;text-align:center;padding:8px 0">日報${nippos.length}件 / 作業者${workers.length}名 / 工事${jobs.length}件</div>
@@ -1304,6 +1306,7 @@ function showNippoDetail(nid){
     ${n.memo?`<div class="divider"></div><div style="color:#888;font-size:11px;line-height:1.6">${esc(n.memo)}</div>`:''}
     <div class="btn-row" style="margin-top:14px">
       <button class="btn-cancel" onclick="closeModalForce()">閉じる</button>
+      <button class="btn-confirm" style="background:#3a1a1a;color:#e87050;border:1px solid #5a2a2a" onclick="deleteNippo('${nid}')">🗑️ 削除</button>
       <button class="btn-confirm blue" onclick="closeModalForce();openNippoModal('${nid}')">✏️ 編集</button>
     </div>
   </div>`);
@@ -1761,6 +1764,32 @@ function importBackupJSON(){
   inp.click();
 }
 
+function removeDuplicateNippos(){
+  const before = nippos.length;
+  // IDが同じものは最初の1件だけ残す
+  const seen = new Set();
+  nippos = nippos.filter(n => {
+    const key = n.id || (n.date + '_' + (n.jobName||'') + '_' + JSON.stringify(n.workers||{}));
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  // 人工数が0でworkersも空の日報を候補として表示
+  const emptyNippos = nippos.filter(n => {
+    const ninku = Object.values(n.workers||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
+    return ninku === 0 && (!n.memo || n.memo === '');
+  });
+  const after = nippos.length;
+  const removed = before - after;
+  save(); render();
+
+  let msg = `重複削除: ${removed}件削除しました（${before}件→${after}件）`;
+  if(emptyNippos.length > 0){
+    msg += `\n\n⚠️ 人工数・メモが空の日報が${emptyNippos.length}件あります。\n日報一覧で確認して不要なものは個別に削除してください。`;
+  }
+  alert(msg);
+}
+
 function confirmReset(){
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#e87050">⚠️ 日報データを初期化しますか？</div>
@@ -1851,6 +1880,30 @@ async function loadFromSheet(){
     console.log('スプレッドシート読み込みエラー:',e);
   }
 }
+// ===== 削除を反映して同期（全件上書き・自動バックアップ付き） =====
+async function saveWithOverwrite(){
+  if(!confirm('⚠️ 削除を反映して同期します。\n\n・実行前にDriveへ自動バックアップが保存されます\n・スプレッドシートの日報データが現在のアプリデータで上書きされます\n・削除した日報が完全に消えます\n\n実行しますか？')) return;
+  const btn = document.querySelector('[onclick="saveWithOverwrite()"]');
+  if(btn){ btn.textContent='⏳ バックアップ保存中...'; btn.disabled=true; }
+  const data = {
+    type: 'nippo_overwrite',
+    nippos:  nippos,
+    jobs:    jobs,
+    workers: workers
+  };
+  fetch(GAS_URL, {
+    method:'POST', mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(()=>{
+    if(btn){ btn.textContent='⚠️ 削除を反映して同期（自動バックアップ付き）'; btn.disabled=false; }
+    alert('✅ 完了\n削除を反映して同期しました。\nDriveの「大竹工務店_バックアップ」に\nバックアップが保存されました。');
+  }).catch(err=>{
+    if(btn){ btn.textContent='⚠️ 削除を反映して同期（自動バックアップ付き）'; btn.disabled=false; }
+    alert('❌ エラー: '+err.message);
+  });
+}
+
 // ===== GASから手動読み込み =====
 async function loadFromSheetManual(){
   const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
