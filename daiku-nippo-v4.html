@@ -394,7 +394,7 @@ function totalNinkuForMonth(y, m){
 }
 function nippoPeriodFilter(n){
   const d=new Date(n.date), now=new Date();
-  if(nippoPeriod==='today') return n.date===today();
+  if(nippoPeriod==='today') return String(n.date||'').slice(0,10)===today();
   if(nippoPeriod==='week'){const w=new Date(now);w.setDate(w.getDate()-7);return d>=w;}
   if(nippoPeriod==='month') return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
   return true;
@@ -441,7 +441,7 @@ function getNinkuByJob(){
 function updateHeader(){
   document.getElementById('today-date').textContent = new Date().toLocaleDateString('ja-JP') + ' · 工事日報管理';
   const now = new Date();
-  const todayNippos = nippos.filter(n=>n.date===today());
+  const todayNippos = nippos.filter(n=>String(n.date||'').slice(0,10)===today());
   const monthNippos = nippos.filter(n=>{
     const d=new Date(n.date);
     return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
@@ -493,9 +493,10 @@ function renderCalendar(){
     const startDow = firstDay.getDay();
     const nippoByDate = {};
     nippos.forEach(n=>{
-      const d = new Date(n.date);
+      const dateKey = String(n.date||'').slice(0,10); // YYYY-MM-DD に正規化
+      const d = new Date(dateKey);
       if(d.getFullYear()===y && d.getMonth()===m){
-        nippoByDate[n.date] = (nippoByDate[n.date]||0) + 1;
+        nippoByDate[dateKey] = (nippoByDate[dateKey]||0) + 1;
       }
     });
     function isMissingDay(d){
@@ -597,7 +598,7 @@ function calNext(){
 
 function onCalDayClick(dateStr){
   // その日の日報一覧を表示、なければ新規入力
-  const list = nippos.filter(n=>n.date===dateStr);
+  const list = nippos.filter(n=>String(n.date||'').slice(0,10)===dateStr);
   if(list.length===0){
     if(confirm(`${dateStr} の日報がありません。新規入力しますか？`)){
       openNewNippo(dateStr);
@@ -621,7 +622,7 @@ function onCalDayClick(dateStr){
 function renderHome(){
   const now = new Date();
   const mn = totalNinkuForMonth(now.getFullYear(), now.getMonth());
-  const todayList = nippos.filter(n=>n.date===today());
+  const todayList = nippos.filter(n=>String(n.date||'').slice(0,10)===today());
 
   const syncHtml = invItems.length>0
     ? `<div class="sync-banner"><div><div class="sync-ok">🔗 在庫管理PWAと連携中</div><div style="color:#555;font-size:10px;margin-top:2px">${invItems.length}品目が参照可能</div></div><button class="btn-sm" onclick="trySyncInventory()">更新</button></div>`
@@ -711,7 +712,7 @@ function renderNippoList(){
     {key:'all',label:'全期間'},
   ].map(p=>`<button class="period-btn${nippoPeriod===p.key?' active':''}" onclick="nippoPeriod='${p.key}';render()">${p.label}</button>`).join('');
 
-  const filtered = [...nippos].filter(nippoPeriodFilter).sort((a,b)=>b.date.localeCompare(a.date));
+  const filtered = [...nippos].filter(nippoPeriodFilter).sort((a,b)=>String(b.date||'').slice(0,10).localeCompare(String(a.date||'').slice(0,10)));
   const totalNinku = filtered.reduce((s,n)=>s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0),0);
 
   const cards = filtered.length===0
