@@ -94,6 +94,8 @@ body{font-family:'Hiragino Sans','Noto Sans JP',sans-serif;background:#111110;mi
       <div style="color:#666;font-size:11px;padding:4px 0">登録: <span id="data-count" style="color:#c8962a;font-weight:700">0</span>件　業者: <span id="vendor-count" style="color:#70a8e8;font-weight:700">0</span>社</div>
       <button class="data-btn green" onclick="saveToSheet()">☁️ Googleスプレッドシートに同期（書き込み）</button>
       <button class="data-btn" style="background:#1a2a3a;color:#70e8d0;border:1px solid #2a4a48" onclick="loadFromSheetManual()">🔄 スプレッドシートから読み込む</button>
+      <button class="data-btn" style="background:#1a3a2a;color:#e8d5a3;border:1px solid #4a3a10" onclick="document.getElementById('cpuace-file').click()">📐 CPU Ace実行予算を取込む（Excel）</button>
+      <input type="file" id="cpuace-file" accept=".xls,.xlsx" style="display:none" onchange="importCpuAce(event)">
       <button class="data-btn blue" onclick="exportJSON()">💾 JSONバックアップ</button>
       <button class="data-btn blue" onclick="document.getElementById('restore-file').click()">📂 バックアップから復元</button>
       <input type="file" id="restore-file" accept=".json" style="display:none" onchange="restoreJSON(event)">
@@ -104,6 +106,7 @@ body{font-family:'Hiragino Sans','Noto Sans JP',sans-serif;background:#111110;mi
 </div>
 <div id="toast" class="toast"></div>
 <div id="modal-wrap"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 
 const GAS_URL='https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
@@ -298,6 +301,104 @@ function exportJSON(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='大竹工務店_単価DB_'+new Date().toISOString().slice(0,10)+'.json';a.click();
   toast('バックアップ保存しました');
+}
+
+// ===== CPU Ace実行予算 取込 =====
+async function importCpuAce(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  document.getElementById('cpuace-file').value = '';
+
+  toast('📐 CPU Ace読み込み中...');
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const wb = XLSX.read(arrayBuffer, {type:'array'});
+
+    // 明細シートを探す
+    const sheetName = wb.SheetNames.find(n => n === '明細') || wb.SheetNames[1];
+    if(!sheetName){ toast('❌ 明細シートが見つかりません'); return; }
+
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+
+    let currentCat = '';
+    const extracted = [];
+    const now = new Date().toISOString();
+    const source = file.name.replace(/\.xlsx?$/, '');
+
+    for(let i=0; i<rows.length; i++){
+      const row = rows[i];
+      const col1 = String(row[1]||'').trim();
+      const col2 = String(row[2]||'').trim();
+      const col3 = row[3]; // 数量
+      const col4 = String(row[4]||'').trim(); // 単位
+      const col5 = row[5]; // 実行単価
+
+      // 工種見出し
+      if(col1.includes('■') || col1.includes('<<')){
+        if(!col1.includes('小 計') && !col1.includes('合 計')){
+          currentCat = col1.replace(/[■<<>>]/g,'').replace('小計','').trim();
+        }
+        continue;
+      }
+
+      // データ行
+      if(col1 && col1 !== '名称' && col3 && col5 && currentCat){
+        const qty = parseFloat(String(col3).replace(',',''));
+        const price = parseFloat(String(col5).replace(',',''));
+        if(!isNaN(qty) && !isNaN(price) && price > 0 && qty > 0){
+          extracted.push({
+            id: 'tk-ace-'+Date.now()+'-'+extracted.length,
+            cat: currentCat,
+            name: col1,
+            spec: col2||'',
+            code: '',
+            vendor: source+'実績単価',
+            price: Math.round(price),
+            unit: col4||'式',
+            updatedAt: now,
+            memo: source+'実績 数量'+qty+(col4||'')
+          });
+        }
+      }
+    }
+
+    if(extracted.length === 0){
+      toast('❌ 取込データが見つかりませんでした'); return;
+    }
+
+    // 既存と重複チェック（同じ工種・品名・仕様は上書き）
+    let added = 0, updated = 0;
+    extracted.forEach(newItem => {
+      const idx = items.findIndex(x =>
+        x.cat === newItem.cat && x.name === newItem.name && x.spec === newItem.spec
+      );
+      if(idx >= 0){
+        items[idx] = {...items[idx], ...newItem, id: items[idx].id};
+        updated++;
+      } else {
+        items.push(newItem);
+        added++;
+      }
+    });
+
+    save(); render();
+
+    // 工種別集計
+    const catCounts = {};
+    extracted.forEach(i => { catCounts[i.cat] = (catCounts[i.cat]||0)+1; });
+    const catSummary = Object.entries(catCounts)
+      .sort((a,b)=>b[1]-a[1]).slice(0,5)
+      .map(([c,n])=>c+':'+n+'件').join('、');
+
+    toast(`✅ CPU Ace取込完了 ${added}件追加・${updated}件更新\n主な工種: ${catSummary}`);
+    alert(`✅ CPU Ace取込完了\n\n追加: ${added}件\n更新: ${updated}件\n合計: ${extracted.length}件\n\nファイル: ${file.name}\n\n主な工種:\n${Object.entries(catCounts).map(([c,n])=>'  '+c+': '+n+'件').join('\n')}`);
+
+  } catch(e) {
+    toast('❌ エラー: '+e.message);
+    console.error(e);
+  }
 }
 
 function restoreJSON(e){
