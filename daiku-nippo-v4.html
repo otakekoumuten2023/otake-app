@@ -841,6 +841,7 @@ function renderMaster(){
       <div class="data-card">
         <div class="data-card-title">🛠️ データ管理</div>
         <div class="data-btn-row">
+          <button class="data-btn" style="background:#1a3a2a;color:#70e8a0;border:1px solid #2a4a3a" onclick="loadFromSheetManual()">🔄 スプレッドシートから読み込む</button>
           <button class="data-btn green" onclick="saveToGoogleDrive()">☁️ スプレッドシートに同期</button>
           <button class="data-btn blue" onclick="importBackupJSON()">📂 バックアップから復元</button>
           <button class="data-btn red" onclick="confirmReset()">🗑️ 日報データを初期化</button>
@@ -1822,6 +1823,37 @@ async function loadFromSheet(){
     }
   }catch(e){
     console.log('スプレッドシート読み込みエラー:',e);
+  }
+}
+// ===== GASから手動読み込み =====
+async function loadFromSheetManual(){
+  const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
+  if(btn){ btn.textContent = '🔄 読み込み中...'; btn.disabled = true; }
+  try{
+    const res = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
+    const data = await res.json();
+    if(data.status==='ok'){
+      if(data.nippos&&data.nippos.length>0){
+        nippos=data.nippos;
+        localStorage.setItem('nip_nippos',JSON.stringify(nippos));
+      }
+      if(data.jobs&&data.jobs.length>0){
+        jobs=data.jobs;
+        localStorage.setItem('nip_jobs',JSON.stringify(jobs));
+      }
+      if(data.workers&&data.workers.length>0){
+        workers=data.workers;
+        localStorage.setItem('nip_workers',JSON.stringify(workers));
+      }
+      render();
+      alert('✅ 読み込み完了\n日報:'+nippos.length+'件 / 工事:'+jobs.length+'件');
+    } else {
+      alert('❌ 読み込み失敗');
+    }
+  }catch(e){
+    alert('❌ エラー: '+e.message);
+  }finally{
+    if(btn){ btn.textContent = '🔄 スプレッドシートから読み込む'; btn.disabled = false; }
   }
 }
 // ===== Googleスプレッドシート同期 =====
