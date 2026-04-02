@@ -319,6 +319,7 @@ let nippoFilter = 'all';
 let nippoPeriod = 'month';
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
+let calView = 'month'; // 'month' | 'halfyear' | 'year'
 
 function defaultWorkers(){
   return [{id:'w1',name:'大竹'},{id:'w2',name:'職人A'},{id:'w3',name:'職人B'}];
@@ -476,99 +477,123 @@ function render(){
 function renderCalendar(){
   const now = new Date();
   const todayStr = today();
-  const firstDay = new Date(calYear, calMonth, 1);
-  const lastDay  = new Date(calYear, calMonth+1, 0);
-  const startDow = firstDay.getDay(); // 0=日
   const MONTHS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
-  // 当月の日報をdate別にカウント
-  const nippoByDate = {};
-  nippos.forEach(n=>{
-    const d = new Date(n.date);
-    if(d.getFullYear()===calYear && d.getMonth()===calMonth){
-      nippoByDate[n.date] = (nippoByDate[n.date]||0) + 1;
+  // 表示切り替えボタン
+  const viewBtns = [
+    {key:'month', label:'月'},
+    {key:'halfyear', label:'半年'},
+    {key:'year', label:'年間'},
+  ].map(v=>`<button onclick="calView='${v.key}';render()" style="border:none;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;${calView===v.key?'background:#c8962a;color:#1a1a16;':'background:#2a2a28;color:#888;'}">${v.label}</button>`).join('');
+
+  // 月単位のカレンダーHTML生成関数
+  function renderMonthGrid(y, m){
+    const firstDay = new Date(y, m, 1);
+    const lastDay  = new Date(y, m+1, 0);
+    const startDow = firstDay.getDay();
+    const nippoByDate = {};
+    nippos.forEach(n=>{
+      const d = new Date(n.date);
+      if(d.getFullYear()===y && d.getMonth()===m){
+        nippoByDate[n.date] = (nippoByDate[n.date]||0) + 1;
+      }
+    });
+    function isMissingDay(d){
+      const dt = new Date(y,m,d);
+      const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      if(dt > now) return false;
+      if(dt.getDay()===0) return false;
+      return !nippoByDate[ds];
     }
-  });
-
-  // 平日（月〜土）で日報がない日を「漏れ候補」とする
-  // ただし未来日と日曜は除外
-  function isMissingDay(y,m,d){
-    const dt = new Date(y,m,d);
-    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    if(dt > now) return false;          // 未来
-    if(dt.getDay()===0) return false;   // 日曜
-    return !nippoByDate[dateStr];       // 日報なし
-  }
-
-  // カレンダーグリッド生成
-  let cells = '';
-  // 前月の空白
-  for(let i=0;i<startDow;i++) cells += `<div class="cal-day other-month"><span class="cal-day-num"></span></div>`;
-
-  for(let d=1;d<=lastDay.getDate();d++){
-    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const dow = new Date(calYear,calMonth,d).getDay();
-    const isToday = dateStr===todayStr;
-    const count = nippoByDate[dateStr]||0;
-    const missing = isMissingDay(calYear,calMonth,d);
-
-    let cls = 'cal-day';
-    if(isToday) cls += ' today-cell';
-    if(count>0) cls += ' has-nippo';
-    if(missing) cls += ' missing-day';
-    if(dow===0) cls += ' weekend-sun';
-    if(dow===6) cls += ' weekend-sat';
-
-    // ドット表示（日報件数分、最大3個）
-    let dots = '';
-    if(count>0){
-      const n = Math.min(count,3);
-      dots = Array(n).fill('<div class="cal-dot cal-dot-nippo"></div>').join('');
-    } else if(missing){
-      dots = '<div class="cal-dot cal-dot-missing"></div>';
+    let cells = '';
+    for(let i=0;i<startDow;i++) cells+=`<div class="cal-day other-month"><span class="cal-day-num"></span></div>`;
+    for(let d=1;d<=lastDay.getDate();d++){
+      const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dow=new Date(y,m,d).getDay();
+      const isToday=dateStr===todayStr;
+      const count=nippoByDate[dateStr]||0;
+      const missing=isMissingDay(d);
+      let cls='cal-day';
+      if(isToday) cls+=' today-cell';
+      if(count>0) cls+=' has-nippo';
+      if(missing) cls+=' missing-day';
+      if(dow===0) cls+=' weekend-sun';
+      if(dow===6) cls+=' weekend-sat';
+      let dots='';
+      if(count>0) dots=Array(Math.min(count,3)).fill('<div class="cal-dot cal-dot-nippo"></div>').join('');
+      else if(missing) dots='<div class="cal-dot cal-dot-missing"></div>';
+      cells+=`<div class="${cls}" onclick="onCalDayClick('${dateStr}')"><span class="cal-day-num">${d}</span><div class="cal-dot-wrap">${dots}</div></div>`;
     }
-
-    cells += `<div class="${cls}" onclick="onCalDayClick('${dateStr}')">
-      <span class="cal-day-num">${d}</span>
-      <div class="cal-dot-wrap">${dots}</div>
+    let missingCount=0;
+    for(let d=1;d<=lastDay.getDate();d++) if(isMissingDay(d)) missingCount++;
+    return `<div style="margin-bottom:12px">
+      <div style="color:#e8d5a3;font-size:11px;font-weight:700;text-align:center;margin-bottom:6px">${MONTHS[m]}${missingCount>0?` <span style="color:#e87050;font-size:9px">⚠️${missingCount}日漏れ</span>`:''}</div>
+      <div class="cal-grid">
+        <div class="cal-dow sun">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div><div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow sat">土</div>
+        ${cells}
+      </div>
     </div>`;
   }
 
-  // 漏れ日数カウント
-  let missingCount = 0;
-  for(let d=1;d<=lastDay.getDate();d++) if(isMissingDay(calYear,calMonth,d)) missingCount++;
+  // 表示内容を決定
+  let content = '';
+  let navPrev = '', navNext = '', navTitle = '';
+
+  if(calView === 'month'){
+    content = renderMonthGrid(calYear, calMonth);
+    navTitle = `${calYear}年 ${MONTHS[calMonth]}`;
+    navPrev = `calPrev()`;
+    navNext = `calNext()`;
+  } else if(calView === 'halfyear'){
+    // 今月を含む直近6ヶ月
+    const months = [];
+    for(let i=5; i>=0; i--){
+      let y=calYear, m=calMonth-i;
+      if(m<0){m+=12;y--;}
+      months.push({y,m});
+    }
+    content = months.map(({y,m})=>renderMonthGrid(y,m)).join('');
+    navTitle = `${months[0].y}年${MONTHS[months[0].m]}〜${MONTHS[months[5].m]}`;
+    navPrev = `calYear=${months[0].y};calMonth=${months[0].m};render()`;
+    navNext = `calYear=${months[5].y};calMonth=Math.min(${months[5].m}+6,11);render()`;
+  } else if(calView === 'year'){
+    // 年間（1〜12月）
+    const months = Array.from({length:12},(_,i)=>({y:calYear,m:i}));
+    content = months.map(({y,m})=>renderMonthGrid(y,m)).join('');
+    navTitle = `${calYear}年 年間`;
+    navPrev = `calYear--;render()`;
+    navNext = `calYear++;render()`;
+  }
 
   return `<div class="cal-wrap">
     <div class="cal-header">
-      <button class="cal-nav" onclick="calPrev()">‹</button>
+      <button class="cal-nav" onclick="${navPrev}">‹</button>
       <div>
-        <div class="cal-title">${calYear}年 ${MONTHS[calMonth]}</div>
-        ${missingCount>0
-          ? `<div style="color:#e87050;font-size:9px;text-align:center;margin-top:2px">⚠️ 日報漏れ ${missingCount}日</div>`
-          : `<div style="color:#70c870;font-size:9px;text-align:center;margin-top:2px">✅ 漏れなし</div>`}
+        <div class="cal-title" style="font-size:13px">${navTitle}</div>
+        <div style="display:flex;gap:4px;justify-content:center;margin-top:4px">${viewBtns}</div>
       </div>
-      <button class="cal-nav" onclick="calNext()">›</button>
+      <button class="cal-nav" onclick="${navNext}">›</button>
     </div>
-    <div class="cal-grid">
-      <div class="cal-dow sun">日</div>
-      <div class="cal-dow">月</div>
-      <div class="cal-dow">火</div>
-      <div class="cal-dow">水</div>
-      <div class="cal-dow">木</div>
-      <div class="cal-dow">金</div>
-      <div class="cal-dow sat">土</div>
-      ${cells}
-    </div>
+    <div style="max-height:60vh;overflow-y:auto;padding-right:2px">${content}</div>
     <div class="cal-legend">
       <div class="cal-legend-item"><div class="cal-dot cal-dot-nippo"></div>日報あり</div>
-      <div class="cal-legend-item"><div class="cal-dot cal-dot-missing"></div>漏れ候補（平日・日報なし）</div>
-      <div class="cal-legend-item"><div style="width:12px;height:12px;border-radius:4px;background:#3a3218;border:1px solid #c8962a55"></div>今日</div>
+      <div class="cal-legend-item"><div class="cal-dot cal-dot-missing"></div>漏れ候補</div>
     </div>
   </div>`;
 }
 
-function calPrev(){ if(calMonth===0){calYear--;calMonth=11;}else calMonth--; render(); }
-function calNext(){ if(calMonth===11){calYear++;calMonth=0;}else calMonth++; render(); }
+function calPrev(){
+  if(calView==='year'){ calYear--; }
+  else if(calView==='halfyear'){ if(calMonth<6){calYear--;calMonth+=6;}else calMonth-=6; }
+  else { if(calMonth===0){calYear--;calMonth=11;}else calMonth--; }
+  render();
+}
+function calNext(){
+  if(calView==='year'){ calYear++; }
+  else if(calView==='halfyear'){ if(calMonth>=6){calYear++;calMonth-=6;}else calMonth+=6; }
+  else { if(calMonth===11){calYear++;calMonth=0;}else calMonth++; }
+  render();
+}
 
 function onCalDayClick(dateStr){
   // その日の日報一覧を表示、なければ新規入力

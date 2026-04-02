@@ -92,9 +92,10 @@ body{font-family:'Hiragino Sans','Noto Sans JP',sans-serif;background:#111110;mi
   <div id="tab-data" style="display:none">
     <div class="data-btn-row">
       <div style="color:#666;font-size:11px;padding:4px 0">登録: <span id="data-count" style="color:#c8962a;font-weight:700">0</span>件　業者: <span id="vendor-count" style="color:#70a8e8;font-weight:700">0</span>社</div>
-      <button class="data-btn green" onclick="saveToSheet()">Googleスプレッドシートに同期</button>
-      <button class="data-btn blue" onclick="exportJSON()">JSONバックアップ</button>
-      <button class="data-btn blue" onclick="document.getElementById('restore-file').click()">バックアップから復元</button>
+      <button class="data-btn green" onclick="saveToSheet()">☁️ Googleスプレッドシートに同期（書き込み）</button>
+      <button class="data-btn" style="background:#1a2a3a;color:#70e8d0;border:1px solid #2a4a48" onclick="loadFromSheetManual()">🔄 スプレッドシートから読み込む</button>
+      <button class="data-btn blue" onclick="exportJSON()">💾 JSONバックアップ</button>
+      <button class="data-btn blue" onclick="document.getElementById('restore-file').click()">📂 バックアップから復元</button>
       <input type="file" id="restore-file" accept=".json" style="display:none" onchange="restoreJSON(event)">
       <button class="data-btn red" onclick="confirmReset()">データを初期化</button>
     </div>
@@ -315,6 +316,19 @@ async function saveToSheet(){
   }catch(e){alert('同期エラー: '+e.message);}
 }
 
+async function loadFromSheetManual(){
+  const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
+  if(btn){ btn.textContent='🔄 読み込み中...'; btn.disabled=true; }
+  try{
+    const res=await fetch(GAS_URL+'?type=tanka',{mode:'cors'});
+    const data=await res.json();
+    if(data.status==='ok'&&data.items){
+      items=data.items; save(); render();
+      toast('✅ 読み込み完了 '+items.length+'件');
+    } else { toast('❌ 読み込み失敗'); }
+  }catch(e){ toast('❌ エラー: '+e.message); }
+  finally{ if(btn){ btn.textContent='🔄 スプレッドシートから読み込む'; btn.disabled=false; } }
+}
 async function loadFromSheet(){
   try{
     const res=await fetch(GAS_URL+'?type=tanka',{mode:'cors'});

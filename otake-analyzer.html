@@ -302,6 +302,10 @@ input[readonly]{color:var(--profit);cursor:default}
   <div class="nav" data-p="analyze">
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>内訳分析
   </div>
+  <div class="nav" data-p="data">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+    データ管理
+  </div>
   <div class="nav" data-p="docs">
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>書類一覧
   </div>
@@ -581,6 +585,25 @@ input[readonly]{color:var(--profit);cursor:default}
 </div>
 
 <!-- ⑤ 書類一覧 -->
+<div class="page" id="p-data">
+  <div><div class="ph">データ管理</div><div class="ps">スプレッドシートとのデータ同期</div></div>
+  <div class="card">
+    <div class="card-t">☁️ Googleスプレッドシート同期</div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-g" onclick="saveToGAS()">☁️ スプレッドシートに同期（書き込み）</button>
+      <button class="btn" style="background:#e8f4f8;color:#2a9d8f;border:1.5px solid #2a9d8f" onclick="loadFromGASManual()">🔄 スプレッドシートから読み込む</button>
+      <div id="gas-msg" style="font-size:12px;color:var(--sell)"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-t">💾 ローカルバックアップ</div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <button class="btn" onclick="exportBackup()">💾 JSONバックアップをダウンロード</button>
+      <button class="btn" onclick="document.getElementById('restore-input').click()">📂 バックアップから復元</button>
+      <input type="file" id="restore-input" accept=".json" style="display:none" onchange="restoreBackup(event)">
+    </div>
+  </div>
+</div>
 <div class="page" id="p-docs">
   <div style="display:flex;align-items:center;justify-content:space-between">
     <div><div class="ph">書類一覧</div><div class="ps">取り込んだ全書類</div></div>
@@ -667,6 +690,58 @@ function init() {
   try { const c = localStorage.getItem(SK_CASES); if (c) cases = JSON.parse(c); } catch(e){ cases=[]; }
   refreshCaseSelect();
   renderAll();
+}
+
+// ===== GAS同期・読み込み =====
+async function saveToGAS(){
+  const msg = document.getElementById('gas-msg');
+  if(msg) msg.textContent = '同期中...';
+  try{
+    await fetch(GAS_URL, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({type:'genka', cases, docs})
+    });
+    if(msg) msg.textContent = '✅ 同期完了（案件:'+cases.length+'件 / 書類:'+docs.length+'件）';
+  }catch(e){ if(msg) msg.textContent = '❌ エラー: '+e.message; }
+}
+
+async function loadFromGASManual(){
+  const msg = document.getElementById('gas-msg');
+  if(msg) msg.textContent = '読み込み中...';
+  try{
+    const res = await fetch(GAS_URL+'?type=genka',{mode:'cors'});
+    const data = await res.json();
+    if(data.status==='ok'){
+      if(data.cases&&data.cases.length>0) cases = data.cases;
+      if(data.docs&&data.docs.length>0) docs = data.docs;
+      persist();
+      if(msg) msg.textContent = '✅ 読み込み完了（案件:'+cases.length+'件 / 書類:'+docs.length+'件）';
+    } else { if(msg) msg.textContent = '❌ 読み込み失敗'; }
+  }catch(e){ if(msg) msg.textContent = '❌ エラー: '+e.message; }
+}
+
+function exportBackup(){
+  const d={cases,docs,exportedAt:new Date().toISOString()};
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));
+  a.download='genka_backup_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+}
+
+function restoreBackup(event){
+  const file=event.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const d=JSON.parse(e.target.result);
+      if(d.cases) cases=d.cases;
+      if(d.docs) docs=d.docs;
+      persist();
+      alert('✅ 復元完了 案件:'+cases.length+'件 / 書類:'+docs.length+'件');
+    }catch(ex){ alert('❌ 読み込みエラー'); }
+  };
+  reader.readAsText(file);
 }
 
 function persist() {

@@ -432,8 +432,13 @@ input,select{font-family:'Noto Sans JP',sans-serif;}
     <div class="out-btn-grid">
       <button class="out-btn green" onclick="saveToGoogleDrive()">
         <span class="ob-icon">☁️</span>
-        <span class="ob-title">スプレッドシートに同期</span>
+        <span class="ob-title">スプレッドシートに同期（書き込み）</span>
         <span class="ob-desc">Googleスプレッドシートにデータを保存</span>
+      </button>
+      <button class="out-btn" style="background:#e8f4f8;border:1.5px solid #2a9d8f;" onclick="loadFromSheetManual()">
+        <span class="ob-icon">🔄</span>
+        <span class="ob-title" style="color:#2a9d8f">スプレッドシートから読み込む</span>
+        <span class="ob-desc">スプレッドシートのデータを読み込む</span>
       </button>
       <button class="out-btn green" onclick="saveBackup()">
         <span class="ob-icon">💾</span>
@@ -1200,6 +1205,23 @@ function clearAllBackups() {
 // ===== START =====
 init();
 
+// ===== GASから手動読み込み =====
+async function loadFromSheetManual(){
+  const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
+  if(btn){ btn.querySelector('.ob-title').textContent='読み込み中...'; btn.disabled=true; }
+  try{
+    const res = await fetch(GAS_URL+'?type=tema',{mode:'cors'});
+    const data = await res.json();
+    if(data.status==='ok'&&data.autosave){
+      localStorage.setItem('otake_autosave', JSON.stringify(data.autosave));
+      loadFromStorage();
+      showToast('✅ スプレッドシートから読み込み完了');
+    } else { showToast('❌ 読み込み失敗'); }
+  }catch(e){ showToast('❌ エラー: '+e.message); }
+  finally{
+    if(btn){ btn.querySelector('.ob-title').textContent='スプレッドシートから読み込む'; btn.disabled=false; }
+  }
+}
 // ===== Googleスプレッドシート同期 =====
 function saveToGoogleDrive(){
   const autosave = localStorage.getItem('otake_autosave') || '{}';

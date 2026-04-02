@@ -323,6 +323,37 @@ function moveLocUp(locId){
 }
 
 // ===== 起動時スプレッドシートから読み込み =====
+async function loadFromSheetManual(){
+  const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
+  if(btn){ btn.textContent='🔄 読み込み中...'; btn.disabled=true; }
+  try{
+    const res = await fetch(GAS_URL+'?type=zaiko',{mode:'cors'});
+    const data = await res.json();
+    if(data.status==='ok'){
+      if(data.locations&&data.locations.length>0){
+        locations=data.locations;
+        localStorage.setItem('dk_loc',JSON.stringify(locations));
+      }
+      if(data.items&&data.items.length>0){
+        items=data.items;
+        localStorage.setItem('dk_items',JSON.stringify(items));
+      }
+      if(data.history&&data.history.length>0){
+        history=data.history;
+        localStorage.setItem('dk_hist',JSON.stringify(history));
+      }
+      save(); render();
+      alert('✅ 読み込み完了\n場所:'+locations.length+'件 / 品目:'+items.length+'件');
+    } else {
+      alert('❌ 読み込み失敗');
+    }
+  }catch(e){
+    alert('❌ エラー: '+e.message);
+  }finally{
+    if(btn){ btn.textContent='🔄 スプレッドシートから読み込む'; btn.disabled=false; }
+  }
+}
+
 async function loadFromSheet(){
   try{
     const res = await fetch(GAS_URL+'?type=zaiko',{mode:'cors'});
@@ -696,7 +727,8 @@ function renderData(){
     <div class="data-card">
       <div class="data-card-title">🛠️ データ管理</div>
       <div class="data-btn-row">
-        <button class="data-btn" style="background:#1a3a2a;color:#70c870;border:1px solid #2a4a3a" onclick="saveToGoogleDrive()">☁️ Googleスプレッドシートに同期</button>
+        <button class="data-btn" style="background:#1a3a2a;color:#70c870;border:1px solid #2a4a3a" onclick="saveToGoogleDrive()">☁️ Googleスプレッドシートに同期（書き込み）</button>
+        <button class="data-btn" style="background:#1a2a3a;color:#70e8d0;border:1px solid #2a4a48" onclick="loadFromSheetManual()">🔄 スプレッドシートから読み込む</button>
         <button class="data-btn" style="background:#2a1a0a;color:#f0a030;border:1px solid #5a3a10" onclick="saveImportant()">⭐ 重要スナップショット（永久保存）</button>
         <button class="data-btn blue" onclick="exportBackupJSON()">💾 JSONバックアップをダウンロード</button>
         <button class="data-btn green" onclick="document.getElementById('file-input').click()">📂 バックアップから復元（JSONまたはExcel）</button>
