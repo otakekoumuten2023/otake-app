@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>大工手間アプリ｜大竹工務店</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap');
+:root{
+  --navy:#0f1c2e;--navy2:#1a2e45;--steel:#2d4a6a;--mid:#3d6491;
+  --accent:#f5a623;--accent2:#c97f10;--green:#27ae60;--red:#e74c3c;
+  --light:#e4edf7;--lighter:#f4f8fc;--text:#1a2e45;--muted:#6b8aab;
+  --white:#fff;--r:14px;--sh:0 4px 20px rgba(15,28,46,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--lighter);color:var(--text);min-height:100vh;padding-bottom:80px;}
+
+/* ===== NAV TABS ===== */
+.tab-bar{position:sticky;top:0;z-index:200;background:var(--navy);display:flex;box-shadow:0 2px 12px rgba(0,0,0,.3);}
+.tab-btn{flex:1;padding:0;border:none;background:none;cursor:pointer;font-family:inherit;color:rgba(255,255,255,.55);font-size:11px;font-weight:700;letter-spacing:.3px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px;transition:all .15s;border-bottom:3px solid transparent;}
+.tab-btn .icon{font-size:18px;}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+/* ===== COMMON ===== */
+.page{display:none;padding-bottom:20px;}
+.page.active{display:block;}
+.card{margin:10px 10px 0;background:var(--white);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;}
+.card-hd{background:var(--navy2);padding:10px 14px;display:flex;align-items:center;gap:8px;}
+.card-hd h2{font-size:13px;font-weight:700;color:var(--white);}
+.badge{background:var(--accent);color:var(--navy);font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:auto;}
+input,select{font-family:'Noto Sans JP',sans-serif;}
+
+/* ===== HOME ===== */
+.home-hero{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);padding:24px 16px 20px;text-align:center;}
+.home-hero .logo{font-size:11px;color:rgba(255,255,255,.5);letter-spacing:2px;margin-bottom:6px;}
+.home-hero h1{font-size:22px;font-weight:900;color:var(--white);}
+.home-hero h1 span{color:var(--accent);}
+.home-hero p{font-size:12px;color:rgba(255,255,255,.6);margin-top:6px;}
+.home-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px;}
+.home-card{background:var(--white);border-radius:var(--r);padding:16px 12px;text-align:center;box-shadow:var(--sh);cursor:pointer;border:2px solid transparent;transition:all .15s;}
+.home-card:active{transform:scale(.97);}
+.home-card .hc-icon{font-size:28px;margin-bottom:6px;}
+.home-card h3{font-size:13px;font-weight:700;color:var(--text);}
+.home-card p{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.4;}
+.home-card.primary{border-color:var(--accent);background:#fffbf2;}
+
+/* ===== HOKAKARI ===== */
+.hk-info{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:10px;}
+.hk-field{padding:4px 6px;}
+.hk-field label{font-size:10px;color:var(--muted);display:block;margin-bottom:3px;}
+.hk-field input,.hk-field select{width:100%;border:1.5px solid var(--light);border-radius:8px;padding:7px 9px;font-size:13px;color:var(--text);background:var(--lighter);outline:none;}
+.hk-field input:focus,.hk-field select:focus{border-color:var(--mid);background:var(--white);}
+.hk-field.full{grid-column:1/-1;}
+.hk-cat{background:var(--steel);padding:7px 14px;font-size:11px;font-weight:700;color:var(--white);}
+.hk-row{border-bottom:1px solid var(--light);padding:10px 12px;display:grid;grid-template-columns:auto 1fr auto auto auto;gap:6px;align-items:center;}
+.hk-row:last-child{border-bottom:none;}
+.hk-no{font-size:10px;color:var(--muted);font-weight:700;width:18px;text-align:center;}
+.hk-name{font-size:12px;font-weight:500;color:var(--text);}
+.hk-unit{font-size:10px;color:var(--muted);width:26px;text-align:center;}
+.hk-std-input{width:62px;border:1.5px solid var(--light);border-radius:8px;padding:6px 6px;font-family:'DM Mono',monospace;font-size:13px;font-weight:500;text-align:center;color:#0000cc;background:#fffde7;outline:none;}
+.hk-std-input:focus{border-color:var(--accent);background:#fff8dc;}
+.hk-note{font-size:9px;color:var(--muted);width:60px;text-align:right;line-height:1.2;}
+.coef-tbl{padding:12px;}
+.coef-tbl-hd{background:var(--mid);padding:7px 12px;border-radius:8px 8px 0 0;display:grid;grid-template-columns:1fr auto auto;gap:8px;}
+.coef-tbl-hd span{font-size:10px;font-weight:700;color:var(--white);}
+.coef-tbl-row{border-bottom:1px solid var(--light);padding:8px 12px;display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;}
+.coef-tbl-row:last-child{border-bottom:none;}
+.coef-tbl-row .type{font-size:12px;color:var(--text);}
+.coef-val-input{width:56px;border:1.5px solid var(--light);border-radius:8px;padding:5px 6px;font-family:'DM Mono',monospace;font-size:13px;font-weight:700;text-align:center;color:#0000cc;background:#fffde7;outline:none;}
+.coef-val-input:focus{border-color:var(--accent);}
+.coef-desc{font-size:9px;color:var(--muted);width:90px;text-align:right;}
+
+/* ===== ESTIMATE ===== */
+.est-info{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:10px;}
+.est-field{padding:4px 6px;}
+.est-field label{font-size:10px;color:var(--muted);display:block;margin-bottom:3px;}
+.est-field input,.est-field select{width:100%;border:1.5px solid var(--light);border-radius:8px;padding:7px 9px;font-size:13px;color:var(--text);background:var(--lighter);outline:none;}
+.est-field input:focus,.est-field select:focus{border-color:var(--mid);background:var(--white);}
+.est-field.full{grid-column:1/-1;}
+.rate-row{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--light);}
+.rate-row:last-child{border-bottom:none;}
+.rate-row label{font-size:12px;color:var(--muted);flex:1;}
+.rate-row input{width:96px;border:1.5px solid var(--light);border-radius:8px;padding:6px 8px;font-family:'DM Mono',monospace;font-size:14px;font-weight:500;text-align:right;color:var(--text);background:var(--lighter);outline:none;}
+.rate-row input:focus{border-color:var(--mid);background:var(--white);}
+.rate-row .unit{font-size:11px;color:var(--muted);}
+.margin-row{display:flex;align-items:center;gap:8px;padding:9px 12px;}
+.margin-row label{font-size:12px;color:var(--muted);flex:1;}
+.mbtn-grp{display:flex;gap:5px;flex-wrap:wrap;}
+.mbtn{border:1.5px solid var(--light);background:var(--lighter);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit;}
+.mbtn.active{border-color:var(--accent);background:#fff8ec;color:var(--accent2);}
+.coef-section{padding:10px 12px;}
+.coef-lbl{font-size:11px;color:var(--muted);margin-bottom:7px;}
+.coef-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px;}
+.cbtn{border:2px solid var(--light);background:var(--lighter);border-radius:10px;padding:7px 3px;text-align:center;cursor:pointer;transition:all .12s;}
+.cbtn .v{font-size:14px;font-weight:900;color:var(--steel);display:block;}
+.cbtn .d{font-size:8px;color:var(--muted);display:block;margin-top:2px;line-height:1.2;}
+.cbtn.active{border-color:var(--accent);background:#fff8ec;}
+.cbtn.active .v{color:var(--accent2);}
+.cbtn.active .d{color:var(--accent2);}
+.coef-custom{display:flex;align-items:center;gap:8px;}
+.coef-custom label{font-size:11px;color:var(--muted);white-space:nowrap;}
+.coef-custom input{flex:1;border:1.5px solid var(--light);border-radius:8px;padding:7px 10px;font-family:'DM Mono',monospace;font-size:14px;font-weight:700;color:var(--text);background:var(--lighter);outline:none;}
+.coef-custom input:focus{border-color:var(--mid);background:var(--white);}
+.work-cat{background:var(--steel);padding:7px 14px;font-size:11px;font-weight:700;color:var(--white);}
+.work-row{border-bottom:1px solid var(--light);padding:9px 12px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:start;}
+.work-row:last-child{border-bottom:none;}
+.work-name{font-size:12px;font-weight:500;color:var(--text);margin-bottom:4px;}
+.work-meta{font-size:10px;color:var(--muted);margin-bottom:4px;}
+.work-who{display:flex;gap:4px;}
+.wbtn{font-size:10px;padding:3px 8px;border-radius:10px;border:1.5px solid var(--light);background:var(--lighter);color:var(--muted);cursor:pointer;font-family:inherit;transition:all .12s;}
+.wbtn.ag{border-color:var(--mid);background:#e8f0f8;color:var(--mid);font-weight:700;}
+.wbtn.aj{border-color:var(--green);background:#eafaf0;color:var(--green);font-weight:700;}
+.work-inp-grp{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}
+.qty-row{display:flex;align-items:center;gap:5px;}
+.qty-inp{width:70px;border:1.5px solid var(--light);border-radius:8px;padding:6px 7px;font-family:'DM Mono',monospace;font-size:14px;font-weight:500;text-align:right;color:var(--text);background:var(--lighter);outline:none;}
+.qty-inp:focus{border-color:var(--mid);background:var(--white);}
+.qty-unit{font-size:10px;color:var(--muted);width:20px;}
+.work-res{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:right;min-height:14px;}
+.work-res.v{color:var(--steel);font-weight:500;}
+.zatsu-row{background:#fff8ec;border-top:1px dashed var(--accent);padding:8px 14px;display:flex;justify-content:space-between;align-items:center;}
+.zatsu-row .zl{font-size:10px;color:var(--accent2);}
+.zatsu-row .zv{font-family:'DM Mono',monospace;font-size:12px;color:var(--accent2);font-weight:700;}
+
+/* ===== SUMMARY ===== */
+.summary{margin:10px 10px 0;background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);border-radius:var(--r);padding:14px;box-shadow:var(--sh);}
+.sum-title{font-size:10px;color:rgba(255,255,255,.5);letter-spacing:1px;margin-bottom:10px;}
+.sum-row{display:flex;justify-content:space-between;align-items:center;margin:5px 0;}
+.sum-row .sl{font-size:12px;color:rgba(255,255,255,.7);}
+.sum-row .sv{font-family:'DM Mono',monospace;font-size:14px;color:var(--white);}
+.sum-row .sv.sm{font-size:12px;color:rgba(255,255,255,.8);}
+.sum-div{border:none;border-top:1px solid rgba(255,255,255,.15);margin:6px 0;}
+.sum-total{background:var(--accent);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;margin-top:8px;}
+.sum-total .tl{font-size:12px;font-weight:700;color:var(--navy);}
+.sum-total .tv{font-family:'DM Mono',monospace;font-size:19px;font-weight:700;color:var(--navy);}
+.needed{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:10px 12px;margin-top:8px;}
+.need-row{display:flex;justify-content:space-between;align-items:center;margin:3px 0;}
+.need-row .nl{font-size:10px;color:rgba(255,255,255,.6);}
+.need-row .nv{font-family:'DM Mono',monospace;font-size:13px;color:rgba(255,255,255,.9);}
+.need-row .nv.hi{color:var(--accent);font-size:16px;font-weight:700;}
+
+/* ===== OUTPUT PAGE ===== */
+.out-btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;}
+.out-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 10px;background:var(--white);border:2px solid var(--light);border-radius:var(--r);cursor:pointer;font-family:inherit;transition:all .15s;}
+.out-btn:active{transform:scale(.96);}
+.out-btn .ob-icon{font-size:26px;}
+.out-btn .ob-title{font-size:13px;font-weight:700;color:var(--text);}
+.out-btn .ob-desc{font-size:10px;color:var(--muted);text-align:center;line-height:1.3;}
+.out-btn.primary{border-color:var(--accent);background:#fffbf2;}
+.out-btn.green{border-color:var(--green);background:#f0faf4;}
+.backup-list{padding:10px 12px;}
+.backup-item{background:var(--lighter);border:1px solid var(--light);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .12s;}
+.backup-item:active{background:var(--light);}
+.backup-item .bi-icon{font-size:20px;}
+.backup-item .bi-info{flex:1;}
+.backup-item .bi-name{font-size:12px;font-weight:700;color:var(--text);}
+.backup-item .bi-date{font-size:10px;color:var(--muted);}
+.backup-item .bi-del{font-size:18px;color:var(--muted);padding:4px;}
+.empty-backup{text-align:center;padding:24px;color:var(--muted);font-size:12px;}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  body{background:white;padding:0;}
+  .tab-bar,.no-print{display:none!important;}
+  .page{display:block!important;}
+  .card{box-shadow:none;border:1px solid #ccc;margin:0 0 8px;}
+  .home-hero{background:var(--navy)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .card-hd,.work-cat,.hk-cat,.coef-tbl-hd{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .summary{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  @page{margin:10mm;}
+}
+
+/* ===== TOAST ===== */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--navy);color:var(--white);padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;opacity:0;transition:all .3s;pointer-events:none;z-index:999;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showPage('home',this)"><span class="icon">🏠</span>ホーム</button>
+  <button class="tab-btn" onclick="showPage('hokakari',this)"><span class="icon">📋</span>歩掛り表</button>
+  <button class="tab-btn" onclick="showPage('estimate',this)"><span class="icon">🔨</span>見積計算</button>
+  <button class="tab-btn" onclick="showPage('output',this)"><span class="icon">📤</span>出力・保存</button>
+</div>
+
+<!-- ===== HOME ===== -->
+<div class="page active" id="page-home">
+  <div class="home-hero">
+    <div class="logo">大竹工務店</div>
+    <h1>大工手間 <span>管理</span>アプリ</h1>
+    <p>歩掛り基準管理 ／ 見積計算 ／ PDF出力 ／ データ保存</p>
+  </div>
+  <div class="home-grid">
+    <div class="home-card primary" onclick="showPage('hokakari',document.querySelectorAll('.tab-btn')[1])">
+      <div class="hc-icon">📋</div>
+      <h3>歩掛り標準表</h3>
+      <p>工種別の1人1日あたり標準値を管理・更新</p>
+    </div>
+    <div class="home-card primary" onclick="showPage('estimate',document.querySelectorAll('.tab-btn')[2])">
+      <div class="hc-icon">🔨</div>
+      <h3>見積計算</h3>
+      <p>数量入力で日数・金額を自動計算。係数×5まで対応</p>
+    </div>
+    <div class="home-card" onclick="showPage('output',document.querySelectorAll('.tab-btn')[3])">
+      <div class="hc-icon">📤</div>
+      <h3>出力・バックアップ</h3>
+      <p>PDF保存・印刷・データバックアップ</p>
+    </div>
+    <div class="home-card" onclick="loadBackup()">
+      <div class="hc-icon">💾</div>
+      <h3>データ復元</h3>
+      <p>保存したバックアップから読み込む</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><h2>📌 このアプリについて</h2></div>
+    <div style="padding:12px 14px;font-size:12px;line-height:1.8;color:var(--text);">
+      <p style="margin-bottom:6px;">久保様邸の実績（想定67人日→実態190人日）の反省をもとに作成した、大竹工務店専用の大工手間管理ツールです。</p>
+      <p style="color:var(--muted);font-size:11px;">① 歩掛り標準表で基準値を管理　② 見積計算で現場の数量×係数で自動計算　③ 出力ページでPDF・バックアップ保存</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 歩掛り表 ===== -->
+<div class="page" id="page-hokakari">
+  <div class="card">
+    <div class="card-hd"><h2>📋 歩掛り標準表</h2><span class="badge">27工種</span></div>
+    <div class="hk-info">
+      <div class="hk-field full"><label>現場名・更新メモ</label>
+        <input type="text" id="hk-memo" placeholder="例：久保様邸実績反映 2024/3"></div>
+      <div class="hk-field"><label>最終更新日</label>
+        <input type="date" id="hk-date"></div>
+      <div class="hk-field"><label>担当者</label>
+        <input type="text" id="hk-author" value="大竹　俊光"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <div class="card-hd"><h2>📏 工種別　標準値（推奨：1人1日）</h2></div>
+    <div style="padding:8px 12px;font-size:10px;color:var(--muted);background:#fffde7;border-bottom:1px solid var(--light);">
+      ✏️ 青数字セルを直接タップして編集できます。実績が蓄積されたら更新してください。
+    </div>
+    <div id="hkTable"></div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <div class="card-hd"><h2>🔧 難易度係数テーブル</h2></div>
+    <div class="coef-tbl">
+      <div class="coef-tbl-hd">
+        <span>現場タイプ</span><span>係数</span><span>説明・目安</span>
+      </div>
+      <div id="coefTable"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <div class="card-hd"><h2>📝 備考・運用メモ</h2></div>
+    <div style="padding:10px;">
+      <textarea id="hk-remarks" rows="4" style="width:100%;border:1.5px solid var(--light);border-radius:8px;padding:8px;font-family:inherit;font-size:12px;color:var(--text);background:var(--lighter);outline:none;resize:none;" placeholder="実績・注意点・特記事項を記入..."></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 見積計算 ===== -->
+<div class="page" id="page-estimate">
+  <div class="card">
+    <div class="card-hd"><h2>📝 現場情報</h2></div>
+    <div class="est-info">
+      <div class="est-field full"><label>現場名・顧客名</label>
+        <input type="text" id="e-site" placeholder="例：山田様邸　フルリフォーム"></div>
+      <div class="est-field full"><label>工事概要</label>
+        <input type="text" id="e-desc" placeholder="例：築40年・大規模改修・構造補強あり"></div>
+      <div class="est-field"><label>見積日</label>
+        <input type="date" id="e-date"></div>
+      <div class="est-field"><label>延べ面積（坪）</label>
+        <input type="number" id="e-area" placeholder="0.0" step="0.5"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <div class="card-hd"><h2>⚙️ 単価・粗利</h2></div>
+    <div class="rate-row"><label>外注大工　日当</label>
+      <input type="number" id="rateG" value="25000" oninput="calcEst()"><span class="unit">円/日</span></div>
+    <div class="rate-row"><label>自社（俊さん）日当</label>
+      <input type="number" id="rateJ" value="28750" oninput="calcEst()"><span class="unit">円/日</span></div>
+    <div class="margin-row"><label>粗利目標率</label>
+      <div class="mbtn-grp">
+        <button class="mbtn" onclick="setMargin(30,this)">30%</button>
+        <button class="mbtn active" onclick="setMargin(45,this)">45%</button>
+        <button class="mbtn" onclick="setMargin(50,this)">50%</button>
+        <button class="mbtn" onclick="setMargin(55,this)">55%</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <div class="card-hd"><h2>🔧 難易度係数</h2><span class="badge" id="coefBadge">×3.0</span></div>
+    <div class="coef-section">
+      <div class="coef-lbl">現場タイプを選択（カスタム入力も可）</div>
+      <div class="coef-grid" id="coefBtns">
+        <div class="cbtn" onclick="setCoef(1.0,this)"><span class="v">×1.0</span><span class="d">新築・シンプル</span></div>
+        <div class="cbtn" onclick="setCoef(1.5,this)"><span class="v">×1.5</span><span class="d">部分改修</span></div>
+        <div class="cbtn" onclick="setCoef(2.0,this)"><span class="v">×2.0</span><span class="d">中規模改修</span></div>
+        <div class="cbtn" onclick="setCoef(2.5,this)"><span class="v">×2.5</span><span class="d">築古・全体</span></div>
+        <div class="cbtn active" onclick="setCoef(3.0,this)"><span class="v">×3.0</span><span class="d">久保様邸クラス</span></div>
+        <div class="cbtn" onclick="setCoef(3.5,this)"><span class="v">×3.5</span><span class="d">特殊事情あり</span></div>
+        <div class="cbtn" onclick="setCoef(4.0,this)"><span class="v">×4.0</span><span class="d">高難易度</span></div>
+        <div class="cbtn" onclick="setCoef(5.0,this)"><span class="v">×5.0</span><span class="d">極めて特殊</span></div>
+      </div>
+      <div class="coef-custom">
+        <label>カスタム：</label>
+        <input type="number" id="coefInp" value="3.0" step="0.1" min="0.5" oninput="setCoefCustom(this.value)">
+        <span style="font-size:12px;color:var(--muted);">倍</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <div class="card-hd"><h2>🔨 工種別　数量入力</h2></div>
+    <div id="worksList"></div>
+    <div class="zatsu-row">
+      <span class="zl">雑工・手直し自動加算（外注合計×15%）</span>
+      <span class="zv" id="zatsuVal">—</span>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="sum-title">大工手間　集計結果</div>
+    <div class="sum-row"><span class="sl">外注　日数</span><span class="sv sm" id="sGd">— 日</span></div>
+    <div class="sum-row"><span class="sl">外注　金額</span><span class="sv sm" id="sGc">—</span></div>
+    <hr class="sum-div">
+    <div class="sum-row"><span class="sl">自社　日数</span><span class="sv sm" id="sJd">— 日</span></div>
+    <div class="sum-row"><span class="sl">自社　金額</span><span class="sv sm" id="sJc">—</span></div>
+    <div class="sum-total">
+      <span class="tl">大工手間　合計</span>
+      <span class="tv" id="sTotal">—</span>
+    </div>
+    <div class="needed">
+      <div class="need-row"><span class="nl">粗利目標での必要見積（税抜）</span><span class="nv hi" id="nEx">—</span></div>
+      <div class="need-row"><span class="nl">税込</span><span class="nv" id="nInc">—</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 出力・バックアップ ===== -->
+<div class="page" id="page-output">
+  <div class="card">
+    <div class="card-hd"><h2>🖨️ 印刷・PDF出力</h2></div>
+    <div class="out-btn-grid">
+      <button class="out-btn primary" onclick="printPage('estimate')">
+        <span class="ob-icon">🖨️</span>
+        <span class="ob-title">見積を印刷</span>
+        <span class="ob-desc">現在の見積計算結果を印刷・PDF保存</span>
+      </button>
+      <button class="out-btn primary" onclick="printPage('hokakari')">
+        <span class="ob-icon">📋</span>
+        <span class="ob-title">歩掛り表を印刷</span>
+        <span class="ob-desc">標準値テーブルを印刷・PDF保存</span>
+      </button>
+      <button class="out-btn" onclick="printPage('all')">
+        <span class="ob-icon">📄</span>
+        <span class="ob-title">全ページ印刷</span>
+        <span class="ob-desc">歩掛り表＋見積をまとめて印刷</span>
+      </button>
+      <button class="out-btn" onclick="exportCSV()">
+        <span class="ob-icon">📊</span>
+        <span class="ob-title">CSV出力</span>
+        <span class="ob-desc">見積データをExcel用CSVで保存</span>
+      </button>
+    </div>
+    <div style="padding:0 12px 12px;font-size:11px;color:var(--muted);">
+      💡 印刷画面で「PDFに保存」を選ぶとPDFファイルとして保存できます。iPhoneはSafari、AndroidはChromeを推奨します。
+    </div>
+  </div>
+
+  <!-- ===== 台帳へ送る ===== -->
+  <div class="card" style="margin-top:10px;border:2px solid var(--accent);">
+    <div class="card-hd" style="background:linear-gradient(135deg,#1a3a1a,#2a5a2a);">
+      <h2 style="color:#70c870;">🏗️ 日報PWA 工事台帳へ送る</h2>
+    </div>
+    <div style="padding:12px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6;">
+        見積計算の結果（工種別人工・合計人工・金額）を日報PWAの工事台帳に自動登録します。<br>
+        <span style="color:#e74c3c;font-weight:700;">※ 日報PWA（daiku-nippo-v2.html）と同じブラウザで開いている必要があります。</span>
+      </div>
+
+      <div id="daichou-send-status" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:8px;font-size:11px;"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div>
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">工事コード（例: 2025-001）</label>
+          <input type="text" id="send-code" placeholder="2025-001" style="width:100%;border:1.5px solid var(--light);border-radius:8px;padding:7px 9px;font-size:12px;font-family:inherit;outline:none;"/>
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">工事名（必須）</label>
+          <input type="text" id="send-name" placeholder="○○様邸リフォーム" style="width:100%;border:1.5px solid var(--light);border-radius:8px;padding:7px 9px;font-size:12px;font-family:inherit;outline:none;"/>
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">施主名</label>
+          <input type="text" id="send-client" placeholder="山田 太郎" style="width:100%;border:1.5px solid var(--light);border-radius:8px;padding:7px 9px;font-size:12px;font-family:inherit;outline:none;"/>
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">ステータス</label>
+          <select id="send-status" style="width:100%;border:1.5px solid var(--light);border-radius:8px;padding:7px 9px;font-size:12px;font-family:inherit;outline:none;">
+            <option value="plan">📅 予定（着工前）</option>
+            <option value="active">🔨 施工中</option>
+            <option value="done">✅ 完工</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- プレビュー -->
+      <div id="send-preview" style="background:#f4f8fc;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11px;display:none;">
+        <div style="font-weight:700;color:var(--navy);margin-bottom:6px;">📋 送信内容プレビュー</div>
+        <div id="send-preview-body"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <button onclick="previewSendToDaichou()" style="flex:1;padding:10px;border:1.5px solid var(--mid);border-radius:10px;background:white;color:var(--navy);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">
+          👁️ プレビュー確認
+        </button>
+        <button onclick="sendToDaichou()" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--green);color:white;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">
+          🏗️ 台帳へ送る
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <div class="card-hd"><h2>💾 データバックアップ</h2></div>
+    <div class="out-btn-grid">
+      <button class="out-btn green" onclick="saveToGoogleDrive()">
+        <span class="ob-icon">☁️</span>
+        <span class="ob-title">スプレッドシートに同期</span>
+        <span class="ob-desc">Googleスプレッドシートにデータを保存</span>
+      </button>
+      <button class="out-btn green" onclick="saveBackup()">
+        <span class="ob-icon">💾</span>
+        <span class="ob-title">バックアップ保存</span>
+        <span class="ob-desc">現在の全データをJSONファイルで保存</span>
+      </button>
+      <button class="out-btn green" onclick="document.getElementById('loadFile').click()">
+        <span class="ob-icon">📂</span>
+        <span class="ob-title">バックアップ読込</span>
+        <span class="ob-desc">保存したJSONファイルを読み込む</span>
+      </button>
+    </div>
+    <input type="file" id="loadFile" accept=".json" style="display:none" onchange="loadBackupFile(event)">
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <div class="card-hd"><h2>📁 保存済みバックアップ</h2><span class="badge" id="backupCount">0件</span></div>
+    <div class="backup-list" id="backupList">
+      <div class="empty-backup">保存されたバックアップはありません</div>
+    </div>
+    <div style="padding:0 12px 12px;">
+      <button style="width:100%;padding:10px;border:1.5px solid var(--red);border-radius:10px;background:white;color:var(--red);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;" onclick="clearAllBackups()">⚠️ 全バックアップを削除</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== DATA =====
+const STD_WORKS = [
+  {cat:'解体工事',  id:'w1',  name:'壁解体',                 unit:'m',   std:35,  who:'g'},
+  {cat:'解体工事',  id:'w2',  name:'床解体',                 unit:'坪',  std:12,  who:'g'},
+  {cat:'解体工事',  id:'w3',  name:'天井解体',               unit:'坪',  std:15,  who:'g'},
+  {cat:'解体工事',  id:'w4',  name:'UB・水回り解体',         unit:'式',  std:0.5, who:'g'},
+  {cat:'解体工事',  id:'w5',  name:'玄関・階段解体',         unit:'式',  std:1.0, who:'g'},
+  {cat:'軸組・補強',id:'w6',  name:'新規壁組み（断熱なし）', unit:'m',   std:18,  who:'g'},
+  {cat:'軸組・補強',id:'w7',  name:'新規壁組み（断熱あり）', unit:'m',   std:14,  who:'g'},
+  {cat:'軸組・補強',id:'w8',  name:'柱抜き・補強',           unit:'箇所',std:1.0, who:'g'},
+  {cat:'軸組・補強',id:'w9',  name:'耐震補強',               unit:'箇所',std:1.0, who:'g'},
+  {cat:'軸組・補強',id:'w10', name:'鋼製束設置',             unit:'本',  std:25,  who:'j'},
+  {cat:'床工事',    id:'w11', name:'フローリング（無垢）',   unit:'坪',  std:6,   who:'j'},
+  {cat:'床工事',    id:'w12', name:'フローリング（複合）',   unit:'坪',  std:9,   who:'j'},
+  {cat:'床工事',    id:'w13', name:'和室→洋室　床組替え',   unit:'坪',  std:5,   who:'g'},
+  {cat:'床工事',    id:'w14', name:'根太・大引き組み直し',   unit:'坪',  std:8,   who:'g'},
+  {cat:'天井・壁下地',id:'w15',name:'天井野縁・ボード貼り', unit:'坪',  std:12,  who:'j'},
+  {cat:'天井・壁下地',id:'w16',name:'壁ボード貼り',         unit:'坪',  std:15,  who:'j'},
+  {cat:'天井・壁下地',id:'w17',name:'間仕切り壁新設',       unit:'m',   std:10,  who:'g'},
+  {cat:'造作・建具',id:'w18', name:'建具枠取付',             unit:'本',  std:6,   who:'j'},
+  {cat:'造作・建具',id:'w19', name:'造作棚・カウンター',     unit:'箇所',std:2,   who:'j'},
+  {cat:'造作・建具',id:'w20', name:'WIC・パントリー棚',     unit:'式',  std:2,   who:'j'},
+  {cat:'造作・建具',id:'w21', name:'上り框・巾木・廻り縁',  unit:'m',   std:30,  who:'j'},
+  {cat:'造作・建具',id:'w22', name:'障子・襖張替',           unit:'本',  std:10,  who:'j'},
+  {cat:'断熱・気密',id:'w23', name:'グラスウール充填',       unit:'坪',  std:16,  who:'g'},
+  {cat:'断熱・気密',id:'w24', name:'気密テープ・気流止め',  unit:'箇所',std:6,   who:'g'},
+  {cat:'断熱・気密',id:'w25', name:'床下断熱材取付',         unit:'坪',  std:10,  who:'g'},
+  {cat:'雑工事',   id:'w26',  name:'備品・金物取付',         unit:'式',  std:1,   who:'j'},
+  {cat:'雑工事',   id:'w27',  name:'その他・追加工事',       unit:'日',  std:1,   who:'g'},
+];
+const COEF_TYPES = [
+  {type:'新築・シンプルな増改築',     val:1.0, desc:'想定外が少ない'},
+  {type:'部分改修・水回り中心',       val:1.5, desc:'工期2〜3ヶ月'},
+  {type:'中規模リフォーム（10〜20坪）',val:2.0,desc:'隠れた不具合10〜20%想定'},
+  {type:'築古・全体リフォーム',       val:2.5, desc:'工期3〜6ヶ月'},
+  {type:'久保様邸クラス（大規模）',   val:3.0, desc:'構造絡み・工期6ヶ月超'},
+  {type:'特殊事情あり',               val:3.5, desc:'複雑な納まり・設計変更多'},
+  {type:'高難易度・長期工期',         val:4.0, desc:'工期1年超・特殊構造'},
+  {type:'極めて特殊な案件',           val:5.0, desc:'事故・シロアリ等'},
+];
+
+// state
+let stdVals = {};
+let coefVals = {};
+let whoState = {};
+let curCoef = 3.0;
+let curMargin = 0.45;
+
+STD_WORKS.forEach(w => { stdVals[w.id] = w.std; whoState[w.id] = w.who; });
+COEF_TYPES.forEach(c => { coefVals[c.type] = c.val; });
+
+// ===== INIT =====
+function init() {
+  // date defaults
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('hk-date').value = today;
+  document.getElementById('e-date').value = today;
+  renderHkTable();
+  renderCoefTable();
+  renderWorks();
+  renderBackupList();
+  loadFromStorage();
+}
+
+// ===== TABS =====
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if(btn) btn.classList.add('active');
+}
+
+// ===== TOAST =====
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ===== HOKAKARI TABLE =====
+function renderHkTable() {
+  const el = document.getElementById('hkTable');
+  let html = '', lastCat = '';
+  STD_WORKS.forEach(w => {
+    if(w.cat !== lastCat) {
+      html += `<div class="hk-cat">${w.cat}</div>`;
+      lastCat = w.cat;
+    }
+    const v = stdVals[w.id] !== undefined ? stdVals[w.id] : w.std;
+    html += `<div class="hk-row">
+      <span class="hk-no">${w.id.replace('w','')}</span>
+      <span class="hk-name">${w.name}</span>
+      <span class="hk-unit">${w.unit}/日</span>
+      <input class="hk-std-input" type="number" id="hk_${w.id}" value="${v}"
+             step="0.5" min="0.1" oninput="updateStd('${w.id}',this.value)" inputmode="decimal">
+      <span class="hk-note">${w.who==='g'?'外注':'自社'}</span>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function renderCoefTable() {
+  const el = document.getElementById('coefTable');
+  let html = '';
+  COEF_TYPES.forEach(c => {
+    const v = coefVals[c.type] !== undefined ? coefVals[c.type] : c.val;
+    html += `<div class="coef-tbl-row">
+      <span class="type">${c.type}</span>
+      <input class="coef-val-input" type="number" value="${v}" step="0.1" min="0.5"
+             oninput="updateCoefType('${c.type}',this.value)" inputmode="decimal">
+      <span class="coef-desc">${c.desc}</span>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function updateStd(id, val) {
+  stdVals[id] = parseFloat(val) || 1;
+  calcEst();
+  autoSave();
+}
+function updateCoefType(type, val) {
+  coefVals[type] = parseFloat(val) || 1;
+  autoSave();
+}
+
+// ===== ESTIMATE =====
+function renderWorks() {
+  const el = document.getElementById('worksList');
+  let html = '', lastCat = '';
+  STD_WORKS.forEach(w => {
+    if(w.cat !== lastCat) {
+      html += `<div class="work-cat">${w.cat}</div>`;
+      lastCat = w.cat;
+    }
+    const who = whoState[w.id];
+    html += `<div class="work-row">
+      <div>
+        <div class="work-name">${w.name}</div>
+        <div class="work-meta">標準: ${stdVals[w.id]||w.std}${w.unit}/日</div>
+        <div class="work-who">
+          <button class="wbtn ${who==='g'?'ag':''}" onclick="setWho('${w.id}','g')">外注</button>
+          <button class="wbtn ${who==='j'?'aj':''}" onclick="setWho('${w.id}','j')">自社</button>
+        </div>
+      </div>
+      <div class="work-inp-grp">
+        <div class="qty-row">
+          <input class="qty-inp" type="number" id="qty_${w.id}"
+                 placeholder="0" min="0" step="0.5" oninput="calcEst()" inputmode="decimal">
+          <span class="qty-unit">${w.unit}</span>
+        </div>
+        <div class="work-res" id="res_${w.id}">—</div>
+      </div>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function setWho(id, who) {
+  whoState[id] = who;
+  renderWorks();
+  calcEst();
+}
+
+function setCoef(val, btn) {
+  curCoef = parseFloat(val);
+  document.getElementById('coefInp').value = val;
+  document.getElementById('coefBadge').textContent = '×' + val;
+  document.querySelectorAll('.cbtn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  calcEst();
+}
+function setCoefCustom(val) {
+  curCoef = parseFloat(val) || 1.0;
+  document.getElementById('coefBadge').textContent = '×' + curCoef.toFixed(1);
+  document.querySelectorAll('.cbtn').forEach(b => b.classList.remove('active'));
+  calcEst();
+}
+function setMargin(pct, btn) {
+  curMargin = pct / 100;
+  document.querySelectorAll('.mbtn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  calcEst();
+}
+
+function fmt(n) {
+  if(!n || isNaN(n) || n===0) return '—';
+  return '¥' + Math.round(n).toLocaleString('ja-JP');
+}
+function fmtD(n) {
+  if(!n || isNaN(n) || n===0) return '—';
+  return n.toFixed(1) + ' 日';
+}
+
+function calcEst() {
+  const rG = parseFloat(document.getElementById('rateG').value) || 25000;
+  const rJ = parseFloat(document.getElementById('rateJ').value) || 28750;
+  let tGd=0, tJd=0, tGc=0, tJc=0;
+
+  STD_WORKS.forEach(w => {
+    const qEl = document.getElementById('qty_' + w.id);
+    const rEl = document.getElementById('res_' + w.id);
+    if(!qEl || !rEl) return;
+    const qty = parseFloat(qEl.value) || 0;
+    if(qty <= 0) { rEl.textContent='—'; rEl.className='work-res'; return; }
+    const std = stdVals[w.id] || w.std;
+    const base = qty / std;
+    const adj = Math.ceil(base * curCoef * 10) / 10;
+    const who = whoState[w.id];
+    const rate = who==='g' ? rG : rJ;
+    const cost = adj * rate;
+    if(who==='g') { tGd+=adj; tGc+=cost; } else { tJd+=adj; tJc+=cost; }
+    rEl.textContent = adj.toFixed(1) + '日　¥' + Math.round(cost).toLocaleString();
+    rEl.className = 'work-res v';
+  });
+
+  const zd = Math.ceil(tGd * 0.15 * 10) / 10;
+  const zc = zd * rG;
+  tGd += zd; tGc += zc;
+  const zEl = document.getElementById('zatsuVal');
+  zEl.textContent = zc > 0 ? zd.toFixed(1) + '日　¥' + Math.round(zc).toLocaleString() : '—';
+
+  const total = tGc + tJc;
+  const needed = curMargin < 1 ? total / (1 - curMargin) : 0;
+
+  document.getElementById('sGd').textContent = fmtD(tGd);
+  document.getElementById('sGc').textContent = fmt(tGc);
+  document.getElementById('sJd').textContent = fmtD(tJd);
+  document.getElementById('sJc').textContent = fmt(tJc);
+  document.getElementById('sTotal').textContent = total > 0 ? fmt(total) : '—';
+  document.getElementById('nEx').textContent = needed > 0 ? fmt(needed) : '—';
+  document.getElementById('nInc').textContent = needed > 0 ? fmt(needed * 1.1) : '—';
+  autoSave();
+}
+
+// ===== PRINT =====
+function printPage(target) {
+  const printWin = window.open('', '_blank', 'width=800,height=600');
+  let content = '';
+  const styles = document.querySelector('style').innerHTML;
+
+  if(target === 'estimate' || target === 'all') {
+    const site = document.getElementById('e-site').value || '（現場名未入力）';
+    const desc = document.getElementById('e-desc').value || '';
+    const date = document.getElementById('e-date').value || '';
+    const coef = document.getElementById('coefBadge').textContent;
+    const total = document.getElementById('sTotal').textContent;
+    const nex = document.getElementById('nEx').textContent;
+    const ninc = document.getElementById('nInc').textContent;
+    const rG = document.getElementById('rateG').value;
+    const rJ = document.getElementById('rateJ').value;
+
+    let rows = '';
+    STD_WORKS.forEach(w => {
+      const qEl = document.getElementById('qty_' + w.id);
+      const rEl = document.getElementById('res_' + w.id);
+      if(!qEl) return;
+      const qty = parseFloat(qEl.value) || 0;
+      const res = rEl ? rEl.textContent : '—';
+      rows += `<tr>
+        <td>${w.name}</td><td>${w.unit}</td>
+        <td style="text-align:right">${qty > 0 ? qty : '—'}</td>
+        <td>${whoState[w.id]==='g'?'外注':'自社'}</td>
+        <td style="text-align:right">${res}</td>
+      </tr>`;
+    });
+
+    content += `
+    <div style="margin-bottom:20px;">
+      <div style="background:#1a2e45;color:white;padding:12px 16px;border-radius:8px;margin-bottom:12px;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">大竹工務店　大工手間見積書</div>
+        <div style="font-size:18px;font-weight:900;">${site}</div>
+        <div style="font-size:12px;opacity:.8;margin-top:4px;">${desc}　／　見積日: ${date}　／　係数: ${coef}</div>
+      </div>
+      <div style="font-size:11px;color:#666;margin-bottom:6px;">外注日当: ¥${parseInt(rG).toLocaleString()}円/日　自社日当: ¥${parseInt(rJ).toLocaleString()}円/日</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:#2e75b6;color:white;">
+          <th style="padding:6px;text-align:left;">工種</th>
+          <th style="padding:6px;">単位</th>
+          <th style="padding:6px;text-align:right;">数量</th>
+          <th style="padding:6px;">区分</th>
+          <th style="padding:6px;text-align:right;">日数・金額</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:12px;background:#f5a623;padding:12px 16px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-weight:700;font-size:13px;">大工手間　合計</span>
+        <span style="font-size:18px;font-weight:900;">${total}</span>
+      </div>
+      <div style="margin-top:8px;background:#1a2e45;color:white;padding:10px 14px;border-radius:8px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-size:11px;opacity:.7;">粗利目標での必要見積（税抜）</span>
+          <span style="font-size:15px;font-weight:700;color:#f5a623;">${nex}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="font-size:11px;opacity:.7;">税込</span>
+          <span style="font-size:13px;color:white;">${ninc}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  if(target === 'hokakari' || target === 'all') {
+    const memo = document.getElementById('hk-memo').value || '';
+    const date = document.getElementById('hk-date').value || '';
+    const author = document.getElementById('hk-author').value || '';
+    let hkRows = '';
+    STD_WORKS.forEach(w => {
+      const v = stdVals[w.id] || w.std;
+      hkRows += `<tr>
+        <td>${w.id.replace('w','')}</td>
+        <td>${w.cat}</td>
+        <td>${w.name}</td>
+        <td style="text-align:center;">${w.unit}/日</td>
+        <td style="text-align:center;font-weight:700;">${v}</td>
+        <td style="text-align:center;">${w.who==='g'?'外注':'自社'}</td>
+      </tr>`;
+    });
+    let coefRows = '';
+    COEF_TYPES.forEach(c => {
+      const v = coefVals[c.type] || c.val;
+      coefRows += `<tr>
+        <td>${c.type}</td>
+        <td style="text-align:center;font-weight:700;">×${v}</td>
+        <td>${c.desc}</td>
+      </tr>`;
+    });
+    content += `
+    <div>
+      <div style="background:#1a2e45;color:white;padding:12px 16px;border-radius:8px;margin-bottom:12px;">
+        <div style="font-size:11px;opacity:.7;">大竹工務店　歩掛り標準表</div>
+        <div style="font-size:16px;font-weight:900;">大工手間 歩掛り標準表（リフォーム・改修工事用）</div>
+        <div style="font-size:11px;opacity:.7;margin-top:4px;">更新日: ${date}　担当: ${author}　${memo}</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;">
+        <thead><tr style="background:#2e75b6;color:white;">
+          <th style="padding:5px;">No</th><th style="padding:5px;">区分</th>
+          <th style="padding:5px;text-align:left;">工種</th>
+          <th style="padding:5px;">単位</th><th style="padding:5px;">標準値</th><th style="padding:5px;">区分</th>
+        </tr></thead>
+        <tbody>${hkRows}</tbody>
+      </table>
+      <div style="font-size:12px;font-weight:700;background:#2e75b6;color:white;padding:6px 10px;border-radius:6px 6px 0 0;">難易度係数テーブル</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="background:#3d6491;color:white;">
+          <th style="padding:5px;text-align:left;">現場タイプ</th>
+          <th style="padding:5px;">係数</th><th style="padding:5px;text-align:left;">説明</th>
+        </tr></thead>
+        <tbody>${coefRows}</tbody>
+      </table>
+    </div>`;
+  }
+
+  printWin.document.write(`<!DOCTYPE html><html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>大竹工務店　大工手間</title>
+    <style>
+      body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;padding:16px;color:#1a2e45;font-size:12px;}
+      table tr:nth-child(even){background:#f4f8fc;}
+      table td,table th{padding:5px 7px;border-bottom:1px solid #e4edf7;}
+      @media print{@page{margin:10mm;}}
+    </style>
+  </head><body>${content}
+  <div style="text-align:center;margin-top:20px;font-size:10px;color:#999;">大竹工務店　大工手間管理アプリ　出力日: ${new Date().toLocaleDateString('ja-JP')}</div>
+  <script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
+window.onload=()=>window.print();<\/script>
+  </body></html>`);
+  printWin.document.close();
+}
+
+// ===== CSV EXPORT =====
+function exportCSV() {
+  const site = document.getElementById('e-site').value || '現場名未入力';
+  const date = document.getElementById('e-date').value || '';
+  const rG = document.getElementById('rateG').value;
+  const rJ = document.getElementById('rateJ').value;
+  const coef = document.getElementById('coefBadge').textContent;
+
+  let csv = '\uFEFF'; // BOM for Excel
+  csv += `大竹工務店　大工手間見積書\n`;
+  csv += `現場名,${site}\n見積日,${date}\n難易度係数,${coef}\n外注日当,${rG}\n自社日当,${rJ}\n\n`;
+  csv += `工種,単位,数量,区分,補正日数,金額\n`;
+
+  const rGn = parseFloat(rG) || 25000;
+  const rJn = parseFloat(rJ) || 28750;
+  STD_WORKS.forEach(w => {
+    const qty = parseFloat((document.getElementById('qty_'+w.id)||{}).value) || 0;
+    if(qty <= 0) return;
+    const std = stdVals[w.id] || w.std;
+    const adj = Math.ceil(qty/std * curCoef * 10) / 10;
+    const rate = whoState[w.id]==='g' ? rGn : rJn;
+    const cost = Math.round(adj * rate);
+    csv += `"${w.name}",${w.unit},${qty},${whoState[w.id]==='g'?'外注':'自社'},${adj},${cost}\n`;
+  });
+
+  const total = parseFloat(document.getElementById('sTotal').textContent.replace(/[¥,]/g,'')) || 0;
+  const nex = parseFloat(document.getElementById('nEx').textContent.replace(/[¥,]/g,'')) || 0;
+  csv += `\n大工手間合計,,,,, ${total}\n粗利目標必要見積（税抜）,,,,,${nex}\n粗利目標必要見積（税込）,,,,,${Math.round(nex*1.1)}\n`;
+
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `大工手間見積_${site}_${date}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('CSVファイルを保存しました');
+}
+
+// ===== 台帳へ送る =====
+
+// 手間アプリの工種カテゴリ → 日報PWAの工種IDマッピング
+const CAT_TO_KOUJI = {
+  '解体工事':   'kaitai',
+  '軸組・補強': 'mokuko',
+  '床工事':     'mokuko',
+  '天井・壁下地':'mokuko',
+  '造作・建具': 'sash',
+  '断熱・気密': 'gaiheki',
+  '雑工事':     'mokuko',
+};
+
+function collectSendData() {
+  const rG = parseFloat(document.getElementById('rateG').value) || 25000;
+  const rJ = parseFloat(document.getElementById('rateJ').value) || 28750;
+
+  let tGd=0, tJd=0, tGc=0, tJc=0;
+  const koujiMap = {}; // 日報PWAの工種ID → 人工合計
+
+  STD_WORKS.forEach(w => {
+    const qEl = document.getElementById('qty_' + w.id);
+    if(!qEl) return;
+    const qty = parseFloat(qEl.value) || 0;
+    if(qty <= 0) return;
+    const std = stdVals[w.id] || w.std;
+    const adj = Math.ceil(qty / std * curCoef * 10) / 10;
+    const who = whoState[w.id];
+    const rate = who==='g' ? rG : rJ;
+    const cost = adj * rate;
+    if(who==='g'){ tGd+=adj; tGc+=cost; } else { tJd+=adj; tJc+=cost; }
+
+    // 工種マッピング
+    const koujiId = CAT_TO_KOUJI[w.cat] || 'mokuko';
+    koujiMap[koujiId] = (koujiMap[koujiId]||0) + adj;
+  });
+
+  // 雑工自動加算
+  const zd = Math.ceil(tGd * 0.15 * 10) / 10;
+  tGd += zd; tGc += zd * rG;
+  koujiMap['mokuko'] = (koujiMap['mokuko']||0) + zd;
+
+  const total = tGc + tJc;
+  const totalNinku = tGd + tJd;
+
+  return { tGd, tJd, tGc, tJc, total, totalNinku, koujiMap };
+}
+
+function previewSendToDaichou() {
+  const d = collectSendData();
+  const name = document.getElementById('send-name').value.trim();
+  const code = document.getElementById('send-code').value.trim();
+
+  const KOUJI_LABELS = {
+    kaitai:'解体・撤去', mokuko:'木工・大工', sash:'サッシ・建具',
+    gaiheki:'外壁工事', naibu:'内部仕上げ', kiso:'基礎工事',
+    yane:'屋根工事', tosou:'塗装工事', haikan:'配管工事',
+    denki:'電気工事', sakan:'左官工事', tobi:'とび・土工'
+  };
+
+  let koujiRows = Object.entries(d.koujiMap)
+    .filter(([,v])=>v>0)
+    .map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #e4edf7;">
+      <span style="color:#6b8aab;">${KOUJI_LABELS[k]||k}</span>
+      <span style="font-weight:700;">${v.toFixed(1)} 人工</span>
+    </div>`).join('');
+
+  const preview = document.getElementById('send-preview');
+  const body = document.getElementById('send-preview-body');
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #e4edf7;margin-bottom:4px;">
+      <span style="color:#6b8aab;">工事名</span><span style="font-weight:700;">${name||'（未入力）'}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #e4edf7;margin-bottom:4px;">
+      <span style="color:#6b8aab;">工事コード</span><span>${code||'—'}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #e4edf7;margin-bottom:4px;">
+      <span style="color:#6b8aab;">合計見積人工</span><span style="font-weight:700;color:#f5a623;">${d.totalNinku.toFixed(1)} 人工</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #e4edf7;margin-bottom:6px;">
+      <span style="color:#6b8aab;">大工手間合計</span><span style="font-weight:700;">¥${Math.round(d.total).toLocaleString()}</span>
+    </div>
+    <div style="font-size:10px;color:#6b8aab;margin-bottom:4px;">工種別内訳</div>
+    ${koujiRows}
+  `;
+  preview.style.display = 'block';
+}
+
+function sendToDaichou() {
+  const name   = document.getElementById('send-name').value.trim();
+  const code   = document.getElementById('send-code').value.trim();
+  const client = document.getElementById('send-client').value.trim();
+  const status = document.getElementById('send-status').value;
+  const statusEl = document.getElementById('daichou-send-status');
+
+  if(!name){ showToast('⚠️ 工事名を入力してください'); return; }
+
+  const d = collectSendData();
+
+  // 日報PWAのlocalStorageキーに書き込む
+  try {
+    const existing = JSON.parse(localStorage.getItem('nip_jobs') || '[]');
+
+    // 同じ工事コードがあれば上書き確認
+    const sameCode = code ? existing.find(j=>j.code===code) : null;
+    const sameName = existing.find(j=>j.name===name);
+    if(sameCode || sameName) {
+      const target = sameCode || sameName;
+      if(!confirm(`「${target.name}」が既に台帳にあります。\n見積人工・金額を上書きしますか？`)) return;
+      target.estNinkuTotal = d.totalNinku;
+      target.estNinkuByKouji = d.koujiMap;
+      target.genka = Math.round(d.total);
+      target.updatedAt = new Date().toISOString();
+      if(code) target.code = code;
+      if(client) target.client = client;
+      target.status = status;
+      localStorage.setItem('nip_jobs', JSON.stringify(existing));
+      showDaichouStatus('success', `✅ 「${target.name}」の見積人工・金額を更新しました`);
+      showToast('✅ 台帳を更新しました');
+    } else {
+      // 新規追加
+      const newJob = {
+        id: 'job-' + Date.now(),
+        code, name, client,
+        status, address: '',
+        kikanStart: '', kikanEnd: '',
+        uriage: 0,
+        genka: Math.round(d.total),
+        estNinkuTotal: d.totalNinku,
+        estNinkuByKouji: d.koujiMap,
+        memo: `大工手間アプリより自動登録（難易度係数×${document.getElementById('coefBadge').textContent.replace('×','')}）`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      existing.unshift(newJob);
+      localStorage.setItem('nip_jobs', JSON.stringify(existing));
+      showDaichouStatus('success', `✅ 「${name}」を台帳に新規登録しました`);
+      showToast('✅ 台帳に登録しました！');
+    }
+
+    // 入力フォームに現場名を自動セット（見積タブと連携）
+    const eSite = document.getElementById('e-site');
+    if(eSite && !eSite.value) eSite.value = name;
+
+  } catch(e) {
+    showDaichouStatus('error', `⚠️ エラーが発生しました: ${e.message}\n日報PWAと同じブラウザで開いているか確認してください`);
+    showToast('⚠️ 送信に失敗しました');
+  }
+}
+
+function showDaichouStatus(type, msg) {
+  const el = document.getElementById('daichou-send-status');
+  el.style.display = 'block';
+  el.style.background = type==='success' ? '#eafaf1' : '#fdf2f2';
+  el.style.color = type==='success' ? '#27ae60' : '#e74c3c';
+  el.style.border = `1px solid ${type==='success'?'#a9dfbf':'#f5c6cb'}`;
+  el.textContent = msg;
+}
+
+// ===== BACKUP =====
+function collectData() {
+  const qtyData = {};
+  STD_WORKS.forEach(w => {
+    const el = document.getElementById('qty_' + w.id);
+    if(el) qtyData[w.id] = el.value;
+  });
+  return {
+    version: '1.0',
+    savedAt: new Date().toISOString(),
+    hokakari: {
+      memo: document.getElementById('hk-memo').value,
+      date: document.getElementById('hk-date').value,
+      author: document.getElementById('hk-author').value,
+      remarks: document.getElementById('hk-remarks').value,
+      stdVals: {...stdVals},
+      coefVals: {...coefVals},
+    },
+    estimate: {
+      site: document.getElementById('e-site').value,
+      desc: document.getElementById('e-desc').value,
+      date: document.getElementById('e-date').value,
+      area: document.getElementById('e-area').value,
+      rateG: document.getElementById('rateG').value,
+      rateJ: document.getElementById('rateJ').value,
+      curCoef, curMargin, whoState: {...whoState}, qtyData,
+    }
+  };
+}
+
+function applyData(data) {
+  if(!data) return;
+  if(data.hokakari) {
+    const h = data.hokakari;
+    if(h.memo) document.getElementById('hk-memo').value = h.memo;
+    if(h.date) document.getElementById('hk-date').value = h.date;
+    if(h.author) document.getElementById('hk-author').value = h.author;
+    if(h.remarks) document.getElementById('hk-remarks').value = h.remarks;
+    if(h.stdVals) { Object.assign(stdVals, h.stdVals); renderHkTable(); }
+    if(h.coefVals) { Object.assign(coefVals, h.coefVals); renderCoefTable(); }
+  }
+  if(data.estimate) {
+    const e = data.estimate;
+    if(e.site) document.getElementById('e-site').value = e.site;
+    if(e.desc) document.getElementById('e-desc').value = e.desc;
+    if(e.date) document.getElementById('e-date').value = e.date;
+    if(e.area) document.getElementById('e-area').value = e.area;
+    if(e.rateG) document.getElementById('rateG').value = e.rateG;
+    if(e.rateJ) document.getElementById('rateJ').value = e.rateJ;
+    if(e.curCoef) { curCoef = e.curCoef; document.getElementById('coefInp').value = curCoef; document.getElementById('coefBadge').textContent='×'+curCoef; }
+    if(e.curMargin) curMargin = e.curMargin;
+    if(e.whoState) Object.assign(whoState, e.whoState);
+    renderWorks();
+    if(e.qtyData) {
+      Object.entries(e.qtyData).forEach(([id, val]) => {
+        const el = document.getElementById('qty_' + id);
+        if(el) el.value = val;
+      });
+    }
+    calcEst();
+  }
+}
+
+function autoSave() {
+  try { localStorage.setItem('otake_autosave', JSON.stringify(collectData())); } catch(e) {}
+}
+
+function loadFromStorage() {
+  try {
+    const d = localStorage.getItem('otake_autosave');
+    if(d) applyData(JSON.parse(d));
+  } catch(e) {}
+}
+
+function saveBackup() {
+  const data = collectData();
+  const site = document.getElementById('e-site').value || '現場名未入力';
+  const key = 'otake_backup_' + Date.now();
+  const entry = { key, name: site, savedAt: data.savedAt, data };
+  try {
+    localStorage.setItem(key, JSON.stringify(entry));
+    showToast('💾 バックアップを保存しました');
+    renderBackupList();
+    // also download file
+    downloadJSON(data, `大竹工務店_大工手間_${site}_${new Date().toLocaleDateString('ja-JP').replace(/\//g,'-')}.json`);
+  } catch(e) { showToast('⚠️ 保存に失敗しました'); }
+}
+
+function downloadJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function loadBackupFile(event) {
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      applyData(data);
+      showToast('✅ バックアップを読み込みました');
+    } catch(err) { showToast('⚠️ ファイルの読み込みに失敗しました'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function loadBackup() {
+  document.getElementById('loadFile').click();
+}
+
+function renderBackupList() {
+  const el = document.getElementById('backupList');
+  const keys = Object.keys(localStorage).filter(k => k.startsWith('otake_backup_')).sort().reverse();
+  document.getElementById('backupCount').textContent = keys.length + '件';
+  if(keys.length === 0) {
+    el.innerHTML = '<div class="empty-backup">保存されたバックアップはありません</div>';
+    return;
+  }
+  let html = '';
+  keys.forEach(k => {
+    try {
+      const entry = JSON.parse(localStorage.getItem(k));
+      const dt = new Date(entry.savedAt).toLocaleString('ja-JP');
+      html += `<div class="backup-item" onclick="restoreBackup('${k}')">
+        <span class="bi-icon">📁</span>
+        <div class="bi-info">
+          <div class="bi-name">${entry.name}</div>
+          <div class="bi-date">${dt}</div>
+        </div>
+        <span class="bi-del" onclick="event.stopPropagation();deleteBackup('${k}')">🗑️</span>
+      </div>`;
+    } catch(e) {}
+  });
+  el.innerHTML = html;
+}
+
+function restoreBackup(key) {
+  try {
+    const entry = JSON.parse(localStorage.getItem(key));
+    if(confirm(`「${entry.name}」のデータを復元しますか？\n現在の入力内容は上書きされます。`)) {
+      applyData(entry.data);
+      showToast('✅ データを復元しました');
+    }
+  } catch(e) { showToast('⚠️ 復元に失敗しました'); }
+}
+
+function deleteBackup(key) {
+  if(confirm('このバックアップを削除しますか？')) {
+    localStorage.removeItem(key);
+    renderBackupList();
+    showToast('🗑️ 削除しました');
+  }
+}
+
+function clearAllBackups() {
+  if(confirm('全バックアップを削除します。この操作は取り消せません。')) {
+    Object.keys(localStorage).filter(k => k.startsWith('otake_backup_')).forEach(k => localStorage.removeItem(k));
+    renderBackupList();
+    showToast('全バックアップを削除しました');
+  }
+}
+
+// ===== START =====
+init();
+
+// ===== Googleスプレッドシート同期 =====
+function saveToGoogleDrive(){
+  const autosave = localStorage.getItem('otake_autosave') || '{}';
+  const data = {
+    type: 'tema',
+    autosave: JSON.parse(autosave)
+  };
+  fetch(GAS_URL, {
+    method:'POST', mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(()=>{
+    alert('✅ 手間見積データをGoogleスプレッドシートに同期しました');
+  }).catch(err=>{
+    alert('同期エラー: '+err.message);
+  });
+}
+</script>
+</body>
+</html>
