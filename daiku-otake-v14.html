@@ -1490,7 +1490,6 @@ function refreshRetItems(){
 function openOut(preItemId,preLocId){
   const item=preItemId?items.find(i=>String(i.id)===String(preItemId)):null;
   const locId=preLocId||(item?locations.find(l=>(item.stocks[l.id]||0)>0)?.id:null)||locations[0]?.id;
-  const item=preItemId?items.find(i=>String(i.id)===String(preItemId)):null;
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#70a8e8">📤 出庫登録</div>
     <div class="sheet-desc">倉庫から現場・作業場へ搬出します</div>
