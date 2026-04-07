@@ -314,6 +314,36 @@ function save(){
   localStorage.setItem('dk_loc',JSON.stringify(locations));
   localStorage.setItem('dk_items',JSON.stringify(items));
   localStorage.setItem('dk_hist',JSON.stringify(history));
+  scheduleGasSync();
+}
+
+// ===== デバウンスGAS自動同期 =====
+let _gasSyncTimer=null;
+function scheduleGasSync(){
+  if(_gasSyncTimer) clearTimeout(_gasSyncTimer);
+  _gasSyncTimer=setTimeout(()=>{
+    _gasSyncTimer=null;
+    pushToGAS();
+  },5000); // 5秒後に変更がなければ送信
+}
+function pushToGAS(){
+  const data={type:'backup',locations,items,history:history.slice(0,500)};
+  fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+    .then(()=>{ showSyncBadge('☁️ 同期完了','#70c870'); })
+    .catch(()=>{ showSyncBadge('⚠️ オフライン（ローカル保存済）','#e8b050'); });
+}
+function showSyncBadge(msg,color){
+  let badge=document.getElementById('_sync_badge');
+  if(!badge){
+    badge=document.createElement('div');
+    badge.id='_sync_badge';
+    badge.style.cssText='position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:#1a1a16;border:1px solid #2e2e28;border-radius:20px;padding:5px 14px;font-size:11px;font-family:inherit;z-index:9999;pointer-events:none;transition:opacity .4s';
+    document.body.appendChild(badge);
+  }
+  badge.style.color=color;
+  badge.textContent=msg;
+  badge.style.opacity='1';
+  setTimeout(()=>{ badge.style.opacity='0'; },2500);
 }
 function moveLocUp(locId){
   var idx=locations.findIndex(l=>l.id===locId);
@@ -323,39 +353,16 @@ function moveLocUp(locId){
 }
 
 // ===== 起動時スプレッドシートから読み込み =====
-async function loadFromSheetManual(){
-  const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
-  if(btn){ btn.textContent='🔄 読み込み中...'; btn.disabled=true; }
-  try{
-    const res = await fetch(GAS_URL+'?type=zaiko',{mode:'cors'});
-    const data = await res.json();
-    if(data.status==='ok'){
-      if(data.locations&&data.locations.length>0){
-        locations=data.locations;
-        localStorage.setItem('dk_loc',JSON.stringify(locations));
-      }
-      if(data.items&&data.items.length>0){
-        items=data.items;
-        localStorage.setItem('dk_items',JSON.stringify(items));
-      }
-      if(data.history&&data.history.length>0){
-        history=data.history;
-        localStorage.setItem('dk_hist',JSON.stringify(history));
-      }
-      save(); render();
-      alert('✅ 読み込み完了\n場所:'+locations.length+'件 / 品目:'+items.length+'件');
-    } else {
-      alert('❌ 読み込み失敗');
-    }
-  }catch(e){
-    alert('❌ エラー: '+e.message);
-  }finally{
-    if(btn){ btn.textContent='🔄 スプレッドシートから読み込む'; btn.disabled=false; }
-  }
-}
-
+// localStorageにデータがある場合はGASから読まない（編集内容を守るため）
 async function loadFromSheet(){
+  const hasLocal = localStorage.getItem('dk_items');
+  if(hasLocal){
+    console.log('ローカルデータあり → GAS読み込みスキップ');
+    return;
+  }
+  // localStorageが空のときだけGASから初期読み込み
   try{
+    showSyncBadge('☁️ 初回データ読み込み中…','#70a8e8');
     const res = await fetch(GAS_URL+'?type=zaiko',{mode:'cors'});
     const data = await res.json();
     if(data.status==='ok'){
@@ -372,11 +379,21 @@ async function loadFromSheet(){
         localStorage.setItem('dk_hist',JSON.stringify(history));
       }
       render();
+      showSyncBadge('☁️ GASから読み込み完了','#70c870');
       console.log('在庫データをスプレッドシートから読み込みました');
     }
   }catch(e){
     console.log('スプレッドシート読み込みエラー（オフライン時は正常）:',e);
   }
+}
+
+// GASから強制再読み込み（手動ボタン用）
+async function forceLoadFromSheet(){
+  if(!confirm('GASのデータでローカルを上書きします。\n現在のローカル編集内容は失われます。よろしいですか？')) return;
+  localStorage.removeItem('dk_items');
+  localStorage.removeItem('dk_loc');
+  localStorage.removeItem('dk_hist');
+  await loadFromSheet();
 }
 
 function moveLocDown(locId){
@@ -727,9 +744,8 @@ function renderData(){
     <div class="data-card">
       <div class="data-card-title">🛠️ データ管理</div>
       <div class="data-btn-row">
-        <button class="data-btn" style="background:#1a3a2a;color:#70c870;border:1px solid #2a4a3a" onclick="saveToGoogleDrive()">☁️ Googleスプレッドシートに同期（書き込み）</button>
-        <button class="data-btn" style="background:#1a2a3a;color:#70e8d0;border:1px solid #2a4a48" onclick="loadFromSheetManual()">🔄 スプレッドシートから読み込む</button>
-        <button class="data-btn" style="background:#2a1a0a;color:#f0a030;border:1px solid #5a3a10" onclick="saveImportant()">⭐ 重要スナップショット（永久保存）</button>
+        <button class="data-btn" style="background:#1a3a2a;color:#70c870;border:1px solid #2a4a3a" onclick="saveToGoogleDrive()">☁️ Googleスプレッドシートに同期</button>
+        <button class="data-btn" style="background:#1a2a3a;color:#70a8e8;border:1px solid #2a3a4a" onclick="forceLoadFromSheet()">🔄 GASから強制再読み込み（上書き）</button>
         <button class="data-btn blue" onclick="exportBackupJSON()">💾 JSONバックアップをダウンロード</button>
         <button class="data-btn green" onclick="document.getElementById('file-input').click()">📂 バックアップから復元（JSONまたはExcel）</button>
         <button class="data-btn gold" onclick="openAddItemModal()">➕ 品目を手動追加</button>
@@ -1287,54 +1303,6 @@ function saveToGoogleDrive(){
   });
 }
 
-// 重要スナップショット（永久保存）
-function saveImportant(){
-  const label = prompt('このスナップショットの名前を入力してください\n例：田中邸着工前・決算前・システム更新前', '');
-  if(label === null) return; // キャンセル
-  const name = label.trim() || '無題';
-
-  const btn = document.querySelector('[onclick="saveImportant()"]');
-  if(btn){ btn.textContent = '⭐ 保存中...'; btn.disabled = true; }
-
-  const data = {
-    type: 'important',
-    label: name,
-    locations: locations,
-    items: items,
-    history: history.slice(0, 500)
-  };
-
-  fetch(GAS_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
-  })
-  .then(() => {
-    if(btn){ btn.textContent = '⭐ 重要スナップショット（永久保存）'; btn.disabled = false; }
-    showModal(`<div class="sheet" onclick="event.stopPropagation()">
-      <div class="sheet-title" style="color:#f0a030">⭐ 永久保存しました</div>
-      <div style="color:#888;font-size:12px;line-height:1.8;margin-bottom:14px">
-        「${name}」として永久保存フォルダに保存されました。<br>
-        このファイルは自動削除されません。
-      </div>
-      <div style="background:#2a1a0a;border-radius:8px;padding:12px;margin-bottom:12px">
-        <div style="color:#f0a030;font-size:11px;font-weight:700;margin-bottom:6px">保存先</div>
-        <div style="color:#aaa;font-size:11px;line-height:2">
-          📁 大竹工務店_永久保存<br>
-          📦 在庫品目：${items.length}件<br>
-          🏷️ ラベル：${name}
-        </div>
-      </div>
-      <button class="btn-cancel" style="width:100%" onclick="closeModalForce()">閉じる</button>
-    </div>`);
-  })
-  .catch(err => {
-    if(btn){ btn.textContent = '⭐ 重要スナップショット（永久保存）'; btn.disabled = false; }
-    alert('保存エラー: ' + err.message);
-  });
-}
-
 // JSONバックアップ
 function exportBackupJSON(){
   const data={locations,items,history,exportedAt:new Date().toISOString()};
@@ -1383,8 +1351,9 @@ function showPriceHint(selId,hintId){
 }
 
 // ========== 入庫 ==========
-function openIn(preItemId){
+function openIn(preItemId,preLocId){
   const item=preItemId?items.find(i=>String(i.id)===String(preItemId)):null;
+  const initLocId=preLocId||locations[0]?.id;
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#70c870">📥 入庫登録</div>
     <div class="sheet-desc">仕入れ・購入した材料を在庫に追加します</div>
@@ -1392,7 +1361,7 @@ function openIn(preItemId){
     <select class="form-select" id="in-item" onchange="showPriceHint('in-item','in-hint')">${itemOpts(preItemId)}</select>
     <div class="price-hint" id="in-hint">${item?`基準単価: ${yen(item.basePrice||0)}/${item.unit}`:''}</div>
     <label class="form-label">入庫先（保管場所）</label>
-    <select class="form-select" id="in-loc" onchange="handleInLocChange(this.value)">${locOpts(locations[0]?.id)}<option value="__new__">＋ 新しい場所を追加...</option></select>
+    <select class="form-select" id="in-loc" onchange="handleInLocChange(this.value)">${locOpts(initLocId)}<option value="__new__">＋ 新しい場所を追加...</option></select>
     <div id="in-loc-new" style="display:none;margin-top:6px">
       <input class="form-input" type="text" id="in-loc-new-name" placeholder="新しい場所の名前（例: 土浦現場）" style="margin-bottom:4px"/>
       <button onclick="addLocFromIn()" style="width:100%;background:#1a3a1a;color:#70c870;border:1px solid #2a4a2a;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✅ この場所を追加して選択</button>
@@ -1519,7 +1488,8 @@ function refreshRetItems(){
   showPriceHint('ret-item','ret-hint');
 }
 function openOut(preItemId,preLocId){
-  const locId=preLocId||(preItemId?locations.find(l=>(items.find(i=>String(i.id)===String(preItemId))?.stocks[l.id]||0)>0)?.id:null)||locations[0]?.id;
+  const item=preItemId?items.find(i=>String(i.id)===String(preItemId)):null;
+  const locId=preLocId||(item?locations.find(l=>(item.stocks[l.id]||0)>0)?.id:null)||locations[0]?.id;
   const item=preItemId?items.find(i=>String(i.id)===String(preItemId)):null;
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#70a8e8">📤 出庫登録</div>
@@ -1570,8 +1540,8 @@ function doOut(){
 
 // ========== 使用 ==========
 function openUse(preItemId,preLocId){
-  const locId=preLocId||(preItemId?locations.find(l=>(items.find(i=>String(i.id)===String(preItemId))?.stocks[l.id]||0)>0)?.id:null)||locations[0]?.id;
   const item=preItemId?items.find(i=>String(i.id)===String(preItemId)):null;
+  const locId=preLocId||(item?locations.find(l=>(item.stocks[l.id]||0)>0)?.id:null)||locations[0]?.id;
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#e8b050">🪚 使用記録</div>
     <div class="sheet-desc">作業で使用した量を記録します</div>
@@ -1612,8 +1582,8 @@ function doUse(){
 
 // ========== 返却 ==========
 function openRet(preItemId,preLocId){
-  const locId=preLocId||(preItemId?locations.find(l=>(items.find(i=>String(i.id)===String(preItemId))?.stocks[l.id]||0)>0)?.id:null)||locations[0]?.id;
   const item=preItemId?items.find(i=>String(i.id)===String(preItemId)):null;
+  const locId=preLocId||(item?locations.find(l=>(item.stocks[l.id]||0)>0)?.id:null)||locations[0]?.id;
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#c870e8">↩️ 返却登録</div>
     <div class="sheet-desc">現場の余り材を倉庫へ戻します</div>
@@ -1656,7 +1626,7 @@ function showLocDetail(locId){
   const loc=locations.find(l=>l.id===locId);
   const li=items.filter(i=>(i.stocks[locId]||0)>0);
   const total=locStockValue(locId);
-  const rows=li.length===0?'<div style="color:#444;font-size:12px;padding:10px 0">この場所に在庫はありません</div>':li.map(i=>`<div class="detail-item"><div><div style="color:#e8d5a3;font-size:12px">${esc(i.stockId||'')} ${esc(i.name)}</div><div style="color:#444;font-size:9px">${i.stocks[locId]}${esc(i.unit)} × ${yen(i.basePrice||0)}</div></div><div style="display:flex;align-items:center;gap:8px"><div style="text-align:right"><div style="color:${loc.color};font-size:13px;font-weight:700">${yen((i.stocks[locId]||0)*(i.basePrice||0))}</div></div><button class="btn-sm" style="background:#2a3a2a;color:#70c870;flex-shrink:0" onclick="closeModalForce();editItemModal('${i.id}')">✏️</button></div></div>`).join('');
+  const rows=li.length===0?'<div style="color:#444;font-size:12px;padding:10px 0">この場所に在庫はありません</div>':li.map(i=>`<div class="detail-item"><div><div style="color:#e8d5a3;font-size:12px">${esc(i.stockId||'')} ${esc(i.name)}</div><div style="color:#444;font-size:9px">${i.stocks[locId]}${esc(i.unit)} × ${yen(i.basePrice||0)}</div></div><div style="display:flex;align-items:center;gap:8px"><div style="text-align:right"><div style="color:${loc.color};font-size:13px;font-weight:700">${yen((i.stocks[locId]||0)*(i.basePrice||0))}</div></div><button class="btn-sm" style="background:#2a3a2a;color:#70c870;flex-shrink:0" onclick="closeModalForce();editItemModal('${i.id}','${locId}')">✏️</button></div></div>`).join('');
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><span style="font-size:26px">${loc.icon}</span><div><div class="sheet-title" style="color:#e8d5a3;margin-bottom:0">${esc(loc.name)}</div><div style="color:#555;font-size:10px">${esc(loc.address)}</div></div></div>
     <div class="money-cell" style="margin-bottom:12px"><div class="money-cell-label">在庫金額合計（税抜）</div><div class="money-cell-val" style="color:${loc.color};font-size:18px">${yen(total)}</div><div style="color:#555;font-size:10px;margin-top:2px">${yen(total*1.1)}（税込）</div></div>
@@ -1687,8 +1657,10 @@ function showActionMenu(){
 }
 
 // ========== 品目編集 ==========
-function editItemModal(itemId){
+function editItemModal(itemId,srcLocId){
   const item=items.find(i=>String(i.id)===String(itemId));if(!item)return;
+  // srcLocIdが未指定の場合、この品目に在庫がある最初の場所を自動選択
+  if(!srcLocId) srcLocId=locations.find(l=>(item.stocks[l.id]||0)>0)?.id||locations[0]?.id||'';
   const lRows=locations.map(l=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e28">
       <span style="color:#c8c8b0;font-size:12px">${l.icon} ${esc(l.name)}</span>
@@ -1720,10 +1692,10 @@ function editItemModal(itemId){
     </div>
     <div style="color:#666;font-size:10px;margin:12px 0 6px">📋 この品目の操作</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px">
-      <button style="border:none;border-radius:10px;padding:10px 6px;cursor:pointer;font-family:inherit;background:#1a3a1a;color:#70c870;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700" onclick="closeModalForce();openIn('${itemId}')">📥<span>入庫</span></button>
-      <button style="border:none;border-radius:10px;padding:10px 6px;cursor:pointer;font-family:inherit;background:#1a2a3a;color:#70a8e8;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700" onclick="closeModalForce();openOut('${itemId}')">📤<span>出庫</span></button>
-      <button style="border:none;border-radius:10px;padding:10px 6px;cursor:pointer;font-family:inherit;background:#3a2a10;color:#e8b050;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700" onclick="closeModalForce();openUse('${itemId}')">🪚<span>使用記録</span></button>
-      <button style="border:none;border-radius:10px;padding:10px 6px;cursor:pointer;font-family:inherit;background:#2a1a3a;color:#c870e8;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700" onclick="closeModalForce();openRet('${itemId}')">↩️<span>返却</span></button>
+      <button style="border:none;border-radius:10px;padding:10px 6px;cursor:pointer;font-family:inherit;background:#1a3a1a;color:#70c870;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700" onclick="closeModalForce();openIn('${itemId}','${srcLocId}')">📥<span>入庫</span></button>
+      <button style="border:none;border-radius:10px;padding:10px 6px;cursor:pointer;font-family:inherit;background:#1a2a3a;color:#70a8e8;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700" onclick="closeModalForce();openOut('${itemId}','${srcLocId}')">📤<span>出庫</span></button>
+      <button style="border:none;border-radius:10px;padding:10px 6px;cursor:pointer;font-family:inherit;background:#3a2a10;color:#e8b050;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700" onclick="closeModalForce();openUse('${itemId}','${srcLocId}')">🪚<span>使用記録</span></button>
+      <button style="border:none;border-radius:10px;padding:10px 6px;cursor:pointer;font-family:inherit;background:#2a1a3a;color:#c870e8;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700" onclick="closeModalForce();openRet('${itemId}','${srcLocId}')">↩️<span>返却</span></button>
     </div>
     <button style="width:100%;margin-top:8px;background:#1a2a3a;color:#70a8e8;border:1px solid #2a3a4a;border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" onclick="closeModalForce();copyItemModal('${itemId}')">📋 この品目をコピーして新規追加</button>
     <button style="width:100%;margin-top:4px;background:#3a1a1a;color:#e87050;border:1px solid #4a2a2a;border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit" onclick="doDeleteItem('${itemId}')">🗑️ この品目を削除する</button>
