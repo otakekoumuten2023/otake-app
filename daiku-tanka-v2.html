@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#1a1a16"/>
+<title>単価DB｜大竹工務店</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Hiragino Sans','Noto Sans JP',sans-serif;background:#111110;min-height:100vh;display:flex;justify-content:center}
+#app{width:100%;max-width:480px;min-height:100vh;background:#1a1a16;display:flex;flex-direction:column}
+.header{background:linear-gradient(160deg,#1e1e14,#16160e);padding:36px 16px 20px;text-align:center;border-bottom:1px solid #2a2a22}
+.header-title{color:#e8d5a3;font-size:20px;font-weight:700}
+.header-title span{color:#c8962a}
+.header-sub{color:#555;font-size:11px;margin-top:6px}
+.tabs{display:flex;background:#141412;border-bottom:1px solid #222}
+.tab{flex:1;padding:11px 2px;text-align:center;font-size:10px;font-weight:700;color:#555;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab.active{color:#c8962a;border-bottom-color:#c8962a}
+.search-wrap{padding:10px 12px 6px;display:flex;gap:8px}
+.search-input{flex:1;background:#222220;border:1px solid #2e2e28;border-radius:9px;padding:9px 12px;color:#e8d5a3;font-size:13px;font-family:inherit;outline:none}
+.search-input::placeholder{color:#444}
+.filter-select{background:#222220;border:1px solid #2e2e28;border-radius:9px;padding:9px 8px;color:#c8c8b0;font-size:11px;font-family:inherit;outline:none;cursor:pointer}
+.card-list{padding:6px 12px;display:flex;flex-direction:column;gap:8px;padding-bottom:80px}
+.tanka-card{background:#222220;border:1px solid #2e2e28;border-radius:12px;padding:12px 14px;cursor:pointer;transition:all .12s}
+.tanka-card:active{opacity:.75}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.card-name{color:#e8d5a3;font-size:13px;font-weight:700;flex:1;margin-right:8px;line-height:1.4}
+.card-price{color:#c8962a;font-size:15px;font-weight:700;white-space:nowrap}
+.card-unit{color:#666;font-size:10px;margin-left:2px}
+.card-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.badge{font-size:9px;border-radius:5px;padding:2px 7px;font-weight:700}
+.badge-cat{background:#2a3a28;color:#70c870}
+.badge-vendor{background:#2a2a3a;color:#70a8e8}
+.badge-date{color:#444;font-size:9px}
+.card-spec{color:#666;font-size:10px;margin-top:4px;line-height:1.5}
+.empty-msg{text-align:center;color:#444;font-size:12px;padding:40px 16px}
+.fab{position:fixed;bottom:24px;right:calc(50% - 228px);width:52px;height:52px;border-radius:50%;background:#c8962a;border:none;color:#1a1a16;font-size:26px;cursor:pointer;box-shadow:0 4px 16px rgba(200,150,42,.4);display:flex;align-items:center;justify-content:center;z-index:50}
+.fab:active{opacity:.7}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#222220;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px 16px 40px;border:1px solid #2e2e28;max-height:90vh;overflow-y:auto}
+.sheet-title{color:#e8d5a3;font-size:16px;font-weight:700;margin-bottom:14px}
+.form-label{color:#888;font-size:10px;font-weight:700;letter-spacing:1px;margin:10px 0 4px;display:block}
+.form-input{width:100%;background:#161614;border:1px solid #2e2e28;border-radius:8px;padding:10px 12px;color:#e8d5a3;font-size:13px;font-family:inherit;outline:none}
+.form-input:focus{border-color:#c8962a}
+.form-select{width:100%;background:#161614;border:1px solid #2e2e28;border-radius:8px;padding:10px 12px;color:#e8d5a3;font-size:13px;font-family:inherit;outline:none;cursor:pointer}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn-row{display:flex;gap:8px;margin-top:14px}
+.btn-cancel{flex:1;background:#2e2e28;color:#888;border:none;border-radius:9px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-confirm{flex:2;background:#c8962a;color:#1a1a16;border:none;border-radius:9px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-danger{width:100%;background:#3a1a1a;color:#e87050;border:1px solid #4a2a2a;border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;margin-top:8px}
+.json-area{width:100%;background:#161614;border:1px solid #2e2e28;border-radius:8px;padding:10px;color:#70c870;font-size:10px;font-family:monospace;min-height:120px;outline:none;resize:vertical}
+.import-msg{font-size:11px;margin-top:6px;min-height:16px;text-align:center}
+.data-btn-row{display:flex;flex-direction:column;gap:8px;padding:12px}
+.data-btn{width:100%;border:none;border-radius:9px;padding:12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.data-btn.green{background:#1a3a1a;color:#70c870;border:1px solid #2a4a2a}
+.data-btn.blue{background:#1a2a3a;color:#70a8e8;border:1px solid #2a3a4a}
+.data-btn.red{background:#3a1a1a;color:#e87050;border:1px solid #4a2a2a}
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#2a3a2a;color:#70c870;border:1px solid #3a4a3a;border-radius:20px;padding:8px 20px;font-size:12px;font-weight:700;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+
+/* ===== 見積りアシスタント ===== */
+#tab-assist{display:none;flex-direction:column;height:calc(100vh - 140px)}
+.assist-body{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:10px;padding-bottom:8px}
+.assist-input-area{padding:10px 12px;border-top:1px solid #2a2a22;background:#1a1a16;display:flex;gap:8px;align-items:flex-end}
+.assist-textarea{flex:1;background:#222220;border:1px solid #2e2e28;border-radius:12px;padding:10px 12px;color:#e8d5a3;font-size:13px;font-family:inherit;outline:none;resize:none;min-height:44px;max-height:120px;line-height:1.5}
+.assist-textarea:focus{border-color:#c8962a}
+.assist-textarea::placeholder{color:#444}
+.assist-send-btn{width:44px;height:44px;border-radius:50%;background:#c8962a;border:none;color:#1a1a16;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.assist-send-btn:disabled{background:#2e2e28;color:#555;cursor:not-allowed}
+.assist-send-btn:active:not(:disabled){opacity:.7}
+
+.msg{display:flex;flex-direction:column;gap:4px;animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg-user{align-items:flex-end}
+.msg-ai{align-items:flex-start}
+.msg-bubble{max-width:88%;border-radius:14px;padding:10px 13px;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
+.msg-user .msg-bubble{background:#2a3a1a;color:#c8e8a0;border-bottom-right-radius:4px}
+.msg-ai .msg-bubble{background:#222220;color:#e8d5a3;border:1px solid #2e2e28;border-bottom-left-radius:4px}
+.msg-label{font-size:9px;color:#444;padding:0 4px}
+
+.assist-card{background:#1e2e1e;border:1px solid #2a3a2a;border-radius:10px;padding:10px 12px;margin-top:4px}
+.assist-card-title{color:#70c870;font-size:10px;font-weight:700;margin-bottom:6px}
+.assist-item{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #2a2a22;font-size:11px}
+.assist-item:last-child{border-bottom:none}
+.assist-item-name{color:#e8d5a3;flex:1;margin-right:8px}
+.assist-item-price{color:#c8962a;font-weight:700;white-space:nowrap}
+.assist-item-meta{color:#555;font-size:9px}
+
+.assist-total{background:#2a2a1a;border:1px solid #3a3a22;border-radius:10px;padding:10px 12px;margin-top:4px}
+.assist-total-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0}
+.assist-total-label{color:#888}
+.assist-total-val{color:#c8962a;font-weight:700}
+.assist-total-row.big .assist-total-val{font-size:16px}
+
+.assist-hint{display:flex;gap:6px;flex-wrap:wrap;padding:6px 12px}
+.hint-chip{background:#222220;border:1px solid #2e2e28;border-radius:20px;padding:6px 12px;font-size:10px;color:#888;cursor:pointer;white-space:nowrap}
+.hint-chip:active{background:#2a2a22}
+
+.typing-indicator{display:flex;align-items:center;gap:4px;padding:10px 13px;background:#222220;border:1px solid #2e2e28;border-radius:14px;border-bottom-left-radius:4px;width:fit-content}
+.typing-dot{width:6px;height:6px;border-radius:50%;background:#555;animation:typing .8s infinite}
+.typing-dot:nth-child(2){animation-delay:.15s}
+.typing-dot:nth-child(3){animation-delay:.3s}
+@keyframes typing{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+
+.assist-welcome{text-align:center;padding:30px 20px;color:#444;font-size:12px;line-height:1.8}
+.assist-welcome-icon{font-size:36px;margin-bottom:12px}
+.assist-welcome-title{color:#888;font-size:14px;font-weight:700;margin-bottom:8px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <div class="header-title">単価<span>DB</span></div>
+    <div class="header-sub">業者別・工種別 単価データベース</div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('list')">一覧</div>
+    <div class="tab" onclick="switchTab('vendor')">業者</div>
+    <div class="tab" onclick="switchTab('assist')">🤖 AI見積</div>
+    <div class="tab" onclick="switchTab('json')">取込</div>
+    <div class="tab" onclick="switchTab('data')">データ</div>
+  </div>
+
+  <div id="tab-list">
+    <div class="search-wrap">
+      <input class="search-input" type="text" id="search-input" placeholder="品名・業者で検索" oninput="render()"/>
+      <select class="filter-select" id="filter-cat" onchange="render()"><option value="">全工種</option></select>
+    </div>
+    <div class="card-list" id="card-list"></div>
+  </div>
+
+  <div id="tab-vendor" style="display:none"><div class="card-list" id="vendor-list"></div></div>
+
+  <!-- 見積りアシスタント -->
+  <div id="tab-assist">
+    <div class="assist-body" id="assist-body">
+      <div class="assist-welcome">
+        <div class="assist-welcome-icon">🏗️</div>
+        <div class="assist-welcome-title">AI見積りアシスタント</div>
+        <div>単価DBのデータをもとに<br>見積りを一緒に作ります<br><br>工事内容を入力してください</div>
+      </div>
+    </div>
+    <div class="assist-hint" id="assist-hints">
+      <div class="hint-chip" onclick="sendHint('LDK床フローリング張り 25㎡の見積りを出して')">床工事25㎡</div>
+      <div class="hint-chip" onclick="sendHint('断熱材の単価を一覧で見せて')">断熱材一覧</div>
+      <div class="hint-chip" onclick="sendHint('木工事の材料費を教えて')">木工事材料</div>
+      <div class="hint-chip" onclick="sendHint('外壁工事の見積りを出して 外壁面積80㎡')">外壁工事80㎡</div>
+    </div>
+    <div class="assist-input-area">
+      <textarea class="assist-textarea" id="assist-input" placeholder="例: 断熱材の単価を教えて&#10;例: 床工事25㎡の見積りを出して" rows="1" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+      <button class="assist-send-btn" id="assist-send" onclick="sendMessage()">↑</button>
+    </div>
+  </div>
+
+  <div id="tab-json" style="display:none;padding:12px">
+    <div style="background:#1a2a1a;border-radius:8px;padding:10px;margin-bottom:10px;font-size:10px;color:#70c870;line-height:1.8">
+      <div style="font-weight:700;margin-bottom:4px">JSONフォーマット</div>
+      <div style="font-family:monospace;color:#888">{"vendor":"業者名","date":"2026-04-01","items":[<br>{"name":"品名","cat":"木工事（構造）","unit":"本","price":2854}<br>]}</div>
+    </div>
+    <textarea class="json-area" id="json-input" placeholder='{"vendor":"業者名","items":[]}'></textarea>
+    <div class="import-msg" id="import-msg"></div>
+    <button class="btn-confirm" style="width:100%;margin-top:8px" onclick="importJSON()">インポート</button>
+  </div>
+
+  <div id="tab-data" style="display:none">
+    <div class="data-btn-row">
+      <div style="color:#666;font-size:11px;padding:4px 0">登録: <span id="data-count" style="color:#c8962a;font-weight:700">0</span>件　業者: <span id="vendor-count" style="color:#70a8e8;font-weight:700">0</span>社</div>
+      <button class="data-btn green" onclick="saveToSheet()">☁️ Googleスプレッドシートに同期（書き込み）</button>
+      <button class="data-btn" style="background:#1a2a3a;color:#70e8d0;border:1px solid #2a4a48" onclick="loadFromSheetManual()">🔄 スプレッドシートから読み込む</button>
+      <button class="data-btn" style="background:#1a3a2a;color:#e8d5a3;border:1px solid #4a3a10" onclick="document.getElementById('cpuace-file').click()">📐 CPU Ace実行予算を取込む（既存データに追加）</button>
+      <input type="file" id="cpuace-file" accept=".xls,.xlsx" style="display:none" onchange="importCpuAce(event)">
+      <button class="data-btn blue" onclick="exportJSON()">💾 JSONバックアップをダウンロード</button>
+      <button class="data-btn blue" onclick="document.getElementById('merge-file').click()">📂 JSONを追加取込（既存データに追加）</button>
+      <input type="file" id="merge-file" accept=".json" style="display:none" onchange="mergeJSON(event)">
+      <button class="data-btn" style="background:#3a1a1a;color:#e87050;border:1px solid #5a2a2a" onclick="document.getElementById('restore-file').click()">⚠️ JSONで全件上書き（既存データが消えます）</button>
+      <input type="file" id="restore-file" accept=".json" style="display:none" onchange="restoreJSON(event)">
+      <button class="data-btn red" onclick="confirmReset()">データを初期化</button>
+    </div>
+  </div>
+
+  <button class="fab" id="fab" onclick="openAdd()">+</button>
+</div>
+<div id="toast" class="toast"></div>
+<div id="modal-wrap"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+
+const GAS_URL='https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
+const SK='otake_tanka_v1';
+const CATS=['仮設工事','基礎工事','木工事（構造）','木工事（手間）','木工事（造作）','断熱・気密工事','内装工事','外壁工事','屋根工事','板金・樋工事','タイル・左官工事','外周建具工事','室内建具工事','塗装工事','住宅設備機器','電気工事','給排水工事','空調・換気工事','太陽光発電','設計・申請費','諸経費','その他'];
+let items=[];
+let currentTab='list';
+let assistHistory=[];
+let assistLoading=false;
+
+function init(){
+  try{items=JSON.parse(localStorage.getItem(SK)||'[]');}catch(e){items=[];}
+  const sel=document.getElementById('filter-cat');
+  CATS.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
+  render();
+  loadFromSheet();
+}
+function save(){localStorage.setItem(SK,JSON.stringify(items));}
+
+function switchTab(tab){
+  currentTab=tab;
+  document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',['list','vendor','assist','json','data'][i]===tab);});
+  ['list','vendor','json','data'].forEach(t=>{document.getElementById('tab-'+t).style.display=t===tab?'':'none';});
+  const assistEl=document.getElementById('tab-assist');
+  assistEl.style.display=tab==='assist'?'flex':'none';
+  document.getElementById('fab').style.display=['list','vendor'].includes(tab)?'flex':'none';
+  if(tab==='vendor')renderVendors();
+  if(tab==='data')renderDataStat();
+  if(tab!=='assist'&&tab!=='vendor')render();
+}
+
+function render(){
+  const q=(document.getElementById('search-input').value||'').toLowerCase();
+  const cat=document.getElementById('filter-cat').value;
+  let f=items.filter(i=>{
+    const mq=!q||[i.name,i.vendor,i.spec,i.code].join(' ').toLowerCase().includes(q);
+    const mc=!cat||i.cat===cat;
+    return mq&&mc;
+  });
+  f.sort((a,b)=>a.cat.localeCompare(b.cat,'ja')||a.name.localeCompare(b.name,'ja'));
+  const list=document.getElementById('card-list');
+  if(!f.length){list.innerHTML='<div class="empty-msg">該当データなし</div>';return;}
+  list.innerHTML=f.map(item=>`
+    <div class="tanka-card" onclick="openDetail('${item.id}')">
+      <div class="card-top">
+        <div class="card-name">${esc(item.name)}</div>
+        <div><span class="card-price">${fmtN(item.price)}円</span><span class="card-unit">/${esc(item.unit||'式')}</span></div>
+      </div>
+      <div class="card-meta">
+        <span class="badge badge-cat">${esc(item.cat)}</span>
+        <span class="badge badge-vendor">${esc(item.vendor)}</span>
+        <span class="badge-date">${item.updatedAt?item.updatedAt.slice(0,10):''}</span>
+      </div>
+      ${item.spec?`<div class="card-spec">${esc(item.spec)}</div>`:''}
+    </div>`).join('');
+}
+
+function renderVendors(){
+  const vs={};
+  items.forEach(i=>{if(!vs[i.vendor])vs[i.vendor]={count:0,cats:new Set()};vs[i.vendor].count++;vs[i.vendor].cats.add(i.cat);});
+  const list=document.getElementById('vendor-list');
+  if(!Object.keys(vs).length){list.innerHTML='<div class="empty-msg">業者データなし</div>';return;}
+  list.innerHTML=Object.entries(vs).sort((a,b)=>a[0].localeCompare(b[0],'ja')).map(([name,info])=>`
+    <div class="tanka-card" onclick="filterByVendor('${esc(name)}')">
+      <div class="card-top"><div class="card-name">${esc(name)}</div><div style="color:#70a8e8;font-size:13px;font-weight:700">${info.count}品目</div></div>
+      <div class="card-meta">${[...info.cats].map(c=>`<span class="badge badge-cat">${esc(c)}</span>`).join('')}</div>
+    </div>`).join('');
+}
+
+function renderDataStat(){
+  document.getElementById('data-count').textContent=items.length;
+  document.getElementById('vendor-count').textContent=new Set(items.map(i=>i.vendor)).size;
+}
+
+function filterByVendor(name){switchTab('list');document.getElementById('search-input').value=name;render();}
+
+// ===== 見積りアシスタント =====
+
+function autoResize(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,120)+'px';
+}
+
+function handleKey(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+}
+
+function sendHint(text){
+  document.getElementById('assist-input').value=text;
+  sendMessage();
+}
+
+function buildDBContext(){
+  if(!items.length)return 'まだ単価データが登録されていません。';
+  const byVendor={};
+  items.forEach(i=>{
+    if(!byVendor[i.cat])byVendor[i.cat]=[];
+    byVendor[i.cat].push(`・${i.name}（${i.vendor}）: ${Math.round(i.price).toLocaleString()}円/${i.unit||'式'}${i.spec?' ['+i.spec+']':''}`);
+  });
+  let ctx='【大竹工務店 単価データベース（'+items.length+'件）】\n';
+  Object.entries(byVendor).forEach(([cat,list])=>{
+    ctx+=`\n▼${cat}\n${list.join('\n')}\n`;
+  });
+  return ctx;
+}
+
+async function sendMessage(){
+  const input=document.getElementById('assist-input');
+  const text=input.value.trim();
+  if(!text||assistLoading)return;
+
+  input.value='';
+  autoResize(input);
+  document.getElementById('assist-hints').style.display='none';
+
+  addMsg('user',text);
+  assistHistory.push({role:'user',content:text});
+
+  assistLoading=true;
+  document.getElementById('assist-send').disabled=true;
+  const typingId=addTyping();
+
+  const dbContext=buildDBContext();
+
+  const systemPrompt=`あなたは大竹工務店（茨城県・木造住宅専門の一人親方工務店）の見積りアシスタントです。
+代表大工の大竹俊光さんをサポートします。
+
+以下の単価データベースを参照して、見積りの作成・単価の確認・工事の相談に答えてください。
+
+${dbContext}
+
+回答のルール:
+- 単価DBにある品目は必ず金額を明示する
+- 数量がわかる場合は合計金額も計算する
+- DBにない品目は「DBに未登録」と明示し、概算目安を参考値として提示する
+- 税抜き金額をベースに、必要に応じて税込（10%）も計算する
+- 簡潔でわかりやすく、実務的な内容にする
+- 日本語で回答する`;
+
+  try{
+    const messages=assistHistory.map(m=>({role:m.role,content:m.content}));
+
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        system:systemPrompt,
+        messages
+      })
+    });
+
+    const data=await res.json();
+    const reply=data.content?.map(b=>b.text||'').join('')||'エラーが発生しました。';
+
+    removeTyping(typingId);
+    addMsg('ai',reply);
+    assistHistory.push({role:'assistant',content:reply});
+
+    if(assistHistory.length>20){
+      assistHistory=assistHistory.slice(-20);
+    }
+
+  }catch(e){
+    removeTyping(typingId);
+    addMsg('ai','⚠️ 通信エラーが発生しました。\n'+e.message);
+  }finally{
+    assistLoading=false;
+    document.getElementById('assist-send').disabled=false;
+  }
+}
+
+function addMsg(role,text){
+  const body=document.getElementById('assist-body');
+  const div=document.createElement('div');
+  div.className='msg msg-'+role;
+  const label=role==='user'?'あなた':'AI';
+  div.innerHTML=`<div class="msg-label">${label}</div><div class="msg-bubble">${esc(text)}</div>`;
+  body.appendChild(div);
+  body.scrollTop=body.scrollHeight;
+  return div;
+}
+
+function addTyping(){
+  const body=document.getElementById('assist-body');
+  const id='typing-'+Date.now();
+  const div=document.createElement('div');
+  div.className='msg msg-ai';
+  div.id=id;
+  div.innerHTML=`<div class="msg-label">AI</div><div class="typing-indicator"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>`;
+  body.appendChild(div);
+  body.scrollTop=body.scrollHeight;
+  return id;
+}
+
+function removeTyping(id){
+  const el=document.getElementById(id);
+  if(el)el.remove();
+}
+
+// ===== 以下元のコードと同じ =====
+
+function openAdd(p){
+  p=p||{};
+  showModal(`<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-title">単価を登録</div>
+    <label class="form-label">工種</label>
+    <select class="form-select" id="add-cat">${CATS.map(c=>`<option value="${c}"${p.cat===c?' selected':''}>${c}</option>`).join('')}</select>
+    <label class="form-label">品名・工事名 *</label>
+    <input class="form-input" id="add-name" type="text" value="${esc(p.name||'')}" placeholder="例: 杉KD特1 120x120x3000"/>
+    <label class="form-label">仕様・摘要</label>
+    <input class="form-input" id="add-spec" type="text" value="${esc(p.spec||'')}" placeholder="例: 構造柱"/>
+    <label class="form-label">品番・型番</label>
+    <input class="form-input" id="add-code" type="text" value="${esc(p.code||'')}" placeholder="例: KPA-6110E0"/>
+    <label class="form-label">業者名 *</label>
+    <input class="form-input" id="add-vendor" type="text" value="${esc(p.vendor||'')}" placeholder="例: ハイピック株式会社"/>
+    <div class="form-row">
+      <div><label class="form-label">単価（税抜） *</label><input class="form-input" id="add-price" type="number" value="${p.price||''}" placeholder="0"/></div>
+      <div><label class="form-label">単位</label><input class="form-input" id="add-unit" type="text" value="${esc(p.unit||'')}" placeholder="本・枚・m2"/></div>
+    </div>
+    <label class="form-label">更新日</label>
+    <input class="form-input" id="add-date" type="date" value="${p.updatedAt?p.updatedAt.slice(0,10):new Date().toISOString().slice(0,10)}"/>
+    <label class="form-label">メモ</label>
+    <input class="form-input" id="add-memo" type="text" value="${esc(p.memo||'')}" placeholder="値上がり情報など"/>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="btn-confirm" id="add-btn" onclick="doAdd()">登録</button>
+    </div>
+  </div>`);
+}
+
+function doAdd(){
+  const name=document.getElementById('add-name').value.trim();
+  const vendor=document.getElementById('add-vendor').value.trim();
+  const price=parseFloat(document.getElementById('add-price').value);
+  if(!name)return alert('品名を入力してください');
+  if(!vendor)return alert('業者名を入力してください');
+  if(isNaN(price))return alert('単価を入力してください');
+  items.push({id:'tk-'+Date.now()+'-'+Math.floor(Math.random()*10000),
+    cat:document.getElementById('add-cat').value,name,vendor,price,
+    spec:document.getElementById('add-spec').value.trim(),
+    code:document.getElementById('add-code').value.trim(),
+    unit:document.getElementById('add-unit').value.trim()||'式',
+    memo:document.getElementById('add-memo').value.trim(),
+    updatedAt:document.getElementById('add-date').value||new Date().toISOString().slice(0,10)
+  });
+  save();closeModal();render();toast('登録しました');
+}
+
+function openDetail(id){
+  const item=items.find(i=>i.id===id);if(!item)return;
+  showModal(`<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-title">${esc(item.name)}</div>
+    <div style="display:grid;gap:8px;font-size:12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between"><span style="color:#666">単価</span><span style="color:#c8962a;font-size:18px;font-weight:700">${fmtN(item.price)}円<span style="font-size:11px;color:#666">/${esc(item.unit)}</span></span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#666">工種</span><span style="color:#70c870">${esc(item.cat)}</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#666">業者</span><span style="color:#70a8e8">${esc(item.vendor)}</span></div>
+      ${item.spec?`<div style="display:flex;justify-content:space-between"><span style="color:#666">仕様</span><span>${esc(item.spec)}</span></div>`:''}
+      ${item.code?`<div style="display:flex;justify-content:space-between"><span style="color:#666">品番</span><span style="font-family:monospace">${esc(item.code)}</span></div>`:''}
+      ${item.memo?`<div style="display:flex;justify-content:space-between"><span style="color:#666">メモ</span><span>${esc(item.memo)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between"><span style="color:#666">更新日</span><span>${item.updatedAt?item.updatedAt.slice(0,10):'—'}</span></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal()">閉じる</button>
+      <button class="btn-confirm" onclick="closeModal();openEdit('${id}')">編集</button>
+    </div>
+    <button class="btn-danger" onclick="doDelete('${id}')">削除</button>
+  </div>`);
+}
+
+function openEdit(id){
+  const item=items.find(i=>i.id===id);if(!item)return;
+  openAdd({...item});
+  setTimeout(()=>{const btn=document.getElementById('add-btn');if(btn)btn.onclick=()=>doEdit(id);},50);
+}
+
+function doEdit(id){
+  const idx=items.findIndex(i=>i.id===id);if(idx<0)return;
+  const name=document.getElementById('add-name').value.trim();
+  const vendor=document.getElementById('add-vendor').value.trim();
+  const price=parseFloat(document.getElementById('add-price').value);
+  if(!name||!vendor||isNaN(price))return alert('品名・業者・単価を入力してください');
+  items[idx]={...items[idx],cat:document.getElementById('add-cat').value,name,vendor,price,
+    spec:document.getElementById('add-spec').value.trim(),
+    code:document.getElementById('add-code').value.trim(),
+    unit:document.getElementById('add-unit').value.trim()||'式',
+    memo:document.getElementById('add-memo').value.trim(),
+    updatedAt:document.getElementById('add-date').value};
+  save();closeModal();render();toast('更新しました');
+}
+
+function doDelete(id){
+  if(!confirm('削除しますか？'))return;
+  items=items.filter(i=>i.id!==id);
+  save();closeModal();render();toast('削除しました');
+}
+
+function importJSON(){
+  const raw=document.getElementById('json-input').value.trim();
+  const msg=document.getElementById('import-msg');
+  try{
+    const d=JSON.parse(raw);
+    const vendor=d.vendor||'不明';
+    const date=d.date||new Date().toISOString().slice(0,10);
+    let count=0;
+    (d.items||[]).forEach((p,i)=>{
+      if(!p.name)return;
+      const ex=items.find(x=>x.name===p.name&&x.vendor===vendor);
+      if(ex){ex.price=p.price||ex.price;ex.spec=p.spec||ex.spec;ex.unit=p.unit||ex.unit;ex.updatedAt=date;}
+      else{items.push({id:'tk-'+Date.now()+'-'+i,cat:p.cat||'その他',name:p.name,vendor,price:p.price||0,spec:p.spec||'',code:p.code||'',unit:p.unit||'式',memo:p.memo||'',updatedAt:date});}
+      count++;
+    });
+    save();render();
+    msg.style.color='#70c870';msg.textContent=count+'件をインポート（業者: '+vendor+'）';
+    document.getElementById('json-input').value='';
+    toast('インポート完了');
+  }catch(e){msg.style.color='#e87050';msg.textContent='JSONの形式が正しくありません';}
+}
+
+function exportJSON(){
+  const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),items},null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='大竹工務店_単価DB_'+new Date().toISOString().slice(0,10)+'.json';a.click();
+  toast('バックアップ保存しました');
+}
+
+async function importCpuAce(event){
+  const file=event.target.files[0];if(!file)return;
+  document.getElementById('cpuace-file').value='';
+  toast('📐 CPU Ace読み込み中...');
+  try{
+    const arrayBuffer=await file.arrayBuffer();
+    const wb=XLSX.read(arrayBuffer,{type:'array'});
+    const sheetName=wb.SheetNames.find(n=>n==='明細')||wb.SheetNames[1];
+    if(!sheetName){toast('❌ 明細シートが見つかりません');return;}
+    const ws=wb.Sheets[sheetName];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    let currentCat='';
+    const extracted=[];
+    const now=new Date().toISOString();
+    const source=file.name.replace(/\.xlsx?$/,'');
+    for(let i=0;i<rows.length;i++){
+      const row=rows[i];
+      const col1=String(row[1]||'').trim();
+      const col2=String(row[2]||'').trim();
+      const col3=row[3];
+      const col4=String(row[4]||'').trim();
+      const col5=row[5];
+      if(col1.includes('■')||col1.includes('<<')){
+        if(!col1.includes('小 計')&&!col1.includes('合 計')){currentCat=col1.replace(/[■<<>>]/g,'').replace('小計','').trim();}
+        continue;
+      }
+      if(col1&&col1!=='名称'&&col3&&col5&&currentCat){
+        const qty=parseFloat(String(col3).replace(',',''));
+        const price=parseFloat(String(col5).replace(',',''));
+        if(!isNaN(qty)&&!isNaN(price)&&price>0&&qty>0){
+          extracted.push({id:'tk-ace-'+Date.now()+'-'+extracted.length,cat:currentCat,name:col1,spec:col2||'',code:'',vendor:source+'実績単価',price:Math.round(price),unit:col4||'式',updatedAt:now,memo:source+'実績 数量'+qty+(col4||'')});
+        }
+      }
+    }
+    if(extracted.length===0){toast('❌ 取込データが見つかりませんでした');return;}
+    let added=0,updated=0;
+    extracted.forEach(newItem=>{
+      const idx=items.findIndex(x=>x.cat===newItem.cat&&x.name===newItem.name&&x.spec===newItem.spec);
+      if(idx>=0){items[idx]={...items[idx],...newItem,id:items[idx].id};updated++;}
+      else{items.push(newItem);added++;}
+    });
+    save();render();
+    const catCounts={};
+    extracted.forEach(i=>{catCounts[i.cat]=(catCounts[i.cat]||0)+1;});
+    toast(`✅ CPU Ace取込完了 ${added}件追加・${updated}件更新`);
+    alert(`✅ CPU Ace取込完了\n\n追加: ${added}件\n更新: ${updated}件\n合計: ${extracted.length}件`);
+  }catch(e){toast('❌ エラー: '+e.message);console.error(e);}
+}
+
+function mergeJSON(e){
+  const file=e.target.files[0];if(!file)return;
+  document.getElementById('merge-file').value='';
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const d=JSON.parse(ev.target.result);
+      const newItems=d.items||d;
+      if(!Array.isArray(newItems)){alert('形式が正しくありません');return;}
+      let added=0,updated=0;
+      newItems.forEach(newItem=>{
+        const idx=items.findIndex(x=>x.id===newItem.id||(x.cat===newItem.cat&&x.name===newItem.name&&x.spec===newItem.spec));
+        if(idx>=0){items[idx]={...items[idx],...newItem,id:items[idx].id};updated++;}
+        else{items.push(newItem);added++;}
+      });
+      save();render();
+      alert(`✅ 追加取込完了\n追加: ${added}件\n更新: ${updated}件\n合計登録数: ${items.length}件`);
+    }catch(err){alert('JSONの形式が正しくありません');}
+  };
+  reader.readAsText(file);
+}
+
+function restoreJSON(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);items=d.items||d;save();render();toast('復元しました');}catch(err){alert('JSONの形式が正しくありません');}};
+  reader.readAsText(file);
+}
+
+function confirmReset(){if(!confirm('全データを削除しますか？'))return;items=[];save();render();toast('初期化しました');}
+
+async function saveToSheet(){
+  try{
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'tanka',items})});
+    toast('スプレッドシートに同期しました');
+  }catch(e){alert('同期エラー: '+e.message);}
+}
+
+async function loadFromSheetManual(){
+  const btn=document.querySelector('[onclick="loadFromSheetManual()"]');
+  if(btn){btn.textContent='🔄 読み込み中...';btn.disabled=true;}
+  try{
+    const res=await fetch(GAS_URL+'?type=tanka',{mode:'cors'});
+    const data=await res.json();
+    if(data.status==='ok'&&data.items){items=data.items;save();render();toast('✅ 読み込み完了 '+items.length+'件');}
+    else{toast('❌ 読み込み失敗');}
+  }catch(e){toast('❌ エラー: '+e.message);}
+  finally{if(btn){btn.textContent='🔄 スプレッドシートから読み込む';btn.disabled=false;}}
+}
+
+async function loadFromSheet(){
+  try{
+    const res=await fetch(GAS_URL+'?type=tanka',{mode:'cors'});
+    const data=await res.json();
+    if(data.status==='ok'&&data.items&&data.items.length>items.length){items=data.items;save();render();}
+  }catch(e){console.log('読込エラー（オフライン時は正常）');}
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtN(n){return Math.round(n||0).toLocaleString();}
+function showModal(html){document.getElementById('modal-wrap').innerHTML=`<div class="overlay" onclick="closeModal()">${html}</div>`;}
+function closeModal(){document.getElementById('modal-wrap').innerHTML='';}
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2500);}
+
+init();
+</script>
+</body>
+</html>
