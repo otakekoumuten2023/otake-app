@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大竹工務店 — 原価・粗利管理</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg:       #0a0c10;
+  --s1:       #111318;
+  --s2:       #181c24;
+  --s3:       #1e2330;
+  --border:   #252c3d;
+  --border2:  #1a2030;
+  --sell:     #34d399;   /* 売上：緑 */
+  --buy:      #60a5fa;   /* 仕入：青 */
+  --profit:   #fbbf24;   /* 粗利：黄 */
+  --danger:   #f87171;
+  --text:     #e2e8f0;
+  --text2:    #8896b3;
+  --text3:    #4a5568;
+  --mono:     'IBM Plex Mono', monospace;
+  --sans:     'Noto Sans JP', sans-serif;
+  --r:        10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14px}
+
+/* ─── HEADER ─── */
+header{
+  height:52px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;background:var(--s1);border-bottom:1px solid var(--border2);
+  position:sticky;top:0;z-index:200;
+}
+.logo{font-weight:900;font-size:14px;letter-spacing:.06em;display:flex;align-items:center;gap:8px}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--sell)}
+.hdr-pills{display:flex;gap:16px}
+.pill{font-family:var(--mono);font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px}
+.pill b{font-size:13px}
+.pill.s b{color:var(--sell)}
+.pill.b b{color:var(--buy)}
+.pill.p b{color:var(--profit)}
+
+/* ─── LAYOUT ─── */
+.wrap{display:flex;height:calc(100vh - 52px)}
+
+/* ─── SIDEBAR ─── */
+aside{
+  width:220px;min-width:220px;background:var(--s1);
+  border-right:1px solid var(--border2);padding:12px 10px;
+  display:flex;flex-direction:column;gap:2px;
+}
+.nav{
+  display:flex;align-items:center;gap:9px;padding:9px 12px;
+  border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;
+  transition:.15s all;
+}
+.nav:hover{background:var(--s2);color:var(--text)}
+.nav.on{background:rgba(52,211,153,.1);color:var(--sell)}
+.nav svg{flex-shrink:0;opacity:.8}
+.nav-sep{height:1px;background:var(--border2);margin:8px 0}
+
+/* ─── MAIN ─── */
+main{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px}
+.page{display:none;flex-direction:column;gap:18px}
+.page.on{display:flex}
+.ph{font-size:18px;font-weight:700}
+.ps{color:var(--text2);font-size:12px;margin-top:3px}
+
+/* ─── UPLOAD ─── */
+.drop{
+  border:2px dashed var(--border);border-radius:14px;padding:40px;
+  text-align:center;cursor:pointer;background:var(--s1);transition:.2s all;
+}
+.drop:hover,.drop.drag{border-color:var(--sell);background:rgba(52,211,153,.04)}
+.drop-icon{font-size:36px;margin-bottom:12px}
+.drop-t{font-size:15px;font-weight:700;margin-bottom:6px}
+.drop-s{font-size:12px;color:var(--text2)}
+.drop-s em{color:var(--sell);font-style:normal}
+#fi{display:none}
+
+/* ─── AI PANEL ─── */
+.aipanel{background:var(--s1);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:none}
+.aipanel-hdr{
+  padding:14px 18px;border-bottom:1px solid var(--border2);
+  display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;
+}
+.ai-chip{
+  font-size:10px;font-weight:800;letter-spacing:.1em;
+  background:rgba(52,211,153,.15);color:var(--sell);padding:2px 8px;border-radius:20px;
+}
+/* type badge */
+.type-sell{background:rgba(52,211,153,.15);color:var(--sell)}
+.type-buy{background:rgba(96,165,250,.15);color:var(--buy)}
+.type-unknown{background:rgba(74,85,104,.2);color:var(--text2)}
+
+.aipanel-body{padding:18px}
+.ai-msg{font-size:13px;color:var(--text2);display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.spin{width:15px;height:15px;border:2px solid var(--border);border-top-color:var(--sell);border-radius:50%;animation:spin .6s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ─── FORM ─── */
+.xform{display:none;flex-direction:column;gap:14px}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.frow.tri{grid-template-columns:1fr 1fr 1fr}
+.frow.full{grid-template-columns:1fr}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fg label{font-size:11px;color:var(--text2);font-weight:600;letter-spacing:.04em}
+input,select,textarea{
+  background:var(--s2);border:1px solid var(--border);border-radius:7px;
+  padding:8px 11px;color:var(--text);font-family:var(--sans);font-size:13px;
+  outline:none;width:100%;transition:.15s border-color;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--sell)}
+textarea{resize:vertical;min-height:60px}
+input[readonly]{color:var(--profit);cursor:default}
+
+/* ─── DOC TYPE TOGGLE ─── */
+.dtype-row{display:flex;gap:8px;align-items:center}
+.dtype-btn{
+  padding:7px 16px;border-radius:7px;border:1px solid var(--border);
+  background:var(--s2);color:var(--text2);cursor:pointer;font-size:12px;font-weight:700;
+  transition:.15s all;font-family:var(--sans);
+}
+.dtype-btn.sell.on{border-color:var(--sell);background:rgba(52,211,153,.12);color:var(--sell)}
+.dtype-btn.buy.on{border-color:var(--buy);background:rgba(96,165,250,.12);color:var(--buy)}
+.dtype-label{font-size:11px;color:var(--text3)}
+
+/* ─── CASE LINK ─── */
+.case-link-row{display:flex;gap:8px;align-items:flex-end}
+.case-link-row select{flex:1}
+.case-link-row .btn{white-space:nowrap}
+
+/* ─── MATERIALS ─── */
+.mat-head{font-size:12px;color:var(--text2);font-weight:700;margin-bottom:8px}
+.mat-tbl{width:100%;border-collapse:collapse}
+.mat-tbl th{
+  background:var(--s2);color:var(--text3);font-size:10px;font-weight:700;
+  letter-spacing:.05em;padding:7px 9px;text-align:left;border-bottom:1px solid var(--border)
+}
+.mat-tbl td{padding:7px 9px;border-bottom:1px solid var(--border2);font-size:12px}
+.mat-tbl td input{padding:4px 7px;font-size:12px;border-radius:5px}
+.add-row{
+  margin-top:7px;padding:5px 12px;border-radius:6px;
+  border:1px dashed var(--border);background:none;color:var(--text3);
+  cursor:pointer;font-size:12px;transition:.15s all;font-family:var(--sans);
+}
+.add-row:hover{border-color:var(--sell);color:var(--sell)}
+
+/* ─── BUTTONS ─── */
+.brow{display:flex;gap:8px;margin-top:6px}
+.btn{
+  padding:9px 18px;border-radius:7px;border:none;cursor:pointer;
+  font-family:var(--sans);font-size:13px;font-weight:700;transition:.15s all;
+  display:flex;align-items:center;gap:5px;
+}
+.btn-g{background:var(--sell);color:#0a0c10}
+.btn-g:hover{background:#10b981}
+.btn-b{background:var(--buy);color:#0a0c10}
+.btn-b:hover{background:#3b82f6}
+.btn-q{background:var(--s2);color:var(--text);border:1px solid var(--border)}
+.btn-q:hover{border-color:var(--sell);color:var(--sell)}
+.btn-d{background:rgba(248,113,113,.12);color:var(--danger);border:1px solid rgba(248,113,113,.25)}
+.btn-d:hover{background:rgba(248,113,113,.22)}
+.btn-sm{padding:5px 12px;font-size:12px}
+
+/* ─── CARD / TABLE ─── */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.card-t{padding:14px 18px;border-bottom:1px solid var(--border2);font-size:12px;font-weight:700;color:var(--text2);letter-spacing:.05em}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{
+  background:var(--s2);color:var(--text3);font-size:10px;font-weight:700;
+  letter-spacing:.05em;padding:9px 14px;text-align:left;white-space:nowrap;
+  border-bottom:1px solid var(--border)
+}
+.tbl td{padding:10px 14px;border-bottom:1px solid var(--border2);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:rgba(255,255,255,.015)}
+.num{font-family:var(--mono);font-size:12px}
+.tag{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;letter-spacing:.03em}
+.tag-s{background:rgba(52,211,153,.15);color:var(--sell)}
+.tag-b{background:rgba(96,165,250,.15);color:var(--buy)}
+.tag-e{background:rgba(251,191,36,.15);color:var(--profit)}
+.del{
+  padding:3px 9px;border-radius:5px;border:none;
+  background:rgba(248,113,113,.1);color:var(--danger);cursor:pointer;
+  font-size:11px;font-weight:700;transition:.15s all;font-family:var(--sans);
+}
+.del:hover{background:rgba(248,113,113,.22)}
+
+/* ─── KPI STRIP ─── */
+.kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.kpi{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.kpi-l{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.06em;margin-bottom:7px}
+.kpi-v{font-family:var(--mono);font-size:20px;font-weight:500}
+.kpi-sub{font-size:10px;color:var(--text3);margin-top:3px}
+.kv-s{color:var(--sell)}
+.kv-b{color:var(--buy)}
+.kv-p{color:var(--profit)}
+.kv-d{color:var(--danger)}
+
+/* ─── CASE CARD (profit view) ─── */
+.case-cards{display:flex;flex-direction:column;gap:10px}
+.ccard{
+  background:var(--s1);border:1px solid var(--border);border-radius:12px;
+  padding:16px 18px;display:flex;flex-direction:column;gap:10px;
+}
+.ccard-top{display:flex;align-items:flex-start;justify-content:space-between}
+.ccard-name{font-weight:700;font-size:14px}
+.ccard-type{font-size:11px;color:var(--text2);margin-top:2px}
+.ccard-profit{text-align:right}
+.ccard-pval{font-family:var(--mono);font-size:18px;font-weight:500}
+.ccard-prate{font-size:11px;color:var(--text2);margin-top:2px}
+.ccard-bars{display:flex;flex-direction:column;gap:5px}
+.cbar-row{display:flex;align-items:center;gap:8px}
+.cbar-lbl{font-size:11px;color:var(--text2);width:36px;text-align:right;flex-shrink:0}
+.cbar-track{flex:1;height:6px;background:var(--s2);border-radius:3px;overflow:hidden}
+.cbar-fill{height:100%;border-radius:3px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.cbar-val{font-family:var(--mono);font-size:11px;color:var(--text2);width:80px;text-align:right;flex-shrink:0}
+.ccard-docs{display:flex;gap:6px;flex-wrap:wrap}
+.doc-chip{
+  font-size:11px;padding:3px 10px;border-radius:5px;cursor:pointer;
+  background:var(--s2);color:var(--text2);border:1px solid var(--border);
+  transition:.15s all;
+}
+.doc-chip:hover{border-color:var(--sell);color:var(--sell)}
+
+/* ─── VENDOR BARS ─── */
+.vbar-section{display:flex;flex-direction:column;gap:8px}
+.vbar{display:flex;align-items:center;gap:10px}
+.vbar-name{font-size:12px;color:var(--text2);width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.vbar-track{flex:1;height:8px;background:var(--s2);border-radius:4px;overflow:hidden}
+.vbar-fill{height:100%;border-radius:4px;background:var(--buy)}
+.vbar-val{font-family:var(--mono);font-size:11px;color:var(--text2);width:90px;text-align:right;flex-shrink:0}
+
+/* ─── CHARTS GRID ─── */
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cbox{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px}
+.cbox-t{font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.05em;margin-bottom:14px}
+
+/* ─── EMPTY ─── */
+.empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}
+.empty span{display:block;font-size:28px;margin-bottom:8px}
+
+/* ─── TOAST ─── */
+.toast{
+  position:fixed;bottom:20px;right:20px;
+  background:var(--s2);border:1px solid var(--border);border-radius:9px;
+  padding:11px 16px;font-size:13px;font-weight:600;
+  box-shadow:0 8px 32px rgba(0,0,0,.5);
+  transform:translateY(60px);opacity:0;transition:.25s all cubic-bezier(.4,0,.2,1);
+  z-index:999;
+}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.ok{border-color:var(--sell)}
+.toast.err{border-color:var(--danger)}
+
+/* ─── MODAL ─── */
+.modal-bg{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;
+  align-items:center;justify-content:center;
+}
+.modal-bg.show{display:flex}
+.modal{
+  background:var(--s1);border:1px solid var(--border);border-radius:14px;
+  padding:24px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto;
+}
+.modal h3{font-size:15px;margin-bottom:16px}
+.modal-close{float:right;background:none;border:none;color:var(--text2);cursor:pointer;font-size:18px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div>大竹工務店 原価・粗利管理</div>
+  <div class="hdr-pills">
+    <div class="pill s">売上合計 <b id="h-sell">¥0</b></div>
+    <div class="pill b">仕入合計 <b id="h-buy">¥0</b></div>
+    <div class="pill p">粗利合計 <b id="h-profit">¥0</b></div>
+  </div>
+</header>
+
+<div class="wrap">
+<aside>
+  <div class="nav on" data-p="import">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>書類取込
+  </div>
+  <div class="nav" data-p="cases">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>案件管理
+  </div>
+  <div class="nav" data-p="profit">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>粗利分析
+  </div>
+  <div class="nav" data-p="vendors">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>業者分析
+  </div>
+  <div class="nav" data-p="sync">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>アプリ連携
+  </div>
+  <div class="nav" data-p="analyze">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>内訳分析
+  </div>
+  <div class="nav" data-p="data">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+    データ管理
+  </div>
+  <div class="nav" data-p="docs">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>書類一覧
+  </div>
+</aside>
+
+<main>
+
+<!-- ① 書類取込 -->
+<div class="page on" id="p-import">
+  <div><div class="ph">書類取込</div><div class="ps">見積書・請求書をアップロード → AIが自動で種別判定・データ抽出します</div></div>
+
+  <div class="drop" id="drop" onclick="document.getElementById('fi').click()">
+    <div class="drop-icon">📄</div>
+    <div class="drop-t">ファイルをドロップ、またはクリックして選択</div>
+    <div class="drop-s">PDF・PNG・JPG 対応　<em>自社発行／業者受取を自動判定</em></div>
+    <input type="file" id="fi" accept=".pdf,.png,.jpg,.jpeg" multiple>
+  </div>
+
+  <div class="aipanel" id="aipanel">
+    <div class="aipanel-hdr">
+      <div class="spin" id="spin"></div>
+      <span id="aptitle">AI 読み取り結果</span>
+      <span class="ai-chip">AI</span>
+      <span id="dtype-badge" class="tag" style="margin-left:4px"></span>
+    </div>
+    <div class="aipanel-body">
+      <div class="ai-msg" id="aimsg">解析中...</div>
+      <div class="xform" id="xform">
+
+        <!-- 書類種別 -->
+        <div class="fg">
+          <label>書類種別（AIが自動判定・変更可）</label>
+          <div class="dtype-row">
+            <button class="dtype-btn sell" id="dt-sell" onclick="setDtype('sell')">📤 自社発行（売上）</button>
+            <button class="dtype-btn buy"  id="dt-buy"  onclick="setDtype('buy')">📥 業者受取（仕入）</button>
+            <span class="dtype-label" id="dt-reason"></span>
+          </div>
+        </div>
+
+        <div class="frow">
+          <div class="fg">
+            <label>書類名・案件名</label>
+            <input id="f-name" placeholder="例：○○邸 外壁工事">
+          </div>
+          <div class="fg">
+            <label>発行元 / 宛先</label>
+            <input id="f-party" placeholder="例：山田建材（仕入）/ 鈴木様（売上）">
+          </div>
+        </div>
+
+        <div class="frow tri">
+          <div class="fg">
+            <label>書類種類</label>
+            <select id="f-doctype">
+              <option value="見積書">見積書</option>
+              <option value="請求書">請求書</option>
+              <option value="発注書">発注書</option>
+              <option value="納品書">納品書</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>工事種別</label>
+            <select id="f-wtype">
+              <option value="">選択</option>
+              <option>新築工事</option><option>リフォーム工事</option>
+              <option>外壁工事</option><option>屋根工事</option>
+              <option>基礎工事</option><option>大工工事</option>
+              <option>内装工事</option><option>設備工事</option>
+              <option>解体工事</option><option>材料のみ</option>
+              <option>その他</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>金額（税抜）</label>
+            <input type="number" id="f-amount" placeholder="0">
+          </div>
+        </div>
+
+        <div class="frow">
+          <div class="fg">
+            <label>書類日付</label>
+            <input type="date" id="f-date">
+          </div>
+          <div class="fg">
+            <label>人工数（売上書類のみ）</label>
+            <input type="number" id="f-mandays" placeholder="0" step="0.5">
+          </div>
+        </div>
+
+        <!-- 案件紐付け -->
+        <div class="fg">
+          <label>案件に紐付ける</label>
+          <div class="case-link-row">
+            <select id="f-case">
+              <option value="">── 新規案件として登録 ──</option>
+            </select>
+            <button class="btn btn-q btn-sm" onclick="refreshCaseSelect()">↻</button>
+          </div>
+        </div>
+
+        <!-- 材料内訳 -->
+        <div>
+          <div class="mat-head">材料・内訳明細</div>
+          <table class="mat-tbl"><thead>
+            <tr><th>品名・材料</th><th>数量</th><th>単位</th><th>単価（税抜）</th><th>金額</th><th></th></tr>
+          </thead><tbody id="matrows"></tbody></table>
+          <button class="add-row" onclick="addMat()">＋ 行追加</button>
+        </div>
+
+        <div class="fg">
+          <label>備考</label>
+          <textarea id="f-memo" placeholder="特記事項など"></textarea>
+        </div>
+
+        <div class="brow">
+          <button class="btn btn-g" id="savebtn" onclick="saveDoc()">✓ 保存</button>
+          <button class="btn btn-q" onclick="clearForm()">クリア</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ② 案件管理 -->
+<div class="page" id="p-cases">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div><div class="ph">案件管理</div><div class="ps">案件ごとの売上・仕入・粗利</div></div>
+    <button class="btn btn-q" onclick="openNewCaseModal()">＋ 案件を手動追加</button>
+  </div>
+  <div class="card" style="padding:0">
+    <table class="tbl" id="case-tbl">
+      <thead><tr>
+        <th>案件名</th><th>種別</th><th>売上</th><th>仕入</th>
+        <th>粗利</th><th>粗利率</th><th>書類数</th><th></th>
+      </tr></thead>
+      <tbody id="case-body"></tbody>
+    </table>
+    <div class="empty" id="case-empty"><span>📂</span>案件がありません</div>
+  </div>
+</div>
+
+<!-- ③ 粗利分析 -->
+<div class="page" id="p-profit">
+  <div><div class="ph">粗利分析</div><div class="ps">案件別・工事種別の収益性</div></div>
+  <div class="kpi-strip">
+    <div class="kpi"><div class="kpi-l">総案件数</div><div class="kpi-v kv-s" id="k-cases">0</div></div>
+    <div class="kpi"><div class="kpi-l">売上合計</div><div class="kpi-v kv-s" id="k-sell">¥0</div></div>
+    <div class="kpi"><div class="kpi-l">仕入合計</div><div class="kpi-v kv-b" id="k-buy">¥0</div></div>
+    <div class="kpi"><div class="kpi-l">粗利合計</div><div class="kpi-v kv-p" id="k-profit">¥0</div></div>
+    <div class="kpi"><div class="kpi-l">平均粗利率</div><div class="kpi-v kv-p" id="k-prate">—</div></div>
+  </div>
+  <div class="cgrid">
+    <div class="cbox"><div class="cbox-t">工事種別 平均粗利率</div><div id="chart-prate" class="vbar-section"></div></div>
+    <div class="cbox"><div class="cbox-t">工事種別 売上件数</div><div id="chart-cnt" class="vbar-section"></div></div>
+  </div>
+  <div><div class="ps" style="margin-bottom:10px">案件別 収益カード</div>
+  <div class="case-cards" id="profit-cards"></div></div>
+</div>
+
+<!-- ④ 業者分析 -->
+<div class="page" id="p-vendors">
+  <div><div class="ph">業者分析</div><div class="ps">業者・メーカー別のコスト・単価傾向</div></div>
+  <div class="card" style="padding:0">
+    <table class="tbl" id="vend-tbl">
+      <thead><tr>
+        <th>業者・メーカー名</th><th>書類数</th><th>仕入合計</th><th>平均単価</th><th>最安</th><th>最高</th><th>主な工事種別</th>
+      </tr></thead>
+      <tbody id="vend-body"></tbody>
+    </table>
+    <div class="empty" id="vend-empty"><span>🏢</span>仕入データがありません</div>
+  </div>
+  <div class="cgrid">
+    <div class="cbox"><div class="cbox-t">業者別 仕入合計</div><div id="chart-vamt" class="vbar-section"></div></div>
+    <div class="cbox"><div class="cbox-t">業者別 取引件数</div><div id="chart-vcnt" class="vbar-section"></div></div>
+  </div>
+</div>
+
+
+
+<!-- ⑥ アプリ連携 -->
+<div class="page" id="p-sync">
+  <div><div class="ph">アプリ連携</div><div class="ps">日報・工事台帳と原価管理を工事コードで連動</div></div>
+
+  <!-- 日報から工事インポート -->
+  <div class="card">
+    <div class="card-t">📋 日報アプリから工事台帳をインポート</div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+      <p style="font-size:12px;color:var(--text2)">日報アプリ（nip_jobs）に登録されている工事を、原価管理の案件として一括取込します。既存の案件は上書きされません。</p>
+      <button class="btn btn-g" onclick="importJobsFromNippo()">📥 日報の工事台帳を取込む</button>
+      <div id="sync-import-msg" style="font-size:12px;color:var(--sell)"></div>
+    </div>
+  </div>
+
+  <!-- 工事別 日報実績サマリー -->
+  <div class="card" style="padding:0">
+    <div class="card-t">👷 工事別 日報実績（人工・作業日数）</div>
+    <table class="tbl">
+      <thead><tr>
+        <th>工事名</th><th>工事コード</th><th>総人工</th><th>作業日数</th><th>直近作業日</th>
+      </tr></thead>
+      <tbody id="sync-nippo-body"></tbody>
+    </table>
+    <div class="empty" id="sync-nippo-empty"><span>📋</span>日報データがありません<br><span style="font-size:11px">日報アプリにデータを入力してください</span></div>
+  </div>
+
+  <!-- 案件別 原価vs日報照合 -->
+  <div class="card" style="padding:0">
+    <div class="card-t">🔗 案件別 原価 × 日報 照合</div>
+    <table class="tbl">
+      <thead><tr>
+        <th>案件名</th><th>売上</th><th>仕入</th><th>日報人工</th><th>粗利</th><th>粗利率</th>
+      </tr></thead>
+      <tbody id="sync-cross-body"></tbody>
+    </table>
+    <div class="empty" id="sync-cross-empty"><span>🔗</span>案件と日報を工事コードで紐付けてください</div>
+  </div>
+</div>
+
+<!-- ⑥ 内訳分析 -->
+<div class="page" id="p-analyze">
+  <div><div class="ph">内訳分析</div><div class="ps">全書類の材料明細を横断的に比較・分析</div></div>
+
+  <!-- フィルター -->
+  <div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fg" style="flex:1;min-width:140px">
+      <label>品名で絞り込み</label>
+      <input id="an-name" placeholder="例：プライマー" oninput="renderAnalyze()">
+    </div>
+    <div class="fg" style="flex:1;min-width:120px">
+      <label>業者で絞り込み</label>
+      <input id="an-party" placeholder="例：松信左官" oninput="renderAnalyze()">
+    </div>
+    <div class="fg" style="min-width:120px">
+      <label>単位</label>
+      <select id="an-unit" onchange="renderAnalyze()">
+        <option value="">すべて</option>
+        <option>㎡</option><option>m</option><option>式</option><option>箇所</option><option>本</option><option>枚</option><option>個</option>
+      </select>
+    </div>
+    <button class="btn btn-q btn-sm" onclick="document.getElementById('an-name').value='';document.getElementById('an-party').value='';document.getElementById('an-unit').value='';renderAnalyze()">リセット</button>
+  </div>
+
+  <!-- 単価比較テーブル -->
+  <div class="card" style="padding:0">
+    <div class="card-t">📊 品目別 単価比較</div>
+    <table class="tbl" id="an-tbl">
+      <thead><tr>
+        <th>品名</th><th>業者</th><th>数量</th><th>単位</th>
+        <th>単価（税抜）</th><th>金額</th><th>書類日付</th><th>案件</th>
+      </tr></thead>
+      <tbody id="an-body"></tbody>
+    </table>
+    <div class="empty" id="an-empty"><span>🔍</span>明細データがありません</div>
+  </div>
+
+  <!-- 品名別最安・最高・平均 -->
+  <div class="card" style="padding:0">
+    <div class="card-t">📈 品名別 単価サマリー</div>
+    <table class="tbl" id="an-sum-tbl">
+      <thead><tr>
+        <th>品名</th><th>単位</th><th>件数</th>
+        <th>最安単価</th><th>最高単価</th><th>平均単価</th><th>業者数</th>
+      </tr></thead>
+      <tbody id="an-sum-body"></tbody>
+    </table>
+    <div class="empty" id="an-sum-empty" style="display:none"><span>📋</span>データなし</div>
+  </div>
+
+  <!-- 業者別単価ランキング -->
+  <div class="card" style="padding:0">
+    <div class="card-t">🏢 業者別 単価ランキング（同一品目）</div>
+    <div id="an-rank" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+      <div class="empty"><span>📊</span>品名で絞り込むと業者間比較が表示されます</div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑤ 書類一覧 -->
+<div class="page" id="p-data">
+  <div><div class="ph">データ管理</div><div class="ps">スプレッドシートとのデータ同期</div></div>
+  <div class="card">
+    <div class="card-t">☁️ Googleスプレッドシート同期</div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-g" onclick="saveToGAS()">☁️ スプレッドシートに同期（書き込み）</button>
+      <button class="btn" style="background:#e8f4f8;color:#2a9d8f;border:1.5px solid #2a9d8f" onclick="loadFromGASManual()">🔄 スプレッドシートから読み込む</button>
+      <div id="gas-msg" style="font-size:12px;color:var(--sell)"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-t">💾 ローカルバックアップ</div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <button class="btn" onclick="exportBackup()">💾 JSONバックアップをダウンロード</button>
+      <button class="btn" onclick="document.getElementById('restore-input').click()">📂 バックアップから復元</button>
+      <input type="file" id="restore-input" accept=".json" style="display:none" onchange="restoreBackup(event)">
+    </div>
+  </div>
+</div>
+<div class="page" id="p-docs">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div><div class="ph">書類一覧</div><div class="ps">取り込んだ全書類</div></div>
+    <button class="btn btn-q" onclick="exportCSV()">📥 CSV出力</button>
+    <button class="btn btn-b" onclick="openImportModal()">📋 JSONインポート</button>
+  </div>
+  <div class="card" style="padding:0">
+    <table class="tbl" id="doc-tbl">
+      <thead><tr>
+        <th>種別</th><th>書類種類</th><th>名称</th><th>発行元/宛先</th>
+        <th>工事種別</th><th>金額（税抜）</th><th>日付</th><th>案件</th><th></th>
+      </tr></thead>
+      <tbody id="doc-body"></tbody>
+    </table>
+    <div class="empty" id="doc-empty"><span>📄</span>書類がありません</div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<!-- JSONインポートモーダル -->
+<div class="modal-bg" id="importModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeImportModal()">✕</button>
+    <h3>📋 JSONインポート</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:12px">Claudeが出力したJSONをここに貼り付けてください</p>
+    <textarea id="import-json" style="min-height:180px;font-family:monospace;font-size:11px" placeholder='{"case":{"name":"新築工事"},"doc":{...}}'></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-g" onclick="importJSON()">✓ インポート</button>
+      <button class="btn btn-q" onclick="closeImportModal()">キャンセル</button>
+    </div>
+    <div id="import-msg" style="margin-top:8px;font-size:12px;color:var(--sell)"></div>
+  </div>
+</div>
+
+<!-- 書類詳細モーダル -->
+<div class="modal-bg" id="detailModal">
+  <div class="modal" style="max-width:600px">
+    <button class="modal-close" onclick="closeDetailModal()">✕</button>
+    <h3 id="dm-title">書類詳細</h3>
+    <div id="dm-body" style="display:flex;flex-direction:column;gap:10px;margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- 案件手動追加モーダル -->
+<div class="modal-bg" id="caseModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeCaseModal()">✕</button>
+    <h3>案件を追加</h3>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="fg"><label>案件名</label><input id="mc-name" placeholder="○○邸 外壁工事"></div>
+      <div class="fg"><label>工事種別</label>
+        <select id="mc-type">
+          <option value="">選択</option>
+          <option>新築工事</option><option>リフォーム工事</option>
+          <option>外壁工事</option><option>屋根工事</option>
+          <option>基礎工事</option><option>大工工事</option>
+          <option>内装工事</option><option>設備工事</option>
+          <option>解体工事</option><option>その他</option>
+        </select>
+      </div>
+      <div class="fg"><label>備考</label><textarea id="mc-memo"></textarea></div>
+      <button class="btn btn-g" onclick="saveCase()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
+const SK_DOCS  = 'otake_docs_v2';
+const SK_CASES = 'otake_cases_v2';
+
+let docs  = [];
+let cases = [];
+let matCnt = 0;
+let curDtype = 'sell';
+
+/* ─── INIT ─── */
+function init() {
+  try { const d = localStorage.getItem(SK_DOCS);  if (d) docs  = JSON.parse(d); } catch(e){ docs=[]; }
+  try { const c = localStorage.getItem(SK_CASES); if (c) cases = JSON.parse(c); } catch(e){ cases=[]; }
+  refreshCaseSelect();
+  renderAll();
+}
+
+// ===== GAS同期・読み込み =====
+async function saveToGAS(){
+  const msg = document.getElementById('gas-msg');
+  if(msg) msg.textContent = '同期中...';
+  try{
+    await fetch(GAS_URL, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({type:'genka', cases, docs})
+    });
+    if(msg) msg.textContent = '✅ 同期完了（案件:'+cases.length+'件 / 書類:'+docs.length+'件）';
+  }catch(e){ if(msg) msg.textContent = '❌ エラー: '+e.message; }
+}
+
+async function loadFromGASManual(){
+  const msg = document.getElementById('gas-msg');
+  if(msg) msg.textContent = '読み込み中...';
+  try{
+    const res = await fetch(GAS_URL+'?type=genka',{mode:'cors'});
+    const data = await res.json();
+    if(data.status==='ok'){
+      if(data.cases&&data.cases.length>0) cases = data.cases;
+      if(data.docs&&data.docs.length>0) docs = data.docs;
+      persist();
+      if(msg) msg.textContent = '✅ 読み込み完了（案件:'+cases.length+'件 / 書類:'+docs.length+'件）';
+    } else { if(msg) msg.textContent = '❌ 読み込み失敗'; }
+  }catch(e){ if(msg) msg.textContent = '❌ エラー: '+e.message; }
+}
+
+function exportBackup(){
+  const d={cases,docs,exportedAt:new Date().toISOString()};
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));
+  a.download='genka_backup_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+}
+
+function restoreBackup(event){
+  const file=event.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const d=JSON.parse(e.target.result);
+      if(d.cases) cases=d.cases;
+      if(d.docs) docs=d.docs;
+      persist();
+      alert('✅ 復元完了 案件:'+cases.length+'件 / 書類:'+docs.length+'件');
+    }catch(ex){ alert('❌ 読み込みエラー'); }
+  };
+  reader.readAsText(file);
+}
+
+function persist() {
+  localStorage.setItem(SK_DOCS,  JSON.stringify(docs));
+  localStorage.setItem(SK_CASES, JSON.stringify(cases));
+}
+
+/* ─── NAV ─── */
+document.querySelectorAll('.nav').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav').forEach(n => n.classList.remove('on'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
+    el.classList.add('on');
+    document.getElementById('p-' + el.dataset.p).classList.add('on');
+    renderAll();
+  });
+});
+
+/* ─── FILE UPLOAD ─── */
+const drop = document.getElementById('drop');
+const fi   = document.getElementById('fi');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+fi.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+async function handleFile(file) {
+  if (!file) return;
+  showPanel();
+  setSpinner(true);
+  setMsg('AIが書類を解析中...');
+  document.getElementById('xform').style.display = 'none';
+
+  try {
+    const b64 = await toB64(file);
+    const mime = file.type === 'application/pdf' ? 'application/pdf' : file.type;
+    const contentItem = mime === 'application/pdf'
+      ? { type:'document', source:{ type:'base64', media_type:mime, data:b64 } }
+      : { type:'image',    source:{ type:'base64', media_type:mime, data:b64 } };
+
+    const prompt = `あなたは建設工務店の書類解析AIです。
+この書類（見積書または請求書）を解析し、以下のJSONのみを返してください。他のテキストは一切不要です。
+
+自社の社名は「大竹工務店株式会社」「大竹工務店」「大竹ホーム」の3つです（社名変更の経緯あり）。
+これらのいずれかが発行元として記載されている書類は sell（売上）、
+これらのいずれかが宛先・受取人として記載されている書類は buy（仕入）と判定してください。
+
+{
+  "dtype": "sell または buy。上記自社名が発行元なら sell、受取人なら buy",
+  "dtype_reason": "判定理由を15文字以内で",
+  "name": "案件名または工事名",
+  "party": "sell の場合は客先名、buy の場合は業者・メーカー名",
+  "doctype": "見積書 / 請求書 / 発注書 / 納品書 / その他",
+  "wtype": "新築工事/リフォーム工事/外壁工事/屋根工事/基礎工事/大工工事/内装工事/設備工事/解体工事/材料のみ/その他 から最も近いもの",
+  "amount": 金額（税抜・整数、不明は0）,
+  "date": "YYYY-MM-DD（不明は空文字）",
+  "mandays": 人工数（数値、不明は0）,
+  "memo": "特記事項（簡潔に30文字以内）",
+  "materials": [
+    {"name":"品名","qty":数量,"unit":"単位","unitPrice":単価（税抜）,"amount":金額}
+  ]
+}`;
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-5',
+        max_tokens:1000,
+        messages:[{ role:'user', content:[contentItem,{type:'text',text:prompt}] }]
+      })
+    });
+    const data = await res.json();
+    const txt = data.content.map(c => c.text||'').join('');
+    const clean = txt.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+
+    fillForm(parsed);
+    setSpinner(false);
+    setMsg('✅ 読み取り完了。内容を確認して保存してください。');
+    document.getElementById('xform').style.display = 'flex';
+
+  } catch(e) {
+    setSpinner(false);
+    setMsg('⚠️ 自動読み取り失敗。手動で入力してください。');
+    document.getElementById('xform').style.display = 'flex';
+    setDtype('sell');
+    addMat();
+  }
+}
+
+function toB64(file) {
+  return new Promise((res,rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej();
+    r.readAsDataURL(file);
+  });
+}
+
+function showPanel() { document.getElementById('aipanel').style.display = 'block'; }
+function setSpinner(on) { document.getElementById('spin').style.display = on ? 'block' : 'none'; }
+function setMsg(m) { document.getElementById('aimsg').textContent = m; }
+
+/* ─── DTYPE ─── */
+function setDtype(t) {
+  curDtype = t;
+  document.getElementById('dt-sell').classList.toggle('on', t==='sell');
+  document.getElementById('dt-buy').classList.toggle('on', t==='buy');
+  const badge = document.getElementById('dtype-badge');
+  if (t==='sell') { badge.className='tag tag-s'; badge.textContent='📤 売上'; }
+  else            { badge.className='tag tag-b'; badge.textContent='📥 仕入'; }
+  // save btn color
+  document.getElementById('savebtn').className = t==='sell' ? 'btn btn-g' : 'btn btn-b';
+}
+
+/* ─── FILL FORM ─── */
+function fillForm(d) {
+  setDtype(d.dtype || 'sell');
+  document.getElementById('dt-reason').textContent = d.dtype_reason || '';
+  document.getElementById('f-name').value    = d.name    || '';
+  document.getElementById('f-party').value   = d.party   || '';
+  document.getElementById('f-doctype').value = d.doctype || '見積書';
+  document.getElementById('f-wtype').value   = d.wtype   || '';
+  document.getElementById('f-amount').value  = d.amount  || '';
+  document.getElementById('f-date').value    = d.date    || '';
+  document.getElementById('f-mandays').value = d.mandays || '';
+  document.getElementById('f-memo').value    = d.memo    || '';
+  document.getElementById('matrows').innerHTML = '';
+  matCnt = 0;
+  if (d.materials && d.materials.length) d.materials.forEach(m => addMat(m));
+  else addMat();
+  refreshCaseSelect();
+}
+
+/* ─── MATERIALS ─── */
+function addMat(d={}) {
+  const id = matCnt++;
+  const tr = document.createElement('tr');
+  tr.id = 'mr'+id;
+  tr.innerHTML = `
+    <td><input value="${d.name||''}" placeholder="品名・材料" onchange="calcAmt(${id})"></td>
+    <td><input type="number" value="${d.qty||''}" placeholder="0" style="width:60px" onchange="calcAmt(${id})"></td>
+    <td><input value="${d.unit||''}" placeholder="m²" style="width:45px"></td>
+    <td><input type="number" id="up${id}" value="${d.unitPrice||''}" placeholder="0" onchange="calcAmt(${id})"></td>
+    <td><input type="number" id="am${id}" value="${d.amount||''}" placeholder="0" readonly></td>
+    <td><button class="del" onclick="document.getElementById('mr${id}').remove()">削除</button></td>`;
+  document.getElementById('matrows').appendChild(tr);
+}
+function calcAmt(id) {
+  const r = document.getElementById('mr'+id); if(!r) return;
+  const ins = r.querySelectorAll('input');
+  document.getElementById('am'+id).value = (parseFloat(ins[1].value)||0) * (parseFloat(ins[3].value)||0) || '';
+}
+
+/* ─── SAVE DOC ─── */
+function saveDoc() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { toast('案件名を入力してください','err'); return; }
+
+  const mats = [];
+  document.querySelectorAll('#matrows tr').forEach(tr => {
+    const ins = tr.querySelectorAll('input');
+    if (ins[0] && ins[0].value.trim()) mats.push({
+      name:ins[0].value.trim(), qty:parseFloat(ins[1].value)||0,
+      unit:ins[2].value.trim(), unitPrice:parseFloat(ins[3].value)||0,
+      amount:parseFloat(ins[4].value)||0
+    });
+  });
+
+  const amount = parseFloat(document.getElementById('f-amount').value) || 0;
+
+  // 案件処理
+  let caseId = document.getElementById('f-case').value;
+  if (!caseId) {
+    // 新規案件作成
+    const nc = {
+      id: 'c'+Date.now(), name,
+      wtype: document.getElementById('f-wtype').value,
+      memo:'', createdAt: new Date().toISOString()
+    };
+    cases.push(nc);
+    caseId = nc.id;
+  }
+
+  const doc = {
+    id: 'd'+Date.now(), dtype: curDtype,
+    name, party: document.getElementById('f-party').value.trim(),
+    doctype: document.getElementById('f-doctype').value,
+    wtype: document.getElementById('f-wtype').value,
+    amount, date: document.getElementById('f-date').value,
+    mandays: parseFloat(document.getElementById('f-mandays').value)||0,
+    memo: document.getElementById('f-memo').value.trim(),
+    materials: mats, caseId,
+    createdAt: new Date().toISOString()
+  };
+  docs.push(doc);
+  persist();
+  clearForm();
+  document.getElementById('aipanel').style.display = 'none';
+  renderAll();
+  toast('✅ 保存しました','ok');
+}
+
+function clearForm() {
+  ['f-name','f-party','f-amount','f-date','f-mandays','f-memo'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('f-doctype').value='見積書';
+  document.getElementById('f-wtype').value='';
+  document.getElementById('matrows').innerHTML=''; matCnt=0;
+  setDtype('sell');
+  document.getElementById('dt-reason').textContent='';
+  fi.value='';
+}
+
+/* ─── CASE SELECT ─── */
+function refreshCaseSelect() {
+  const sel = document.getElementById('f-case');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">── 新規案件として登録 ──</option>';
+  cases.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = c.name;
+    sel.appendChild(o);
+  });
+  if (cur) sel.value = cur;
+}
+
+/* ─── CASE MODAL ─── */
+function openNewCaseModal() { document.getElementById('caseModal').classList.add('show'); }
+function closeCaseModal()   { document.getElementById('caseModal').classList.remove('show'); }
+function saveCase() {
+  const n = document.getElementById('mc-name').value.trim();
+  if (!n) { toast('案件名を入力してください','err'); return; }
+  cases.push({ id:'c'+Date.now(), name:n, wtype:document.getElementById('mc-type').value, memo:document.getElementById('mc-memo').value, createdAt:new Date().toISOString() });
+  persist();
+  closeCaseModal();
+  refreshCaseSelect();
+  renderAll();
+  toast('案件を追加しました','ok');
+}
+
+/* ─── DELETE ─── */
+function deleteDoc(id) {
+  docs = docs.filter(d => d.id !== id);
+  persist();
+  renderAll();
+  toast('削除しました','');
+}
+function deleteCase(id) {
+  cases = cases.filter(c => c.id !== id);
+  docs  = docs.filter(d => d.caseId !== id);
+  persist();
+  renderAll();
+  toast('案件を削除しました','');
+}
+
+/* ─── RENDER ALL ─── */
+function renderAll() {
+  renderHeader();
+  renderCases();
+  renderProfit();
+  renderVendors();
+  renderDocs();
+}
+
+/* ─── HEADER ─── */
+function renderHeader() {
+  const sell   = docs.filter(d=>d.dtype==='sell').reduce((s,d)=>s+d.amount,0);
+  const buy    = docs.filter(d=>d.dtype==='buy').reduce((s,d)=>s+d.amount,0);
+  const profit = sell - buy;
+  document.getElementById('h-sell').textContent   = fmtS(sell);
+  document.getElementById('h-buy').textContent    = fmtS(buy);
+  document.getElementById('h-profit').textContent = fmtS(profit);
+}
+
+/* ─── CASES TABLE ─── */
+function renderCases() {
+  const body = document.getElementById('case-body');
+  document.getElementById('case-empty').style.display = cases.length ? 'none' : 'block';
+  body.innerHTML = cases.map(c => {
+    const cdocs = docs.filter(d => d.caseId === c.id);
+    const sell  = cdocs.filter(d=>d.dtype==='sell').reduce((s,d)=>s+d.amount,0);
+    const buy   = cdocs.filter(d=>d.dtype==='buy').reduce((s,d)=>s+d.amount,0);
+    const pr    = sell - buy;
+    const rate  = sell > 0 ? Math.round(pr/sell*100) : null;
+    const rateColor = rate === null ? '' : rate >= 30 ? 'color:var(--sell)' : rate >= 15 ? 'color:var(--profit)' : 'color:var(--danger)';
+    return `<tr>
+      <td><b>${c.name}</b></td>
+      <td><span class="tag tag-e">${c.wtype||'—'}</span></td>
+      <td class="num" style="color:var(--sell)">${sell?fmtS(sell):'—'}</td>
+      <td class="num" style="color:var(--buy)">${buy?fmtS(buy):'—'}</td>
+      <td class="num" style="${pr>=0?'color:var(--profit)':'color:var(--danger)'}">${sell||buy?fmtS(pr):'—'}</td>
+      <td class="num" style="${rateColor}">${rate!==null?rate+'%':'—'}</td>
+      <td>${cdocs.length}件</td>
+      <td><button class="del" onclick="deleteCase('${c.id}')">削除</button></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ─── PROFIT PAGE ─── */
+function renderProfit() {
+  const sellDocs = docs.filter(d=>d.dtype==='sell');
+  const buyDocs  = docs.filter(d=>d.dtype==='buy');
+  const totalSell = sellDocs.reduce((s,d)=>s+d.amount,0);
+  const totalBuy  = buyDocs.reduce((s,d)=>s+d.amount,0);
+  const totalPr   = totalSell - totalBuy;
+  const avgRate   = totalSell > 0 ? Math.round(totalPr/totalSell*100) : null;
+
+  document.getElementById('k-cases').textContent  = cases.length;
+  document.getElementById('k-sell').textContent   = fmtS(totalSell);
+  document.getElementById('k-buy').textContent    = fmtS(totalBuy);
+  document.getElementById('k-profit').textContent = fmtS(totalPr);
+  document.getElementById('k-prate').textContent  = avgRate!==null ? avgRate+'%' : '—';
+
+  // by wtype
+  const byW = {};
+  cases.forEach(c => {
+    const wt = c.wtype || 'その他';
+    const cdocs = docs.filter(d=>d.caseId===c.id);
+    const s = cdocs.filter(d=>d.dtype==='sell').reduce((x,d)=>x+d.amount,0);
+    const b = cdocs.filter(d=>d.dtype==='buy').reduce((x,d)=>x+d.amount,0);
+    if (!byW[wt]) byW[wt]={sell:0,buy:0,cnt:0};
+    byW[wt].sell+=s; byW[wt].buy+=b; byW[wt].cnt++;
+  });
+  const wtypes = Object.entries(byW);
+  const colors = ['#34d399','#60a5fa','#fbbf24','#a78bfa','#f87171','#38bdf8'];
+  const maxRate = Math.max(...wtypes.map(([,v])=>v.sell>0?Math.round((v.sell-v.buy)/v.sell*100):0),1);
+  document.getElementById('chart-prate').innerHTML = wtypes.length
+    ? wtypes.sort((a,b)=>{ const ra=a[1].sell>0?(a[1].sell-a[1].buy)/a[1].sell:0; const rb=b[1].sell>0?(b[1].sell-b[1].buy)/b[1].sell:0; return rb-ra; }).map(([wt,v],i)=>{
+        const r = v.sell>0 ? Math.round((v.sell-v.buy)/v.sell*100) : 0;
+        return `<div class="vbar"><div class="vbar-name" title="${wt}">${wt}</div>
+          <div class="vbar-track"><div class="vbar-fill" style="width:${r/maxRate*100}%;background:${colors[i%colors.length]}"></div></div>
+          <div class="vbar-val">${r}%</div></div>`;
+      }).join('') : '<div class="empty">データなし</div>';
+
+  const maxCnt = Math.max(...wtypes.map(([,v])=>v.cnt),1);
+  document.getElementById('chart-cnt').innerHTML = wtypes.length
+    ? wtypes.sort((a,b)=>b[1].cnt-a[1].cnt).map(([wt,v],i)=>
+        `<div class="vbar"><div class="vbar-name" title="${wt}">${wt}</div>
+          <div class="vbar-track"><div class="vbar-fill" style="width:${v.cnt/maxCnt*100}%;background:${colors[i%colors.length]}"></div></div>
+          <div class="vbar-val">${v.cnt}件</div></div>`
+      ).join('') : '<div class="empty">データなし</div>';
+
+  // case cards
+  const maxSell = Math.max(...cases.map(c=>docs.filter(d=>d.caseId===c.id&&d.dtype==='sell').reduce((s,d)=>s+d.amount,0)),1);
+  document.getElementById('profit-cards').innerHTML = cases.length
+    ? cases.slice().reverse().map(c => {
+        const cdocs = docs.filter(d=>d.caseId===c.id);
+        const s = cdocs.filter(d=>d.dtype==='sell').reduce((x,d)=>x+d.amount,0);
+        const b = cdocs.filter(d=>d.dtype==='buy').reduce((x,d)=>x+d.amount,0);
+        const pr = s - b;
+        const rate = s > 0 ? Math.round(pr/s*100) : null;
+        const prColor = pr >= 0 ? 'var(--profit)' : 'var(--danger)';
+        const docChips = cdocs.map(d=>`<span class="doc-chip">${d.dtype==='sell'?'📤':'📥'}${d.doctype} ${d.party||''}</span>`).join('');
+        return `<div class="ccard">
+          <div class="ccard-top">
+            <div><div class="ccard-name">${c.name}</div><div class="ccard-type">${c.wtype||'種別未設定'}</div></div>
+            <div class="ccard-profit">
+              <div class="ccard-pval" style="color:${prColor}">${s||b?fmtS(pr):'データなし'}</div>
+              <div class="ccard-prate">${rate!==null?'粗利率 '+rate+'%':'—'}</div>
+            </div>
+          </div>
+          <div class="ccard-bars">
+            <div class="cbar-row"><div class="cbar-lbl" style="color:var(--sell)">売上</div><div class="cbar-track"><div class="cbar-fill" style="width:${s/maxSell*100}%;background:var(--sell)"></div></div><div class="cbar-val">${s?fmtS(s):'—'}</div></div>
+            <div class="cbar-row"><div class="cbar-lbl" style="color:var(--buy)">仕入</div><div class="cbar-track"><div class="cbar-fill" style="width:${b/maxSell*100}%;background:var(--buy)"></div></div><div class="cbar-val">${b?fmtS(b):'—'}</div></div>
+          </div>
+          ${docChips ? `<div class="ccard-docs">${docChips}</div>` : ''}
+        </div>`;
+      }).join('') : '<div class="empty"><span>📊</span>案件データがありません</div>';
+}
+
+/* ─── VENDORS ─── */
+function renderVendors() {
+  const buyDocs = docs.filter(d => d.dtype==='buy');
+  const vm = {};
+  buyDocs.forEach(d => {
+    const k = d.party || '不明';
+    if (!vm[k]) vm[k] = { total:0, cnt:0, wtypes:[], prices:[] };
+    vm[k].total += d.amount;
+    vm[k].cnt++;
+    if (d.wtype) vm[k].wtypes.push(d.wtype);
+    d.materials && d.materials.forEach(m => { if (m.unitPrice) vm[k].prices.push(m.unitPrice); });
+  });
+  const vlist = Object.entries(vm).sort((a,b)=>b[1].total-a[1].total);
+  document.getElementById('vend-empty').style.display = vlist.length ? 'none' : 'block';
+  document.getElementById('vend-body').innerHTML = vlist.map(([name,v]) => {
+    const prices = v.prices;
+    const avgP   = prices.length ? Math.round(prices.reduce((s,p)=>s+p,0)/prices.length) : null;
+    const minP   = prices.length ? Math.min(...prices) : null;
+    const maxP   = prices.length ? Math.max(...prices) : null;
+    const topW   = v.wtypes.length ? v.wtypes.sort((a,b)=>v.wtypes.filter(x=>x===b).length-v.wtypes.filter(x=>x===a).length)[0] : '—';
+    return `<tr>
+      <td><b>${name}</b></td>
+      <td>${v.cnt}件</td>
+      <td class="num" style="color:var(--buy)">${fmtS(v.total)}</td>
+      <td class="num">${avgP!==null?fmtS(avgP):'—'}</td>
+      <td class="num">${minP!==null?fmtS(minP):'—'}</td>
+      <td class="num">${maxP!==null?fmtS(maxP):'—'}</td>
+      <td><span class="tag tag-b">${topW}</span></td>
+    </tr>`;
+  }).join('');
+
+  const maxAmt = vlist.length ? vlist[0][1].total : 1;
+  const maxCnt = vlist.length ? Math.max(...vlist.map(([,v])=>v.cnt)) : 1;
+  const colors = ['#60a5fa','#34d399','#fbbf24','#a78bfa','#f87171','#38bdf8'];
+  document.getElementById('chart-vamt').innerHTML = vlist.slice(0,8).map(([n,v],i)=>
+    `<div class="vbar"><div class="vbar-name" title="${n}">${n}</div>
+      <div class="vbar-track"><div class="vbar-fill" style="width:${v.total/maxAmt*100}%;background:${colors[i%colors.length]}"></div></div>
+      <div class="vbar-val">${fmtS(v.total)}</div></div>`
+  ).join('') || '<div class="empty">データなし</div>';
+  document.getElementById('chart-vcnt').innerHTML = vlist.slice(0,8).sort((a,b)=>b[1].cnt-a[1].cnt).map(([n,v],i)=>
+    `<div class="vbar"><div class="vbar-name" title="${n}">${n}</div>
+      <div class="vbar-track"><div class="vbar-fill" style="width:${v.cnt/maxCnt*100}%;background:${colors[i%colors.length]}"></div></div>
+      <div class="vbar-val">${v.cnt}件</div></div>`
+  ).join('') || '<div class="empty">データなし</div>';
+}
+
+/* ─── DOCS TABLE ─── */
+function renderDocs() {
+  const body = document.getElementById('doc-body');
+  document.getElementById('doc-empty').style.display = docs.length ? 'none' : 'block';
+  body.innerHTML = docs.slice().reverse().map(d => {
+    const cn = cases.find(c=>c.id===d.caseId);
+    const hasMat = d.materials && d.materials.length > 0;
+    return `<tr style="cursor:pointer" onclick="openDetail('${d.id}')">
+      <td><span class="tag ${d.dtype==='sell'?'tag-s':'tag-b'}">${d.dtype==='sell'?'📤 売上':'📥 仕入'}</span></td>
+      <td>${d.doctype}</td>
+      <td>${d.name}${hasMat?'<span style="font-size:10px;color:var(--text3);margin-left:4px">📋'+d.materials.length+'項目</span>':''}</td>
+      <td>${d.party||'—'}</td>
+      <td><span class="tag tag-e">${d.wtype||'—'}</span></td>
+      <td class="num" style="color:${d.dtype==='sell'?'var(--sell)':'var(--buy)'}">${fmtS(d.amount)}</td>
+      <td>${d.date||'—'}</td>
+      <td>${cn?cn.name:'—'}</td>
+      <td><button class="del" onclick="event.stopPropagation();deleteDoc('${d.id}')">削除</button></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ─── JSON IMPORT ─── */
+function openImportModal() {
+  document.getElementById('import-json').value = '';
+  document.getElementById('import-msg').textContent = '';
+  document.getElementById('importModal').classList.add('show');
+}
+function closeImportModal() { document.getElementById('importModal').classList.remove('show'); }
+function importJSON() {
+  const raw = document.getElementById('import-json').value.trim();
+  const msg = document.getElementById('import-msg');
+  try {
+    const d = JSON.parse(raw);
+    // 案件処理
+    let caseId = '';
+    if (d.case) {
+      const existing = cases.find(c => c.name === d.case.name);
+      if (existing) {
+        caseId = existing.id;
+      } else {
+        const nc = { id:'c'+Date.now(), name:d.case.name, wtype:d.case.wtype||'', memo:d.case.memo||'', createdAt:new Date().toISOString() };
+        cases.push(nc);
+        caseId = nc.id;
+      }
+    }
+    // 書類処理（単数・複数両対応）
+    const docList = d.docs || (d.doc ? [d.doc] : []);
+    let docCount = 0;
+    docList.forEach((docData, i) => {
+      const doc = {
+        id: 'd'+Date.now()+i,
+        dtype: docData.dtype || 'buy',
+        name: docData.name || docData.memo || d.case?.name || '',
+        party: docData.company || docData.party || '',
+        doctype: docData.doctype || (docData.dtype==='sell' ? '見積書' : '請求書'),
+        wtype: docData.wtype || d.case?.wtype || '',
+        amount: docData.amount || 0,
+        date: docData.date || '',
+        mandays: docData.mandays || 0,
+        memo: docData.memo || '',
+        materials: docData.materials || [],
+        caseId,
+        createdAt: new Date().toISOString()
+      };
+      docs.push(doc);
+      docCount++;
+    });
+    persist();
+    renderAll();
+    msg.style.color = 'var(--sell)';
+    msg.textContent = `✅ インポート完了！（書類${docCount}件）`;
+    setTimeout(() => closeImportModal(), 1500);
+    toast(`✅ ${docCount}件の書類をインポートしました`,'ok');
+  } catch(e) {
+    msg.style.color = 'var(--danger)';
+    msg.textContent = '⚠️ JSONの形式が正しくありません';
+  }
+}
+
+
+/* ─── DETAIL MODAL ─── */
+function openDetail(id) {
+  const d = docs.find(x => x.id === id);
+  if (!d) return;
+  const cn = cases.find(c => c.id === d.caseId);
+  const badge = d.dtype==='sell' ? '<span class="tag tag-s">📤 売上</span>' : '<span class="tag tag-b">📥 仕入</span>';
+  let html = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+      <div><span style="color:var(--text3);font-size:11px">種別</span><div style="margin-top:3px">${badge}</div></div>
+      <div><span style="color:var(--text3);font-size:11px">書類種類</span><div style="margin-top:3px">${d.doctype}</div></div>
+      <div><span style="color:var(--text3);font-size:11px">書類名</span><div style="margin-top:3px">${d.name}</div></div>
+      <div><span style="color:var(--text3);font-size:11px">発行元/宛先</span><div style="margin-top:3px">${d.party||'—'}</div></div>
+      <div><span style="color:var(--text3);font-size:11px">工事種別</span><div style="margin-top:3px">${d.wtype||'—'}</div></div>
+      <div><span style="color:var(--text3);font-size:11px">日付</span><div style="margin-top:3px">${d.date||'—'}</div></div>
+      <div><span style="color:var(--text3);font-size:11px">金額（税抜）</span><div style="margin-top:3px;font-family:var(--mono);color:${d.dtype==='sell'?'var(--sell)':'var(--buy)'};font-size:16px;font-weight:700">${fmtS(d.amount)}</div></div>
+      <div><span style="color:var(--text3);font-size:11px">案件</span><div style="margin-top:3px">${cn?cn.name:'—'}</div></div>
+      ${d.memo?`<div style="grid-column:1/-1"><span style="color:var(--text3);font-size:11px">備考</span><div style="margin-top:3px">${d.memo}</div></div>`:''}
+    </div>`;
+
+  if (d.materials && d.materials.length) {
+    html += `<div style="margin-top:4px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">材料・内訳明細</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--s2)">
+          <th style="padding:6px 8px;text-align:left;color:var(--text3);font-size:10px;border-bottom:1px solid var(--border)">品名</th>
+          <th style="padding:6px 8px;text-align:right;color:var(--text3);font-size:10px;border-bottom:1px solid var(--border)">数量</th>
+          <th style="padding:6px 8px;text-align:left;color:var(--text3);font-size:10px;border-bottom:1px solid var(--border)">単位</th>
+          <th style="padding:6px 8px;text-align:right;color:var(--text3);font-size:10px;border-bottom:1px solid var(--border)">単価</th>
+          <th style="padding:6px 8px;text-align:right;color:var(--text3);font-size:10px;border-bottom:1px solid var(--border)">金額</th>
+        </tr></thead>
+        <tbody>
+          ${d.materials.map(m=>`<tr style="border-bottom:1px solid var(--border2)">
+            <td style="padding:6px 8px">${m.name}</td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono)">${m.qty||''}</td>
+            <td style="padding:6px 8px">${m.unit||''}</td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono)">${m.unitPrice?fmtS(m.unitPrice):''}</td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--profit)">${m.amount?fmtS(m.amount):''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  document.getElementById('dm-title').innerHTML = d.name + ' <span style="font-size:12px;color:var(--text2)">- ' + (d.party||'') + '</span>';
+  document.getElementById('dm-body').innerHTML = html;
+  document.getElementById('detailModal').classList.add('show');
+}
+function closeDetailModal() { document.getElementById('detailModal').classList.remove('show'); }
+
+/* ─── APP SYNC ─── */
+function importJobsFromNippo() {
+  const msg = document.getElementById('sync-import-msg');
+  try {
+    const nippoJobs = JSON.parse(localStorage.getItem('nip_jobs') || '[]');
+    if (!nippoJobs.length) { msg.style.color='var(--danger)'; msg.textContent='⚠️ 日報アプリに工事データがありません'; return; }
+    let added = 0;
+    nippoJobs.forEach(j => {
+      // 工事コードまたは名前で重複チェック
+      const exists = cases.find(c => c.jobCode === j.id || c.name === j.name);
+      if (!exists) {
+        cases.push({
+          id: 'c'+Date.now()+Math.random(),
+          name: j.name || j.code || '未設定',
+          wtype: j.wtype || '',
+          jobCode: j.id,
+          nippoCode: j.code || '',
+          client: j.client || '',
+          memo: j.client ? '施主：'+j.client : '',
+          createdAt: new Date().toISOString()
+        });
+        added++;
+      }
+    });
+    persist();
+    renderAll();
+    msg.style.color = 'var(--sell)';
+    msg.textContent = `✅ ${added}件の工事を取込みました（重複スキップ：${nippoJobs.length - added}件）`;
+  } catch(e) {
+    msg.style.color = 'var(--danger)';
+    msg.textContent = '⚠️ 日報データの読み込みに失敗しました';
+  }
+}
+
+function renderSync() {
+  // 日報データ取得
+  let nippos = [], nippoJobs = [];
+  try { nippos    = JSON.parse(localStorage.getItem('nip_nippos') || '[]'); } catch(e){}
+  try { nippoJobs = JSON.parse(localStorage.getItem('nip_jobs')   || '[]'); } catch(e){}
+
+  // 工事別日報実績
+  const nippoEmpty = document.getElementById('sync-nippo-empty');
+  const nippBody   = document.getElementById('sync-nippo-body');
+  if (!nippos.length) {
+    nippoEmpty.style.display = 'block';
+    nippBody.innerHTML = '';
+  } else {
+    nippoEmpty.style.display = 'none';
+    // jobCodeでグループ化
+    const jobMap = {};
+    nippos.forEach(n => {
+      const key  = n.jobCode || n.jobName || '未設定';
+      const name = n.jobName || (nippoJobs.find(j=>j.id===n.jobCode)?.name) || n.jobCode || '未設定';
+      const code = nippoJobs.find(j=>j.id===n.jobCode)?.code || n.jobCode || '';
+      if (!jobMap[key]) jobMap[key] = { name, code, ninku:0, days:0, lastDate:'' };
+      const ninku = Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0);
+      jobMap[key].ninku += ninku;
+      jobMap[key].days  += 1;
+      if (!jobMap[key].lastDate || n.date > jobMap[key].lastDate) jobMap[key].lastDate = n.date;
+    });
+    const jlist = Object.values(jobMap).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));
+    nippBody.innerHTML = jlist.map(j => `<tr>
+      <td><b>${j.name}</b></td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">${j.code||'—'}</td>
+      <td class="num" style="color:var(--profit)">${j.ninku.toFixed(1)}人工</td>
+      <td class="num">${j.days}日</td>
+      <td style="font-size:11px;color:var(--text2)">${j.lastDate||'—'}</td>
+    </tr>`).join('');
+  }
+
+  // 案件×日報 照合
+  const crossEmpty = document.getElementById('sync-cross-empty');
+  const crossBody  = document.getElementById('sync-cross-body');
+  if (!cases.length) {
+    crossEmpty.style.display = 'block';
+    crossBody.innerHTML = '';
+    return;
+  }
+  crossEmpty.style.display = 'none';
+  crossBody.innerHTML = cases.map(c => {
+    const cdocs = docs.filter(d => d.caseId === c.id);
+    const sell  = cdocs.filter(d=>d.dtype==='sell').reduce((s,d)=>s+d.amount,0);
+    const buy   = cdocs.filter(d=>d.dtype==='buy').reduce((s,d)=>s+d.amount,0);
+    const pr    = sell - buy;
+    const rate  = sell > 0 ? Math.round(pr/sell*100) : null;
+    const rateColor = rate===null?'':rate>=30?'color:var(--sell)':rate>=15?'color:var(--profit)':'color:var(--danger)';
+    // 日報から人工実績を取得（jobCode or 案件名で照合）
+    const related = nippos.filter(n =>
+      (c.jobCode && (n.jobCode === c.jobCode)) ||
+      n.jobName === c.name || n.jobCode === c.name
+    );
+    const totalNinku = related.reduce((s,n)=>
+      s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0), 0);
+    return `<tr>
+      <td><b>${c.name}</b>${c.nippoCode?`<div style="font-size:10px;color:var(--text3)">${c.nippoCode}</div>`:''}</td>
+      <td class="num" style="color:var(--sell)">${sell?fmtS(sell):'—'}</td>
+      <td class="num" style="color:var(--buy)">${buy?fmtS(buy):'—'}</td>
+      <td class="num" style="color:var(--profit)">${totalNinku?totalNinku.toFixed(1)+'人工':'—'}</td>
+      <td class="num" style="${pr>=0?'color:var(--profit)':'color:var(--danger)'}">${sell||buy?fmtS(pr):'—'}</td>
+      <td class="num" style="${rateColor}">${rate!==null?rate+'%':'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ─── ANALYZE ─── */
+function renderAnalyze() {
+  const nameF  = (document.getElementById('an-name')?.value||'').trim().toLowerCase();
+  const partyF = (document.getElementById('an-party')?.value||'').trim().toLowerCase();
+  const unitF  = document.getElementById('an-unit')?.value||'';
+
+  // 全書類の材料明細をフラット化
+  const rows = [];
+  docs.forEach(d => {
+    if (!d.materials || !d.materials.length) return;
+    const cn = cases.find(c => c.id === d.caseId);
+    d.materials.forEach(m => {
+      if (!m.name) return;
+      if (nameF  && !m.name.toLowerCase().includes(nameF)) return;
+      if (partyF && !(d.party||'').toLowerCase().includes(partyF)) return;
+      if (unitF  && m.unit !== unitF) return;
+      rows.push({ ...m, party: d.party||'不明', date: d.date||'', caseName: cn?cn.name:'—', docId: d.id });
+    });
+  });
+
+  const tbody = document.getElementById('an-body');
+  const empty = document.getElementById('an-empty');
+  empty.style.display = rows.length ? 'none' : 'block';
+
+  // 単価で昇順ソート
+  rows.sort((a,b) => (a.unitPrice||0) - (b.unitPrice||0));
+
+  tbody.innerHTML = rows.map(r => {
+    const upColor = r.unitPrice ? 'color:var(--profit)' : 'color:var(--text3)';
+    return `<tr onclick="openDetail('${r.docId}')" style="cursor:pointer">
+      <td><b>${r.name}</b></td>
+      <td>${r.party}</td>
+      <td class="num">${r.qty||'—'}</td>
+      <td>${r.unit||'—'}</td>
+      <td class="num" style="${upColor}">${r.unitPrice?fmtS(r.unitPrice):'—'}</td>
+      <td class="num">${r.amount?fmtS(r.amount):'—'}</td>
+      <td>${r.date||'—'}</td>
+      <td>${r.caseName}</td>
+    </tr>`;
+  }).join('');
+
+  // サマリー（品名×単位でグループ化）
+  const sumMap = {};
+  rows.forEach(r => {
+    if (!r.unitPrice) return;
+    const key = r.name + '|' + (r.unit||'');
+    if (!sumMap[key]) sumMap[key] = { name:r.name, unit:r.unit||'', prices:[], parties:new Set() };
+    sumMap[key].prices.push(r.unitPrice);
+    sumMap[key].parties.add(r.party);
+  });
+  const sumList = Object.values(sumMap).sort((a,b) => b.prices.length - a.prices.length);
+  const sumBody = document.getElementById('an-sum-body');
+  document.getElementById('an-sum-empty').style.display = sumList.length ? 'none' : 'block';
+  sumBody.innerHTML = sumList.map(s => {
+    const min = Math.min(...s.prices);
+    const max = Math.max(...s.prices);
+    const avg = Math.round(s.prices.reduce((a,b)=>a+b,0)/s.prices.length);
+    const spread = max > 0 ? Math.round((max-min)/max*100) : 0;
+    const spreadColor = spread > 30 ? 'color:var(--danger)' : spread > 10 ? 'color:var(--profit)' : 'color:var(--text2)';
+    return `<tr>
+      <td><b>${s.name}</b></td>
+      <td>${s.unit}</td>
+      <td>${s.prices.length}件</td>
+      <td class="num" style="color:var(--sell)">${fmtS(min)}</td>
+      <td class="num" style="color:var(--danger)">${fmtS(max)}</td>
+      <td class="num" style="color:var(--profit)">${fmtS(avg)}</td>
+      <td><span style="${spreadColor};font-size:11px;font-family:var(--mono)">${s.parties.size}社 ±${spread}%</span></td>
+    </tr>`;
+  }).join('');
+
+  // 業者別ランキング（品名絞り込み時のみ）
+  const rankDiv = document.getElementById('an-rank');
+  if (nameF && sumList.length) {
+    const colors = ['#34d399','#60a5fa','#fbbf24','#a78bfa','#f87171'];
+    rankDiv.innerHTML = sumList.slice(0,5).map(s => {
+      // この品名の業者別平均単価
+      const byParty = {};
+      rows.filter(r => r.name === s.name && r.unitPrice).forEach(r => {
+        if (!byParty[r.party]) byParty[r.party] = [];
+        byParty[r.party].push(r.unitPrice);
+      });
+      const partyList = Object.entries(byParty)
+        .map(([p,prices]) => ({ party:p, avg: Math.round(prices.reduce((a,b)=>a+b,0)/prices.length), cnt:prices.length }))
+        .sort((a,b) => a.avg - b.avg);
+      if (partyList.length < 2) return '';
+      const maxAvg = partyList[partyList.length-1].avg;
+      return `<div>
+        <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">【${s.name}】${s.unit} — 業者別平均単価</div>
+        ${partyList.map((p,i) => `
+          <div class="vbar" style="margin-bottom:6px">
+            <div class="vbar-name" title="${p.party}" style="width:140px">${p.party}</div>
+            <div class="vbar-track"><div class="vbar-fill" style="width:${p.avg/maxAvg*100}%;background:${colors[i%colors.length]}"></div></div>
+            <div class="vbar-val">${fmtS(p.avg)} <span style="color:var(--text3);font-size:10px">${p.cnt}件</span></div>
+          </div>`).join('')}
+      </div>`;
+    }).filter(Boolean).join('<hr style="border-color:var(--border2);margin:10px 0">') || '<div class="empty">比較データが1社のみです</div>';
+  } else if (!nameF) {
+    rankDiv.innerHTML = '<div class="empty"><span>📊</span>品名で絞り込むと業者間比較が表示されます</div>';
+  }
+}
+
+/* ─── CSV ─── */
+function exportCSV() {
+  if (!docs.length) { toast('データがありません','err'); return; }
+  const h = ['種別','書類種類','案件名','発行元/宛先','工事種別','金額（税抜）','日付','案件','登録日'];
+  const rows = docs.map(d => {
+    const cn = cases.find(c=>c.id===d.caseId);
+    return [d.dtype==='sell'?'売上':'仕入',d.doctype,d.name,d.party,d.wtype,d.amount,d.date,cn?cn.name:'',fmtDate(d.createdAt)];
+  });
+  const csv = '\uFEFF'+[h,...rows].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = '大竹工務店_書類データ.csv'; a.click();
+}
+
+/* ─── HELPERS ─── */
+function fmtS(n) { return '¥'+Math.round(n).toLocaleString('ja-JP'); }
+function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString('ja-JP') : '—'; }
+
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast' + (type?' '+type:'');
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 2800);
+}
+
+init();
+</script>
+</body>
+</html>
