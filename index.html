@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="大竹工務店"/>
+<meta name="theme-color" content="#1a1a16"/>
+<link rel="manifest" id="pwa-manifest"/>
+<title>大竹工務店 アプリ</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Noto Sans JP',sans-serif;background:#111110;min-height:100vh;display:flex;justify-content:center;align-items:flex-start}
+#app{width:100%;max-width:430px;min-height:100vh;background:#1a1a16;display:flex;flex-direction:column}
+
+/* ヘッダー */
+.header{background:linear-gradient(160deg,#222218 0%,#1a1a12 100%);padding:40px 20px 28px;text-align:center;border-bottom:1px solid #2e2e28;position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,#c8962a18 0%,transparent 70%)}
+.header-logo{font-size:11px;color:#555;letter-spacing:3px;margin-bottom:10px;font-weight:700}
+.header-title{color:#e8d5a3;font-size:24px;font-weight:900;line-height:1.2}
+.header-title span{color:#c8962a}
+.header-sub{color:#555;font-size:11px;margin-top:8px}
+.header-date{color:#444;font-size:10px;margin-top:4px}
+
+/* ステータスバー */
+.status-bar{display:flex;gap:6px;padding:12px 14px;overflow-x:auto;scrollbar-width:none}
+.status-bar::-webkit-scrollbar{display:none}
+.status-chip{flex-shrink:0;background:#222220;border:1px solid #2e2e28;border-radius:8px;padding:6px 10px;text-align:center}
+.status-chip-val{color:#c8962a;font-size:13px;font-weight:700}
+.status-chip-label{color:#444;font-size:8px;margin-top:1px}
+
+/* アプリグリッド */
+.app-grid{padding:10px 12px;display:flex;flex-direction:column;gap:10px}
+
+.app-card{border-radius:16px;padding:18px 18px;cursor:pointer;transition:all .15s;border:1px solid transparent;display:flex;align-items:center;gap:16px;text-decoration:none;position:relative;overflow:hidden}
+.app-card:active{transform:scale(.97);opacity:.85}
+.app-card::after{content:'›';position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:20px;color:rgba(255,255,255,.2)}
+
+.app-card.nippo{background:linear-gradient(135deg,#2a2210 0%,#1e1c10 100%);border-color:#3a3218}
+.app-card.zaiko{background:linear-gradient(135deg,#1a2a1a 0%,#141e14 100%);border-color:#2a3a28}
+.app-card.genka{background:linear-gradient(135deg,#1a1e2a 0%,#14161e 100%);border-color:#282a3a}
+.app-card.tema{background:linear-gradient(135deg,#2a1a2a 0%,#1e141e 100%);border-color:#3a2838}
+
+.app-icon-wrap{width:54px;height:54px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+.nippo .app-icon-wrap{background:#3a3218;border:1px solid #4a4228}
+.zaiko .app-icon-wrap{background:#1e3a1e;border:1px solid #2e4a2e}
+.genka .app-icon-wrap{background:#1e1e3a;border:1px solid #2e2e4a}
+.tema .app-icon-wrap{background:#3a1e3a;border:1px solid #4a2e4a}
+
+.app-info{flex:1;min-width:0}
+.app-name{font-size:15px;font-weight:700;margin-bottom:3px}
+.nippo .app-name{color:#e8d5a3}
+.zaiko .app-name{color:#70c870}
+.genka .app-name{color:#70a8e8}
+.tema .app-name{color:#c870e8}
+.app-desc{font-size:10px;color:#666;line-height:1.5}
+.app-tags{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.app-tag{font-size:8px;border-radius:4px;padding:2px 6px;font-weight:700}
+.nippo .app-tag{background:#3a3218;color:#c8962a}
+.zaiko .app-tag{background:#1e3a1e;color:#70c870}
+.genka .app-tag{background:#1e1e3a;color:#70a8e8}
+.tema .app-tag{background:#3a1e3a;color:#c870e8}
+
+/* 区切り */
+.section-label{color:#333;font-size:9px;font-weight:700;letter-spacing:2px;padding:8px 16px 2px}
+
+/* データ連携バッジ */
+.sync-row{display:flex;gap:6px;padding:6px 12px 4px;flex-wrap:wrap}
+.sync-badge{font-size:9px;border-radius:6px;padding:3px 8px;font-weight:700;background:#1a2a1a;color:#70c870;border:1px solid #2a3a2a}
+.sync-badge.ng{background:#2a1a10;color:#e87050;border-color:#3a2a20}
+
+/* フッター */
+.sync-all-btn{width:calc(100% - 24px);margin:8px 12px 0;background:linear-gradient(135deg,#1a3a2a,#1a2a3a);color:#70c870;border:1px solid #2a4a3a;border-radius:14px;padding:14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s}
+.sync-all-btn:active{opacity:.7}
+.sync-all-btn.syncing{color:#aaa;border-color:#333}
+.footer{margin-top:auto;padding:20px 16px;text-align:center;border-top:1px solid #1e1e1a}
+.footer-text{color:#333;font-size:10px;line-height:1.8}
+
+/* ファイル選択モーダル */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#222220;width:100%;max-width:430px;border-radius:18px 18px 0 0;padding:20px 16px 40px;border:1px solid #2e2e28;max-height:85vh;overflow-y:auto}
+.sheet-title{color:#e8d5a3;font-size:15px;font-weight:700;margin-bottom:4px}
+.sheet-desc{color:#555;font-size:10px;margin-bottom:16px;line-height:1.6}
+.file-btn{width:100%;background:#2e2e28;color:#c8c8b0;border:none;border-radius:10px;padding:13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;display:flex;align-items:center;gap:10px;transition:opacity .15s}
+.file-btn:active{opacity:.7}
+.file-btn-icon{font-size:20px}
+.file-btn.primary{background:#3a3218;color:#c8962a;border:1px solid #4a4228}
+.btn-cancel{width:100%;background:none;color:#555;border:none;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;margin-top:4px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <div class="header-logo">OTAKE KOMUTEN</div>
+    <div class="header-title">大竹<span>工務店</span></div>
+    <div class="header-sub">業務管理アプリ ランチャー</div>
+    <div class="header-date" id="header-date"></div>
+  </div>
+
+  <div class="status-bar" id="status-bar">
+    <div class="status-chip"><div class="status-chip-val" id="st-nippo">—</div><div class="status-chip-label">今月の日報</div></div>
+    <div class="status-chip"><div class="status-chip-val" id="st-ninku">—</div><div class="status-chip-label">今月の人工</div></div>
+    <div class="status-chip"><div class="status-chip-val" id="st-zaiko">—</div><div class="status-chip-label">在庫品目</div></div>
+    <div class="status-chip"><div class="status-chip-val" id="st-jobs">—</div><div class="status-chip-label">工事件数</div></div>
+    <div class="status-chip"><div class="status-chip-val" id="st-genka" style="color:#70a8e8">—</div><div class="status-chip-label">仕入合計</div></div>
+    <div class="status-chip"><div class="status-chip-val" id="st-profit" style="color:#fbbf24">—</div><div class="status-chip-label">粗利合計</div></div>
+  </div>
+
+  <div class="sync-row" id="sync-row"></div>
+
+  <button class="sync-all-btn" id="sync-all-btn" onclick="syncAll()">
+    ☁️ 全データをスプレッドシートに同期
+  </button>
+  <div id="sync-all-status" style="text-align:center;font-size:10px;color:#444;padding:4px 12px;min-height:16px"></div>
+  <div class="section-label">APPS</div>
+  <div class="app-grid">
+
+    <a class="app-card nippo" onclick="openApp('nippo')">
+      <div class="app-icon-wrap">📋</div>
+      <div class="app-info">
+        <div class="app-name">日報・工事台帳</div>
+        <div class="app-desc">日報入力・工種別人工集計<br>工事台帳・カレンダー管理</div>
+        <div class="app-tags">
+          <span class="app-tag">日報</span>
+          <span class="app-tag">工事台帳</span>
+          <span class="app-tag">人工集計</span>
+          <span class="app-tag">カレンダー</span>
+        </div>
+      </div>
+    </a>
+
+    <a class="app-card zaiko" onclick="openApp('zaiko')">
+      <div class="app-icon-wrap">📦</div>
+      <div class="app-info">
+        <div class="app-name">在庫管理</div>
+        <div class="app-desc">資材の入出庫・場所別管理<br>買い出しリストAI取込み</div>
+        <div class="app-tags">
+          <span class="app-tag">入出庫</span>
+          <span class="app-tag">場所別</span>
+          <span class="app-tag">AI取込み</span>
+          <span class="app-tag">Excel出力</span>
+        </div>
+      </div>
+    </a>
+
+    <a class="app-card genka" onclick="openApp('genka')">
+      <div class="app-icon-wrap">📊</div>
+      <div class="app-info">
+        <div class="app-name">原価・粗利管理</div>
+        <div class="app-desc">見積・請求書のAI読み取り<br>案件別粗利・業者コスト分析</div>
+        <div class="app-tags">
+          <span class="app-tag">AI読み取り</span>
+          <span class="app-tag">粗利分析</span>
+          <span class="app-tag">業者分析</span>
+        </div>
+      </div>
+    </a>
+
+    <a class="app-card tema" onclick="openApp('tema')">
+      <div class="app-icon-wrap">🔨</div>
+      <div class="app-info">
+        <div class="app-name">大工手間・歩掛り</div>
+        <div class="app-desc">歩掛り標準値管理<br>工種別見積計算・台帳連携</div>
+        <div class="app-tags">
+          <span class="app-tag">歩掛り</span>
+          <span class="app-tag">手間見積</span>
+          <span class="app-tag">台帳連携</span>
+        </div>
+      </div>
+    </a>
+
+    <a class="app-card" style="background:linear-gradient(135deg,#1a2a2a 0%,#141e1e 100%);border-color:#2a3a38" onclick="openApp('tanka')">
+      <div class="app-icon-wrap" style="background:#1e3a38;border:1px solid #2e4a48">💰</div>
+      <div class="app-info">
+        <div class="app-name" style="color:#70e8d0">単価データベース</div>
+        <div class="app-desc">業者別・工種別の単価管理<br>書類から自動判別・登録</div>
+        <div class="app-tags">
+          <span class="app-tag" style="background:#1e3a38;color:#70e8d0">単価管理</span>
+          <span class="app-tag" style="background:#1e3a38;color:#70e8d0">業者別</span>
+          <span class="app-tag" style="background:#1e3a38;color:#70e8d0">工種別</span>
+        </div>
+      </div>
+    </a>
+
+  </div>
+
+  <div class="footer">
+    <div class="footer-text">
+      大竹工務店株式会社<br>
+      各アプリのデータはブラウザ内に保存されています<br>
+      <span style="color:#444">定期的にバックアップをお取りください</span>
+    </div>
+  </div>
+</div>
+
+<div id="modal-container"></div>
+
+<script>
+// ========== アプリファイル設定 ==========
+// ▼ ここにファイルパスを設定してください
+const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
+
+async function syncAll(){
+  const btn = document.getElementById('sync-all-btn');
+  const status = document.getElementById('sync-all-status');
+  btn.classList.add('syncing');
+  btn.textContent = '⏳ 同期中...';
+  status.textContent = '';
+
+  const results = [];
+
+  // 在庫データ
+  try {
+    const zaiko = {
+      type: 'zaiko',
+      locations: JSON.parse(localStorage.getItem('dk_loc')||'[]'),
+      items:     JSON.parse(localStorage.getItem('dk_items')||'[]'),
+      history:   JSON.parse(localStorage.getItem('dk_hist')||'[]').slice(0,500)
+    };
+    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(zaiko)});
+    results.push('✅ 在庫');
+  } catch(e) { results.push('❌ 在庫'); }
+
+  // 原価データ
+  try {
+    const genka = {
+      type: 'genka',
+      cases: JSON.parse(localStorage.getItem('otake_cases_v2')||'[]'),
+      docs:  JSON.parse(localStorage.getItem('otake_docs_v2')||'[]')
+    };
+    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(genka)});
+    results.push('✅ 原価');
+  } catch(e) { results.push('❌ 原価'); }
+
+  // 日報データ
+  try {
+    const nippo = {
+      type: 'nippo',
+      nippos:  JSON.parse(localStorage.getItem('nip_nippos')||'[]'),
+      jobs:    JSON.parse(localStorage.getItem('nip_jobs')||'[]'),
+      workers: JSON.parse(localStorage.getItem('nip_workers')||'[]')
+    };
+    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(nippo)});
+    results.push('✅ 日報');
+  } catch(e) { results.push('❌ 日報'); }
+
+  // 手間データ
+  try {
+    const tema = {
+      type: 'tema',
+      autosave: JSON.parse(localStorage.getItem('otake_autosave')||'{}')
+    };
+    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(tema)});
+    results.push('✅ 手間');
+  } catch(e) { results.push('❌ 手間'); }
+
+  // 単価データ
+  try {
+    const tanka = {
+      type: 'tanka',
+      items: JSON.parse(localStorage.getItem('otake_tanka_v1')||'[]')
+    };
+    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(tanka)});
+    results.push('✅ 単価');
+  } catch(e) { results.push('❌ 単価'); }
+
+  btn.classList.remove('syncing');
+  btn.innerHTML = '☁️ 全データをスプレッドシートに同期';
+  status.textContent = results.join(' ');
+  
+  // 3秒後にステータスをクリア
+  setTimeout(()=>{ status.textContent = '最終同期: '+new Date().toLocaleString('ja-JP'); }, 3000);
+}
+
+const APP_FILES = {
+  nippo: 'daiku-nippo-v4.html',
+  zaiko: 'daiku-otake-v14.html',
+  genka: 'otake-analyzer.html',
+  tema:  'daiku-tema-v2.html',
+  tanka: 'daiku-tanka-v2.html',
+};
+
+// ========== アプリを開く ==========
+function openApp(key){
+  const file = APP_FILES[key];
+  if(file === null){ alert('🚧 このアプリは現在準備中です'); return; }
+  if(!file){ alert('ファイルが設定されていません'); return; }
+  window.location.href = file;
+}
+
+// ========== ステータスを取得（localStorageから） ==========
+async function loadAllFromSheet(){
+  const status = document.getElementById('sync-all-status');
+  if(status) status.textContent = '⏳ データを読み込んでいます...';
+
+  let loaded = 0;
+
+  // XHRで並列読み込み（GASのリダイレクトに対応）
+  function xhrGet(url){
+    return new Promise((resolve, reject)=>{
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.onload = ()=>{
+        try{ resolve(JSON.parse(xhr.responseText)); }
+        catch(e){ reject(e); }
+      };
+      xhr.onerror = ()=>reject(new Error('XHR error'));
+      xhr.send();
+    });
+  }
+
+  await Promise.allSettled([
+    xhrGet(GAS_URL+'?type=zaiko')
+      .then(data=>{
+        if(data.status==='ok'){
+          if(data.locations&&data.locations.length>0) localStorage.setItem('dk_loc', JSON.stringify(data.locations));
+          if(data.items&&data.items.length>0) localStorage.setItem('dk_items', JSON.stringify(data.items));
+          if(data.history&&data.history.length>0) localStorage.setItem('dk_hist', JSON.stringify(data.history));
+          loaded++;
+        }
+      }).catch(e=>console.log('zaiko読み込みエラー:', e)),
+
+    xhrGet(GAS_URL+'?type=nippo')
+      .then(data=>{
+        if(data.status==='ok'){
+          if(data.nippos&&data.nippos.length>0) localStorage.setItem('nip_nippos', JSON.stringify(data.nippos));
+          if(data.jobs&&data.jobs.length>0) localStorage.setItem('nip_jobs', JSON.stringify(data.jobs));
+          if(data.workers&&data.workers.length>0) localStorage.setItem('nip_workers', JSON.stringify(data.workers));
+          loaded++;
+        }
+      }).catch(e=>console.log('nippo読み込みエラー:', e)),
+  ]);
+
+  if(status){
+    status.textContent = loaded>0
+      ? '✅ データを読み込みました（'+new Date().toLocaleTimeString('ja-JP')+'）'
+      : '';
+  }
+  loadStatus();
+}
+
+function loadStatus(){
+  const now = new Date();
+
+  // 日報データ
+  try{
+    const nippos = JSON.parse(localStorage.getItem('nip_nippos')||'[]');
+    const jobs   = JSON.parse(localStorage.getItem('nip_jobs')||'[]');
+    const monthNippos = nippos.filter(n=>{
+      const d=new Date(n.date);
+      return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
+    });
+    const monthNinku = monthNippos.reduce((s,n)=>
+      s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0),0);
+    document.getElementById('st-nippo').textContent = monthNippos.length+'件';
+    document.getElementById('st-ninku').textContent = monthNinku.toFixed(1)+'人工';
+    document.getElementById('st-jobs').textContent  = jobs.length+'件';
+  } catch(e){}
+
+  // 在庫データ
+  try{
+    const items = JSON.parse(localStorage.getItem('dk_items')||'[]');
+    document.getElementById('st-zaiko').textContent = items.length+'品目';
+  } catch(e){}
+
+  // 原価データ
+  try{
+    const gdocs  = JSON.parse(localStorage.getItem('otake_docs_v2')||'[]');
+    const gcases = JSON.parse(localStorage.getItem('otake_cases_v2')||'[]');
+    const sell   = gdocs.filter(d=>d.dtype==='sell').reduce((s,d)=>s+d.amount,0);
+    const buy    = gdocs.filter(d=>d.dtype==='buy').reduce((s,d)=>s+d.amount,0);
+    const profit = sell - buy;
+    function fmtM(n){ return n>=1000000?'¥'+(n/1000000).toFixed(1)+'M': n>=1000?'¥'+(n/1000).toFixed(0)+'K':'¥'+n; }
+    document.getElementById('st-genka').textContent  = gdocs.length?fmtM(buy):'—';
+    document.getElementById('st-profit').textContent = gdocs.length?fmtM(profit):'—';
+    document.getElementById('st-jobs').textContent   = gcases.length+'件';
+  } catch(e){}
+
+  // 連携バッジ
+  const syncRow = document.getElementById('sync-row');
+  const badges = [];
+  const hasNippo = localStorage.getItem('nip_nippos');
+  const hasZaiko = localStorage.getItem('dk_items');
+  const hasGenka = localStorage.getItem('otake_cases_v2');
+  const hasTema  = localStorage.getItem('otake_autosave');
+  badges.push(`<span class="sync-badge${hasNippo?'':' ng'}">${hasNippo?'✅':'⚠️'} 日報</span>`);
+  badges.push(`<span class="sync-badge${hasZaiko?'':' ng'}">${hasZaiko?'✅':'⚠️'} 在庫</span>`);
+  badges.push(`<span class="sync-badge${hasGenka?'':' ng'}">${hasGenka?'✅':'⚠️'} 原価</span>`);
+  badges.push(`<span class="sync-badge${hasTema?'':' ng'}">${hasTema?'✅':'⚠️'} 手間</span>`);
+  const hasTanka = localStorage.getItem('otake_tanka_v1');
+  badges.push(`<span class="sync-badge${hasTanka?'':' ng'}">${hasTanka?'✅':'⚠️'} 単価</span>`);
+  syncRow.innerHTML = badges.join('');
+}
+
+// ========== 日付表示 ==========
+document.getElementById('header-date').textContent =
+  new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
+
+loadStatus(); // 起動時はlocalStorageから表示のみ（GAS読み込みは同期ボタンから）
+
+// ========== PWA対応 ==========
+function setupPWA(){
+  const iconSvg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <rect width="512" height="512" rx="100" fill="#1a1a16"/>
+    <rect x="40" y="40" width="432" height="432" rx="80" fill="#222220"/>
+    <text x="256" y="200" text-anchor="middle" font-size="120" fill="#c8962a">🏠</text>
+    <text x="256" y="320" text-anchor="middle" font-size="52" font-family="sans-serif" fill="#e8d5a3" font-weight="900">大竹</text>
+    <text x="256" y="390" text-anchor="middle" font-size="30" font-family="sans-serif" fill="#888">工務店</text>
+  </svg>`;
+  const iconB64='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(iconSvg)));
+  ['apple-touch-icon','shortcut icon'].forEach(rel=>{
+    const l=document.createElement('link');l.rel=rel;l.href=iconB64;document.head.appendChild(l);
+  });
+  const manifest={
+    name:'大竹工務店',short_name:'大竹工務店',
+    description:'大竹工務店 業務管理アプリランチャー',
+    start_url:location.pathname||'/',
+    scope:location.pathname.replace(/\/[^\/]*$/,'/')||'/',
+    display:'standalone',
+    background_color:'#1a1a16',theme_color:'#c8962a',
+    orientation:'portrait-primary',lang:'ja',
+    icons:[
+      {src:iconB64,sizes:'192x192',type:'image/svg+xml',purpose:'any'},
+      {src:iconB64,sizes:'512x512',type:'image/svg+xml',purpose:'any'},
+      {src:iconB64,sizes:'192x192',type:'image/svg+xml',purpose:'maskable'},
+    ]
+  };
+  try{
+    const mBlob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+    const mUrl=URL.createObjectURL(mBlob);
+    const ml=document.getElementById('pwa-manifest');
+    if(ml){ml.href=mUrl;ml.type='application/manifest+json';}
+  }catch(e){}
+  // ランチャーはSW不使用（常に最新データを取得するため）
+  // 既存のSWが残っている場合は登録解除
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(regs=>{
+      regs.forEach(r=>r.unregister());
+    }).catch(()=>{});
+  }
+}
+setupPWA();
+</script>
+</body>
+</html>
