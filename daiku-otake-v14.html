@@ -1331,7 +1331,7 @@ function doReset(){
 function showModal(html){document.getElementById('modal-container').innerHTML=`<div class="overlay" id="modal-overlay" onclick="closeModal(event)">${html}</div>`;}
 function closeModal(e){if(!e||e.target.id==='modal-overlay')closeModalForce();}
 function closeModalForce(){document.getElementById('modal-container').innerHTML='';}
-function itemOpts(preId){return items.map(i=>`<option value="${i.id}"${preId===i.id?' selected':''}>${esc(i.stockId||'')} ${esc(i.name)}</option>`).join('');}
+function itemOpts(preId){return items.map(i=>`<option value="${i.id}"${String(preId)===String(i.id)?' selected':''}>${esc(i.stockId||'')} ${esc(i.name)}</option>`).join('');}
 function locOpts(preId,typeFilter){
   const filtered=typeFilter?locations.filter(l=>(l.locType||'warehouse')===typeFilter):locations;
   const warehouses=filtered.filter(l=>(l.locType||'warehouse')==='warehouse');
@@ -1467,7 +1467,7 @@ function itemOptsForLoc(locId,preId){
   // 指定場所に在庫がある品目のみ
   const filtered=locId?items.filter(i=>(i.stocks[locId]||0)>0):items;
   if(filtered.length===0) return '<option value="">この場所に在庫がありません</option>';
-  return filtered.map(i=>`<option value="${i.id}"${preId===i.id?' selected':''}>` + esc((i.stockId||'')+' '+i.name) + ` (${i.stocks[locId]||0}${esc(i.unit)})</option>`).join('');
+  return filtered.map(i=>`<option value="${i.id}"${String(preId)===String(i.id)?' selected':''}>` + esc((i.stockId||'')+' '+i.name) + ` (${i.stocks[locId]||0}${esc(i.unit)})</option>`).join('');
 }
 function refreshOutItems(){
   const locId=document.getElementById('out-from')?.value;
@@ -2293,21 +2293,16 @@ function setupPWA(){
     if(ml){ml.href=mUrl;ml.type='application/manifest+json';}
   }catch(e){console.log('manifest error:',e);}
 
-  // Service Worker をインラインで登録
+  // Service Worker を無効化・古いキャッシュを全削除
   if('serviceWorker' in navigator){
-    const swCode=[
-      "const C='daiku-v10';",
-      "self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.add(self.registration.scope)).then(()=>self.skipWaiting()).catch(()=>self.skipWaiting())));",
-      "self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));",
-      "self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{if(res.ok){const clone=res.clone();caches.open(C).then(c=>c.put(e.request,clone));}return res;}).catch(()=>caches.match(e.request))));});",
-    ].join('\n');
-    try{
-      const swBlob=new Blob([swCode],{type:'application/javascript'});
-      const swUrl=URL.createObjectURL(swBlob);
-      navigator.serviceWorker.register(swUrl,{scope:'./'})
-        .then(reg=>{console.log('SW OK scope:',reg.scope);})
-        .catch(err=>{console.log('SW fail:',err);});
-    }catch(e){console.log('SW error:',e);}
+    navigator.serviceWorker.getRegistrations().then(regs=>{
+      regs.forEach(r=>r.unregister());
+    }).catch(()=>{});
+  }
+  if('caches' in window){
+    caches.keys().then(keys=>{
+      keys.forEach(key=>caches.delete(key));
+    }).catch(()=>{});
   }
 }
 loadFromSheet();
