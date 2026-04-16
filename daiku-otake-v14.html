@@ -1023,14 +1023,33 @@ function doEditHist(hid){
   const locSel=document.getElementById('eh-loc-sel');
   const locInp=document.getElementById('eh-loc-inp');
   const newLocName=locSel?(locSel.value==='__other__'?(locInp?locInp.value.trim():''):locSel.value):h.locName;
-  // 在庫数量を差分で調整（数量変更のみ、場所変更時は在庫に触れない）
+  // 在庫数量を調整（場所変更・数量変更の両方に対応）
   const item=items.find(i=>i.id===h.itemId||i.name===h.itemName);
-  if(item&&diff!==0){
+  if(item){
     const oldLocId=locations.find(l=>l.name===h.locName)?.id;
+    const newLocId=locations.find(l=>l.name===newLocName)?.id;
     const destId=locations.find(l=>l.name===h.destName)?.id;
-    if(h.type==='in'&&oldLocId) item.stocks[oldLocId]=(item.stocks[oldLocId]||0)+diff;
-    else if((h.type==='out'||h.type==='use')&&oldLocId) item.stocks[oldLocId]=(item.stocks[oldLocId]||0)-diff;
-    else if(h.type==='ret'&&oldLocId&&destId){item.stocks[oldLocId]=(item.stocks[oldLocId]||0)-diff;item.stocks[destId]=(item.stocks[destId]||0)+diff;}
+    if(h.type==='in'){
+      if(oldLocId&&newLocId&&oldLocId!==newLocId){
+        // 場所変更：旧場所からoldQty分戻して新場所にnewQty追加
+        item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-oldQty);
+        item.stocks[newLocId]=(item.stocks[newLocId]||0)+newQty;
+      } else if(oldLocId&&diff!==0){
+        // 同じ場所で数量変更のみ
+        item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)+diff);
+      }
+    } else if(h.type==='out'||h.type==='use'){
+      if(oldLocId&&newLocId&&oldLocId!==newLocId){
+        // 場所変更：旧場所にoldQty分戻して新場所からnewQty減算
+        item.stocks[oldLocId]=(item.stocks[oldLocId]||0)+oldQty;
+        item.stocks[newLocId]=Math.max(0,(item.stocks[newLocId]||0)-newQty);
+      } else if(oldLocId&&diff!==0){
+        item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-diff);
+      }
+    } else if(h.type==='ret'&&oldLocId&&destId&&diff!==0){
+      item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-diff);
+      item.stocks[destId]=(item.stocks[destId]||0)+diff;
+    }
   }
   h.locName=newLocName||h.locName;
   h.qty=newQty;
