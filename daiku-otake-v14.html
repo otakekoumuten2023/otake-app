@@ -963,6 +963,13 @@ function showHistMenu(hid){
 function editHistModal(hid){
   const h=history.find(x=>x.id===hid);if(!h)return;
   const isOut=(h.type==='out'||h.type==='use');
+  const isIn=(h.type==='in');
+  // 場所セレクト（locName編集用）
+  const currentLoc=h.locName||'';
+  const locSelOpts=`<option value="">-- 場所を選択 --</option>`+
+    locations.map(l=>`<option value="${esc(l.name)}"${currentLoc===l.name?' selected':''}>${l.icon} ${esc(l.name)}</option>`).join('')+
+    `<option value="__other__"${currentLoc&&!locations.find(l=>l.name===currentLoc)?' selected':''}>＋ 直接入力する</option>`;
+  const locInputStyle=(currentLoc&&!locations.find(l=>l.name===currentLoc))?'':'display:none';
   // 出庫先セレクトの選択肢（場所一覧＋過去の履歴から）
   const locNames=locations.map(l=>l.name);
   const pastDests=[...new Set(history.filter(x=>x.destName&&x.type!=='ret').map(x=>x.destName))];
@@ -973,18 +980,21 @@ function editHistModal(hid){
     allDests.map(d=>`<option value="${esc(d)}"${currentDest===d?' selected':''}>${esc(d)}</option>`).join('')+
     `<option value="__new__"${!destInList&&currentDest?' selected':''}>＋ 直接入力する</option>`;
   const destInputStyle=(!destInList&&currentDest)?'':'display:none';
+  // 日付をYYYY-MM-DD形式に正規化
+  const dateVal=(h.date||'').slice(0,10);
+  const locLabel=isIn?'📥 入庫先（場所）':'📤 出庫元（場所）';
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#70a8e8">✏️ 記録を編集</div>
     <div class="sheet-desc">${esc(h.itemName)} - ${TYPE_META[h.type]?.label||h.type}</div>
-    <div style="background:#1a1810;border:1px solid #2e2a18;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#888">
-      出庫元: <span style="color:#c8c8b0;font-weight:700">${esc(h.locName||'未設定')}</span>
-      ${isOut?`　→　搬入先: <span style="color:${currentDest?'#70c870':'#e87050'};font-weight:700">${esc(currentDest||'未設定')}</span>`:''}
-    </div>
-    <label class="form-label">日付</label><input class="form-input" type="date" id="eh-date" value="${h.date}"/>
-    <label class="form-label">数量</label><input class="form-input" type="number" id="eh-qty" value="${h.qty}" min="0.01" step="any"/>
-    <label class="form-label">単価（税抜）</label><input class="form-input" type="number" id="eh-price" value="${h.unitPrice||0}" step="any"/>
+    <label class="form-label" style="color:${isIn?'#70c870':'#e8b050'}">${locLabel}</label>
+    <select class="form-select" id="eh-loc-sel" onchange="
+      var v=this.value;
+      var inp=document.getElementById('eh-loc-inp');
+      if(inp) inp.style.display=(v==='__other__')?'block':'none';
+    ">${locSelOpts}</select>
+    <input class="form-input" type="text" id="eh-loc-inp" placeholder="場所名を直接入力" value="${currentLoc&&!locations.find(l=>l.name===currentLoc)?esc(currentLoc):''}" style="${locInputStyle}"/>
     ${isOut?`
-    <label class="form-label" style="color:#70c870">📤 搬入先（出庫先）</label>
+    <label class="form-label" style="color:#70a8e8">🏗️ 搬入先（出庫先）</label>
     <select class="form-select" id="eh-dest-sel" onchange="
       var v=this.value;
       var inp=document.getElementById('eh-dest-inp');
@@ -992,6 +1002,9 @@ function editHistModal(hid){
     ">${destSelOpts}</select>
     <input class="form-input" type="text" id="eh-dest-inp" placeholder="搬入先を直接入力" value="${!destInList?esc(currentDest):''}" style="${destInputStyle}"/>
     `:''}
+    <label class="form-label">日付</label><input class="form-input" type="date" id="eh-date" value="${dateVal}"/>
+    <label class="form-label">数量</label><input class="form-input" type="number" id="eh-qty" value="${h.qty}" min="0.01" step="any"/>
+    <label class="form-label">単価（税抜）</label><input class="form-input" type="number" id="eh-price" value="${h.unitPrice||0}" step="any"/>
     <label class="form-label">作業名</label><input class="form-input" type="text" id="eh-job" value="${esc(h.jobName||'')}"/>
     <label class="form-label">仕入れ先</label><input class="form-input" type="text" id="eh-supplier" value="${esc(h.supplier||'')}"/>
     <label class="form-label">メモ</label><input class="form-input" type="text" id="eh-memo" value="${esc(h.memo||'')}"/>
@@ -1006,17 +1019,36 @@ function doEditHist(hid){
   const oldQty=h.qty;
   const newQty=parseFloat(document.getElementById('eh-qty').value)||0;
   const diff=newQty-oldQty;
-  // 在庫数量を差分で調整
+  // 場所(locName)の新しい値を取得
+  const locSel=document.getElementById('eh-loc-sel');
+  const locInp=document.getElementById('eh-loc-inp');
+  const newLocName=locSel?(locSel.value==='__other__'?(locInp?locInp.value.trim():''):locSel.value):h.locName;
+  // 在庫数量を差分で調整（場所変更も考慮）
   const item=items.find(i=>i.id===h.itemId||i.name===h.itemName);
-  if(item&&diff!==0){
-    const locId=locations.find(l=>l.name===h.locName)?.id;
+  if(item){
+    const oldLocId=locations.find(l=>l.name===h.locName)?.id;
+    const newLocId=locations.find(l=>l.name===newLocName)?.id;
     const destId=locations.find(l=>l.name===h.destName)?.id;
-    if(h.type==='in'&&locId) item.stocks[locId]=(item.stocks[locId]||0)+diff;
-    else if((h.type==='out'||h.type==='use')&&locId) item.stocks[locId]=(item.stocks[locId]||0)-diff;
-    else if(h.type==='ret'&&locId&&destId){item.stocks[locId]=(item.stocks[locId]||0)-diff;item.stocks[destId]=(item.stocks[destId]||0)+diff;}
+    // 場所が変わった場合：旧場所の在庫を戻して新場所に適用
+    if(oldLocId&&newLocId&&oldLocId!==newLocId){
+      if(h.type==='in'){
+        item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-oldQty);
+        item.stocks[newLocId]=(item.stocks[newLocId]||0)+newQty;
+      } else if(h.type==='out'||h.type==='use'){
+        item.stocks[oldLocId]=(item.stocks[oldLocId]||0)+oldQty;
+        item.stocks[newLocId]=Math.max(0,(item.stocks[newLocId]||0)-newQty);
+      }
+    } else if(diff!==0){
+      // 場所は同じで数量だけ変わった場合
+      if(h.type==='in'&&oldLocId) item.stocks[oldLocId]=(item.stocks[oldLocId]||0)+diff;
+      else if((h.type==='out'||h.type==='use')&&oldLocId) item.stocks[oldLocId]=(item.stocks[oldLocId]||0)-diff;
+      else if(h.type==='ret'&&oldLocId&&destId){item.stocks[oldLocId]=(item.stocks[oldLocId]||0)-diff;item.stocks[destId]=(item.stocks[destId]||0)+diff;}
+    }
   }
+  h.locName=newLocName||h.locName;
   h.qty=newQty;
-  h.date=document.getElementById('eh-date').value||h.date;
+  const newDate=document.getElementById('eh-date').value||'';
+  h.date=newDate?newDate.slice(0,10):h.date.slice(0,10);
   h.unitPrice=parseFloat(document.getElementById('eh-price').value)||0;
   h.jobName=document.getElementById('eh-job').value.trim();
   h.supplier=document.getElementById('eh-supplier').value.trim();
