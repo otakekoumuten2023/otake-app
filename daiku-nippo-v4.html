@@ -982,6 +982,9 @@ function openNippoModal(nippoId, preDate){
     </div>
     ${nippoId?`<button style="width:100%;margin-top:8px;background:#3a1a1a;color:#e87050;border:1px solid #4a2a2a;border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit" onclick="deleteNippo('${nippoId}')">🗑️ この日報を削除する</button>`:''}
   </div>`);
+  // 日付フィールドをJSで確実に設定（HTMLのvalue属性だけでは反映されない場合があるため）
+  const nipDateEl = document.getElementById('nip-date');
+  if(nipDateEl) nipDateEl.value = date;
   initMatSearch(matListId);
 }
 
@@ -1132,8 +1135,10 @@ function onJobSelChange(){
 }
 
 function saveNippo(existingId, matListId){
-  const date = document.getElementById('nip-date').value;
+  const dateEl = document.getElementById('nip-date');
+  const date = dateEl ? dateEl.value : '';
   if(!date){ alert('作業日を入力してください'); return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert('作業日の形式が正しくありません（例: 2026-04-16）'); return; }
 
   // 工事
   const jobSel = document.getElementById('nip-job-sel').value;
