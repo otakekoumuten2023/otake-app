@@ -926,8 +926,8 @@ function histCardHtml(h,allowEdit=false){
   const subParts=[];if(h.locName)subParts.push(h.locName);if(h.destName)subParts.push('→ '+h.destName);
   const metaParts=[h.date];if(h.jobName)metaParts.push('作業: '+h.jobName);if(h.supplier)metaParts.push(h.supplier);if(h.memo)metaParts.push(h.memo);
   const amt=h.qty*(h.unitPrice||0);
-  const longPressAttr=allowEdit?`onmousedown="startHistPress(${h.id})" onmouseup="cancelHistPress()" onmouseleave="cancelHistPress()" ontouchstart="startHistPress(${h.id})" ontouchend="cancelHistPress()" ontouchcancel="cancelHistPress()"`:
-    `onmousedown="startHistPress(${h.id})" onmouseup="cancelHistPress()" onmouseleave="cancelHistPress()" ontouchstart="startHistPress(${h.id})" ontouchend="cancelHistPress()" ontouchcancel="cancelHistPress()"`;
+  const _hid=String(h.id);
+  const longPressAttr=`onmousedown="startHistPress('${_hid}')" onmouseup="cancelHistPress()" onmouseleave="cancelHistPress()" ontouchstart="startHistPress('${_hid}')" ontouchend="cancelHistPress()" ontouchcancel="cancelHistPress()"`;
   return`<div class="hist-card" id="hc-${h.id}" style="cursor:pointer;user-select:none" ${longPressAttr}>
     <div class="hist-icon-wrap ${m.cls}">${m.icon}</div>
     <div style="flex:1;min-width:0">
@@ -948,7 +948,7 @@ function startHistPress(hid){
 }
 function cancelHistPress(){if(histPressTimer){clearTimeout(histPressTimer);histPressTimer=null;}}
 function showHistMenu(hid){
-  const h=history.find(x=>x.id===hid);if(!h)return;
+  const h=history.find(x=>String(x.id)===String(hid));if(!h)return;
   const m=TYPE_META[h.type]||TYPE_META.in;
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#e8d5a3">✏️ 操作を選択</div>
@@ -961,7 +961,7 @@ function showHistMenu(hid){
   </div>`);
 }
 function editHistModal(hid){
-  const h=history.find(x=>x.id===hid);if(!h)return;
+  const h=history.find(x=>String(x.id)===String(hid));if(!h)return;
   const isOut=(h.type==='out'||h.type==='use');
   const isIn=(h.type==='in');
   // 場所セレクト（locName編集用）
@@ -1015,7 +1015,7 @@ function editHistModal(hid){
   </div>`);
 }
 function doEditHist(hid){
-  const h=history.find(x=>x.id===hid);if(!h)return;
+  const h=history.find(x=>String(x.id)===String(hid));if(!h)return;
   const oldQty=h.qty;
   const newQty=parseFloat(document.getElementById('eh-qty').value)||0;
   const diff=newQty-oldQty;
@@ -1071,7 +1071,7 @@ function doEditHist(hid){
   save();closeModalForce();render();
 }
 function cancelHist(hid){
-  const h=history.find(x=>x.id===hid);if(!h)return;
+  const h=history.find(x=>String(x.id)===String(hid));if(!h)return;
   if(!confirm(`「${h.itemName}」の${TYPE_META[h.type]?.label||h.type}（${h.qty}個）を取り消しますか？\n在庫数量も元に戻ります。`))return;
   // 在庫を逆戻し
   const item=items.find(i=>i.id===h.itemId||i.name===h.itemName);
@@ -1082,7 +1082,7 @@ function cancelHist(hid){
     else if((h.type==='out'||h.type==='use')&&locId) item.stocks[locId]=(item.stocks[locId]||0)+h.qty;
     else if(h.type==='ret'&&locId&&destId){item.stocks[locId]=(item.stocks[locId]||0)+h.qty;item.stocks[destId]=Math.max(0,(item.stocks[destId]||0)-h.qty);}
   }
-  history.splice(history.findIndex(x=>x.id===hid),1);
+  history.splice(history.findIndex(x=>String(x.id)===String(hid)),1);
   save();render();
 }
 
