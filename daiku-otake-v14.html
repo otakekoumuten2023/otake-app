@@ -954,8 +954,8 @@ function showHistMenu(hid){
     <div class="sheet-title" style="color:#e8d5a3">✏️ 操作を選択</div>
     <div class="sheet-desc">${m.label}：${esc(h.itemName)}（${h.qty}${h.date}）</div>
     <div class="data-btn-row">
-      <button class="data-btn blue" onclick="closeModalForce();editHistModal(${hid})">✏️ この記録を編集する</button>
-      <button class="data-btn red" onclick="closeModalForce();cancelHist(${hid})">↩️ この操作を取り消す（在庫を元に戻す）</button>
+      <button class="data-btn blue" onclick="closeModalForce();editHistModal('${hid}')">✏️ この記録を編集する</button>
+      <button class="data-btn red" onclick="closeModalForce();cancelHist('${hid}')">↩️ この操作を取り消す（在庫を元に戻す）</button>
     </div>
     <button class="btn-cancel" style="width:100%;margin-top:10px" onclick="closeModalForce()">キャンセル</button>
   </div>`);
@@ -1010,7 +1010,7 @@ function editHistModal(hid){
     <label class="form-label">メモ</label><input class="form-input" type="text" id="eh-memo" value="${esc(h.memo||'')}"/>
     <div class="btn-row">
       <button class="btn-cancel" onclick="closeModalForce()">キャンセル</button>
-      <button class="btn-confirm blue" onclick="doEditHist(${hid})">保存する</button>
+      <button class="btn-confirm blue" onclick="doEditHist('${hid}')">保存する</button>
     </div>
   </div>`);
 }
