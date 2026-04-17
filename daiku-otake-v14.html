@@ -311,8 +311,12 @@ let history   = JSON.parse(localStorage.getItem('dk_hist')||'null') || [];
 // ===== idを文字列に統一する修復処理 =====
 (function fixHistoryIds(){
   let changed = false;
-  history.forEach(function(h){
-    if(typeof h.id !== 'string'){
+  history.forEach(function(h, i){
+    // idがない・undefined・null・"undefined"の場合は新しいidを付与
+    if(!h.id || h.id==='undefined' || h.id==='null'){
+      h.id = String(Date.now() + i);
+      changed = true;
+    } else if(typeof h.id !== 'string'){
       h.id = String(h.id);
       changed = true;
     }
@@ -389,7 +393,10 @@ async function loadFromSheet(){
         localStorage.setItem('dk_items',JSON.stringify(items));
       }
       if(data.history&&data.history.length>0){
-        history=data.history;
+        history=data.history.map((h,i)=>{
+          if(h.id===undefined||h.id===null||h.id==='') h.id=Date.now()+i;
+          return h;
+        });
         localStorage.setItem('dk_hist',JSON.stringify(history));
       }
       render();
