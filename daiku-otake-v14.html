@@ -1060,13 +1060,32 @@ function doEditHist(hid){
         item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)+diff);
       }
     } else if(h.type==='out'||h.type==='use'){
+      // 出庫先（destName）の新しい値を取得
+      const destSel=document.getElementById('eh-dest-sel');
+      const destInp=document.getElementById('eh-dest-inp');
+      const newDestName=destSel?(destSel.value==='__new__'?(destInp?destInp.value.trim():''):destSel.value===''?'':destSel.value):h.destName||'';
+      const oldDestId=locations.find(l=>l.name===h.destName)?.id;
+      const newDestId=locations.find(l=>l.name===newDestName)?.id;
       if(oldLocId&&newLocId&&oldLocId!==newLocId){
-        // 場所変更：旧場所にoldQty分戻して新場所からnewQty減算
+        // 出庫元場所変更：旧場所にoldQty分戻して新場所からnewQty減算
         item.stocks[oldLocId]=(item.stocks[oldLocId]||0)+oldQty;
         item.stocks[newLocId]=Math.max(0,(item.stocks[newLocId]||0)-newQty);
       } else if(oldLocId&&diff!==0){
         item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-diff);
       }
+      // 出庫先在庫の調整
+      if(oldDestId&&newDestId&&oldDestId!==newDestId){
+        // 出庫先変更：旧出庫先からoldQty減算、新出庫先にnewQty追加
+        item.stocks[oldDestId]=Math.max(0,(item.stocks[oldDestId]||0)-oldQty);
+        item.stocks[newDestId]=(item.stocks[newDestId]||0)+newQty;
+      } else if(newDestId&&!oldDestId){
+        // 出庫先が新規設定された場合：新出庫先にnewQty追加
+        item.stocks[newDestId]=(item.stocks[newDestId]||0)+newQty;
+      } else if(oldDestId&&newDestId&&oldDestId===newDestId&&diff!==0){
+        // 同じ出庫先で数量変更のみ
+        item.stocks[oldDestId]=(item.stocks[oldDestId]||0)+diff;
+      }
+      h.destName=newDestName;
     } else if(h.type==='ret'&&oldLocId&&destId&&diff!==0){
       item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-diff);
       item.stocks[destId]=(item.stocks[destId]||0)+diff;
@@ -1080,15 +1099,6 @@ function doEditHist(hid){
   h.jobName=document.getElementById('eh-job').value.trim();
   h.supplier=document.getElementById('eh-supplier').value.trim();
   h.memo=document.getElementById('eh-memo').value.trim();
-  // 出庫先の保存（出庫・使用タイプのみ）
-  if(h.type==='out'||h.type==='use'){
-    const sel=document.getElementById('eh-dest-sel');
-    const inp=document.getElementById('eh-dest-inp');
-    if(sel){
-      h.destName = sel.value==='__new__' ? (inp?inp.value.trim():'') :
-                   sel.value===''        ? '' : sel.value;
-    }
-  }
   save();closeModalForce();render();
 }
 function cancelHist(hid){
