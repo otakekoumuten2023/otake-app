@@ -308,6 +308,20 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MO
 let locations = JSON.parse(localStorage.getItem('dk_loc')||'null') || [];
 let items     = JSON.parse(localStorage.getItem('dk_items')||'null') || [];
 let history   = JSON.parse(localStorage.getItem('dk_hist')||'null') || [];
+// ===== idを文字列に統一する修復処理 =====
+(function fixHistoryIds(){
+  let changed = false;
+  history.forEach(function(h){
+    if(typeof h.id !== 'string'){
+      h.id = String(h.id);
+      changed = true;
+    }
+  });
+  if(changed){
+    localStorage.setItem('dk_hist', JSON.stringify(history));
+    console.log('履歴IDを文字列に修復しました');
+  }
+})();
 let currentTab='ホーム', histFilter='all', histPeriod='all', searchVal='', moneyPeriod='month';
 
 function save(){
