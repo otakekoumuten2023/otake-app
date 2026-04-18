@@ -275,7 +275,7 @@ async function syncAll(){
 }
 
 const APP_FILES = {
-  nippo: 'daiku-nippo-v4.html',
+  nippo: 'daiku-nippo-v5.html',
   zaiko: 'daiku-otake-v14.html',
   genka: 'otake-analyzer.html',
   tema:  'daiku-tema-v2.html',
@@ -325,9 +325,25 @@ async function loadAllFromSheet(){
     xhrGet(GAS_URL+'?type=nippo')
       .then(data=>{
         if(data.status==='ok'){
-          if(data.nippos&&data.nippos.length>0) localStorage.setItem('nip_nippos', JSON.stringify(data.nippos));
-          if(data.jobs&&data.jobs.length>0) localStorage.setItem('nip_jobs', JSON.stringify(data.jobs));
-          if(data.workers&&data.workers.length>0) localStorage.setItem('nip_workers', JSON.stringify(data.workers));
+          // 日報はマージ方式（既存データを上書きしない）
+          if(data.nippos&&data.nippos.length>0){
+            const existing = JSON.parse(localStorage.getItem('nip_nippos')||'[]');
+            const existingIds = new Set(existing.map(n=>n.id));
+            const merged = [...existing, ...data.nippos.filter(n=>!existingIds.has(n.id))];
+            merged.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+            localStorage.setItem('nip_nippos', JSON.stringify(merged));
+          }
+          if(data.jobs&&data.jobs.length>0){
+            const existingJobs = JSON.parse(localStorage.getItem('nip_jobs')||'[]');
+            const existingJobIds = new Set(existingJobs.map(j=>j.id));
+            const mergedJobs = [...existingJobs, ...data.jobs.filter(j=>!existingJobIds.has(j.id))];
+            localStorage.setItem('nip_jobs', JSON.stringify(mergedJobs));
+          }
+          if(data.workers&&data.workers.length>0){
+            const existingW = JSON.parse(localStorage.getItem('nip_workers')||'[]');
+            const isDefault = existingW.every(w=>['w1','w2','w3'].includes(w.id));
+            if(isDefault) localStorage.setItem('nip_workers', JSON.stringify(data.workers));
+          }
           loaded++;
         }
       }).catch(e=>console.log('nippo読み込みエラー:', e)),

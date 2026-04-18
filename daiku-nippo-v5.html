@@ -363,7 +363,14 @@ function save(){
   localStorage.setItem('nip_jobs', JSON.stringify(jobs));
 }
 
-function today(){ return new Date().toISOString().slice(0,10); }
+function today(){
+  // toISOString()はUTCを返すため、JST(UTC+9)の朝9時前に前日になるバグを修正
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ========== 在庫PWAとの連携 ==========
@@ -1860,26 +1867,50 @@ function setupPWA(){
 setupPWA();
 
 
-// ===== 起動時スプレッドシートから読み込み =====
+// ===== 起動時スプレッドシートから読み込み（マージ方式） =====
+// アプリ側のデータを上書きしないよう、IDベースでマージする
 async function loadFromSheet(){
   try{
     const res = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
     const data = await res.json();
     if(data.status==='ok'){
+      let merged = false;
+
+      // 日報：IDが存在しないものだけ追加（上書きしない）
       if(data.nippos&&data.nippos.length>0){
-        nippos=data.nippos;
-        localStorage.setItem('nip_nippos',JSON.stringify(nippos));
+        const existingIds = new Set(nippos.map(n=>n.id));
+        const newOnes = data.nippos.filter(n=>!existingIds.has(n.id));
+        if(newOnes.length>0){
+          nippos = [...nippos, ...newOnes];
+          nippos.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+          localStorage.setItem('nip_nippos',JSON.stringify(nippos));
+          merged = true;
+        }
       }
+
+      // 工事台帳：IDが存在しないものだけ追加
       if(data.jobs&&data.jobs.length>0){
-        jobs=data.jobs;
-        localStorage.setItem('nip_jobs',JSON.stringify(jobs));
+        const existingJobIds = new Set(jobs.map(j=>j.id));
+        const newJobs = data.jobs.filter(j=>!existingJobIds.has(j.id));
+        if(newJobs.length>0){
+          jobs = [...jobs, ...newJobs];
+          localStorage.setItem('nip_jobs',JSON.stringify(jobs));
+          merged = true;
+        }
       }
-      if(data.workers&&data.workers.length>0){
-        workers=data.workers;
-        localStorage.setItem('nip_workers',JSON.stringify(workers));
+
+      // 作業者：ローカルが初期値のみなら上書き、そうでなければスキップ
+      if(data.workers&&data.workers.length>0 && workers.length<=3){
+        const isDefault = workers.every(w=>['w1','w2','w3'].includes(w.id));
+        if(isDefault){
+          workers = data.workers;
+          localStorage.setItem('nip_workers',JSON.stringify(workers));
+          merged = true;
+        }
       }
-      render();
-      console.log('日報データをスプレッドシートから読み込みました');
+
+      if(merged) render();
+      console.log('日報データをスプレッドシートからマージしました');
     }
   }catch(e){
     console.log('スプレッドシート読み込みエラー:',e);
@@ -1896,20 +1927,36 @@ async function saveWithOverwrite(){
     jobs:    jobs,
     workers: workers
   };
-  fetch(GAS_URL, {
-    method:'POST', mode:'no-cors',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(data)
-  }).then(()=>{
-    if(btn){ btn.textContent='⚠️ 削除を反映して同期（自動バックアップ付き）'; btn.disabled=false; }
-    alert('✅ 完了\n削除を反映して同期しました。\nDriveの「大竹工務店_バックアップ」に\nバックアップが保存されました。');
-  }).catch(err=>{
-    if(btn){ btn.textContent='⚠️ 削除を反映して同期（自動バックアップ付き）'; btn.disabled=false; }
-    alert('❌ エラー: '+err.message);
-  });
+  const origText2 = btn ? btn.textContent : '';
+  try{
+    await fetch(GAS_URL, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    if(btn) btn.textContent='⏳ 確認中...';
+    await new Promise(r=>setTimeout(r,2000));
+    try{
+      const check = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
+      const result = await check.json();
+      if(result.status==='ok'){
+        const sheetCount = result.nippos?.length || 0;
+        showToast(`✅ 削除反映同期完了！\nシート: ${sheetCount}件 / アプリ: ${nippos.length}件\nDriveにバックアップ保存済み`,'green');
+      } else {
+        showToast('⚠️ 送信しましたが確認できませんでした','gold');
+      }
+    }catch(e2){
+      showToast('⚠️ 送信済み（通信確認エラー）','gold');
+    }
+  }catch(err){
+    showToast('❌ エラー: '+err.message,'red');
+  }finally{
+    if(btn){ btn.textContent=origText2; btn.disabled=false; }
+  }
 }
 
-// ===== GASから手動読み込み =====
+// ===== GASから手動読み込み（マージ方式） =====
+// 完全上書きではなく、IDベースでマージして既存データを保護する
 async function loadFromSheetManual(){
   const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
   if(btn){ btn.textContent = '🔄 読み込み中...'; btn.disabled = true; }
@@ -1917,20 +1964,45 @@ async function loadFromSheetManual(){
     const res = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
     const data = await res.json();
     if(data.status==='ok'){
+      let addedNippo = 0, addedJob = 0;
+
+      // 日報：IDが存在しないものだけ追加（既存を上書きしない）
       if(data.nippos&&data.nippos.length>0){
-        nippos=data.nippos;
-        localStorage.setItem('nip_nippos',JSON.stringify(nippos));
+        const existingIds = new Set(nippos.map(n=>n.id));
+        const newOnes = data.nippos.filter(n=>!existingIds.has(n.id));
+        addedNippo = newOnes.length;
+        if(newOnes.length>0){
+          nippos = [...nippos, ...newOnes];
+          nippos.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+          localStorage.setItem('nip_nippos',JSON.stringify(nippos));
+        }
       }
+
+      // 工事台帳：IDが存在しないものだけ追加
       if(data.jobs&&data.jobs.length>0){
-        jobs=data.jobs;
-        localStorage.setItem('nip_jobs',JSON.stringify(jobs));
+        const existingJobIds = new Set(jobs.map(j=>j.id));
+        const newJobs = data.jobs.filter(j=>!existingJobIds.has(j.id));
+        addedJob = newJobs.length;
+        if(newJobs.length>0){
+          jobs = [...jobs, ...newJobs];
+          localStorage.setItem('nip_jobs',JSON.stringify(jobs));
+        }
       }
+
+      // 作業者：ローカルが初期値のみなら上書き
       if(data.workers&&data.workers.length>0){
-        workers=data.workers;
-        localStorage.setItem('nip_workers',JSON.stringify(workers));
+        const isDefault = workers.every(w=>['w1','w2','w3'].includes(w.id));
+        if(isDefault){
+          workers = data.workers;
+          localStorage.setItem('nip_workers',JSON.stringify(workers));
+        }
       }
+
       render();
-      alert('✅ 読み込み完了\n日報:'+nippos.length+'件 / 工事:'+jobs.length+'件');
+      const msg = addedNippo > 0 || addedJob > 0
+        ? `✅ 読み込み完了（マージ）\n新規追加: 日報 ${addedNippo}件 / 工事 ${addedJob}件\n合計: 日報 ${nippos.length}件 / 工事 ${jobs.length}件`
+        : `✅ 確認完了\n新しいデータはありませんでした\n（日報 ${nippos.length}件 / 工事 ${jobs.length}件）`;
+      alert(msg);
     } else {
       alert('❌ 読み込み失敗');
     }
@@ -1940,23 +2012,66 @@ async function loadFromSheetManual(){
     if(btn){ btn.textContent = '🔄 スプレッドシートから読み込む'; btn.disabled = false; }
   }
 }
-// ===== Googleスプレッドシート同期 =====
-function saveToGoogleDrive(){
+// ===== Googleスプレッドシート同期（追記・安全） =====
+async function saveToGoogleDrive(){
+  const btn = document.querySelector('[onclick="saveToGoogleDrive()"]');
+  const origText = btn ? btn.textContent : '';
+  if(btn){ btn.textContent='⏳ 送信中...'; btn.disabled=true; }
   const data = {
     type: 'nippo',
     nippos: nippos,
     jobs: jobs,
     workers: workers
   };
-  fetch(GAS_URL, {
-    method:'POST', mode:'no-cors',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(data)
-  }).then(()=>{
-    alert('✅ 日報・工事台帳データをGoogleスプレッドシートに同期しました\n日報:'+nippos.length+'件 / 工事:'+jobs.length+'件');
-  }).catch(err=>{
-    alert('同期エラー: '+err.message);
-  });
+  try{
+    // no-corsのため成功可否は直接わからない。送信後に読み込み確認する
+    await fetch(GAS_URL, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    // 2秒待ってからGASに確認読み込み
+    if(btn) btn.textContent='⏳ 確認中...';
+    await new Promise(r=>setTimeout(r,2000));
+    try{
+      const check = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
+      const result = await check.json();
+      if(result.status==='ok'){
+        const sheetCount = result.nippos?.length || 0;
+        showToast(`✅ 同期完了！シート: ${sheetCount}件 / アプリ: ${nippos.length}件`,'green');
+      } else {
+        showToast('⚠️ 送信しましたが確認できませんでした','gold');
+      }
+    }catch(e2){
+      showToast('⚠️ 送信済み（通信確認エラー）','gold');
+    }
+  }catch(err){
+    showToast('❌ 送信エラー: '+err.message,'red');
+  }finally{
+    if(btn){ btn.textContent=origText; btn.disabled=false; }
+  }
+}
+
+// ===== トースト通知 =====
+function showToast(msg, color='green'){
+  const colors={green:'#1a3a1a',gold:'#3a2a10',red:'#3a1a1a'};
+  const borders={green:'#2a5a2a',gold:'#5a3a10',red:'#5a1a1a'};
+  const texts={green:'#70c870',gold:'#e8b050',red:'#e87050'};
+  const t=document.createElement('div');
+  t.style.cssText=`position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;
+    background:${colors[color]};border:1px solid ${borders[color]};border-radius:10px;
+    padding:10px 18px;color:${texts[color]};font-size:12px;font-weight:700;
+    max-width:340px;text-align:center;box-shadow:0 4px 16px #00000066;
+    animation:toastIn .2s ease;white-space:pre-line;font-family:inherit`;
+  t.textContent=msg;
+  if(!document.getElementById('toast-style')){
+    const s=document.createElement('style');
+    s.id='toast-style';
+    s.textContent='@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
+    document.head.appendChild(s);
+  }
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),3500);
 }
 
 loadFromSheet();
