@@ -349,7 +349,7 @@ const KOUJI_TYPES = [
   // プライベート
   {id:'priv_kyuyo',   label:'休養',     icon:'😴', cat:'プライベート'},
   {id:'priv_kenkyu',  label:'学習・研究',icon:'📚', cat:'プライベート'},
-  {id:'priv_kensetsu',label:'自宅・家族',icon:'🏡', cat:'プライベート'},
+  {id:'priv_kensetsu',label:'自宅・家族',icon:'🏠', cat:'プライベート'},
   {id:'priv_other',   label:'その他',   icon:'🌿', cat:'プライベート'},
   // 打合せ
   {id:'mtg_uchiawase',label:'打合せ',   icon:'🤝', cat:'打合せ'},
@@ -1544,15 +1544,21 @@ function showJobDetail(jobId){
 function addJobModal(id){
   const j = id ? jobs.find(x=>x.id===id) : null;
 
-  // 工種別見積人工の入力フィールド
-  const koujiEstInputs = KOUJI_TYPES.map(kt=>{
-    const val = j?.estNinkuByKouji?.[kt.id]||'';
-    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <span style="color:#888;font-size:11px;flex:1">${kt.icon} ${kt.label}</span>
-      <input style="width:60px;background:#161614;border:none;border-bottom:1px solid #3a3a30;color:#e8b050;font-size:12px;text-align:right;outline:none;font-family:inherit;padding:2px 0"
-        type="number" step="0.5" min="0" id="est-${kt.id}" value="${val}" placeholder="0"/>
-      <span style="color:#555;font-size:10px">人工</span>
-    </div>`;
+  // 工種別見積人工の入力フィールド（カテゴリ別に整理）
+  const koujiCats2 = ['現場','事務','経営','打合せ','プライベート'];
+  const catColors2 = {'現場':'#c8962a','事務':'#70a8e8','経営':'#c870e8','打合せ':'#e8e050','プライベート':'#70c8a0'};
+  const koujiEstInputs = koujiCats2.map(cat=>{
+    const types = KOUJI_TYPES.filter(k=>k.cat===cat);
+    const rows = types.map(kt=>{
+      const val = j?.estNinkuByKouji?.[kt.id]||'';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="color:#888;font-size:11px;flex:1">${kt.icon} ${kt.label}</span>
+        <input style="width:60px;background:#161614;border:none;border-bottom:1px solid #3a3a30;color:#e8b050;font-size:12px;text-align:right;outline:none;font-family:inherit;padding:2px 0"
+          type="number" step="0.5" min="0" id="est-${kt.id}" value="${val}" placeholder="0"/>
+        <span style="color:#555;font-size:10px">人工</span>
+      </div>`;
+    }).join('');
+    return `<div style="color:${catColors2[cat]};font-size:9px;font-weight:700;letter-spacing:1px;margin:8px 0 5px">${cat}</div>${rows}`;
   }).join('');
 
   const statusOpts = [
