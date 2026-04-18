@@ -1045,7 +1045,15 @@ function doEditHist(hid){
   const locInp=document.getElementById('eh-loc-inp');
   const newLocName=locSel?(locSel.value==='__other__'?(locInp?locInp.value.trim():''):locSel.value):h.locName;
   // 在庫数量を調整（場所変更・数量変更の両方に対応）
-  const item=items.find(i=>i.id===h.itemId||i.name===h.itemName);
+  let item=items.find(i=>i.id===h.itemId||i.name===h.itemName);
+  // 品目が見つからない場合は新規作成して在庫に追加
+  if(!item && h.type==='in'){
+    const newLocId2=locations.find(l=>l.name===h.locName)?.id||locations[0]?.id||'';
+    const stocks={};
+    if(newLocId2) stocks[newLocId2]=0;
+    item={id:h.itemId||('itm-'+Date.now()),name:h.itemName,unit:'個',category:'その他',basePrice:h.unitPrice||0,stocks,minStock:0,stockId:'',memo:''};
+    items.push(item);
+  }
   if(item){
     const oldLocId=locations.find(l=>l.name===h.locName)?.id;
     const newLocId=locations.find(l=>l.name===newLocName)?.id;
