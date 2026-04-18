@@ -1055,9 +1055,15 @@ function doEditHist(hid){
         // 場所変更：旧場所からoldQty分戻して新場所にnewQty追加
         item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-oldQty);
         item.stocks[newLocId]=(item.stocks[newLocId]||0)+newQty;
-      } else if(oldLocId&&diff!==0){
+      } else if(oldLocId&&newLocId&&oldLocId===newLocId&&diff!==0){
         // 同じ場所で数量変更のみ
         item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)+diff);
+      } else if(!oldLocId&&newLocId){
+        // 旧場所が不明・新場所が設定された場合：新場所にnewQty追加
+        item.stocks[newLocId]=(item.stocks[newLocId]||0)+newQty;
+      } else if(oldLocId&&!newLocId){
+        // 新場所が不明の場合：旧場所でdiff調整
+        if(diff!==0) item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)+diff);
       }
     } else if(h.type==='out'||h.type==='use'){
       // 出庫先（destName）の新しい値を取得
