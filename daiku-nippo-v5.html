@@ -357,6 +357,9 @@ const KOUJI_TYPES = [
   {id:'mtg_other',    label:'その他',   icon:'💬', cat:'打合せ'},
 ];
 
+function uid(prefix){
+  return prefix+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+}
 function save(){
   localStorage.setItem('nip_nippos', JSON.stringify(nippos));
   localStorage.setItem('nip_workers', JSON.stringify(workers));
@@ -1187,7 +1190,7 @@ function saveNippo(existingId, matListId){
   const memo = document.getElementById('nip-memo')?.value.trim()||'';
 
   const record = {
-    id: existingId || ('nip-'+Date.now()),
+    id: existingId || uid('nip'),
     date, jobCode, jobName, koujiTypes,
     workers: workerMap, materials, memo,
     createdAt: existingId ? (nippos.find(x=>x.id===existingId)?.createdAt||new Date().toISOString()) : new Date().toISOString(),
@@ -1345,7 +1348,7 @@ function saveWorker(id){
     const w = workers.find(x=>x.id===id);
     if(w) w.name=name;
   } else {
-    workers.push({id:'w-'+Date.now(), name});
+    workers.push({id:uid('w'), name});
   }
   save(); closeModalForce(); render();
 }
@@ -1647,7 +1650,7 @@ function saveJob(id){
   });
 
   const record = {
-    id: id || ('job-'+Date.now()),
+    id: id || uid('job'),
     code, name, client, address: addr, status,
     kikanStart: start, kikanEnd: end,
     uriage: parseFloat(uriage)||0,
