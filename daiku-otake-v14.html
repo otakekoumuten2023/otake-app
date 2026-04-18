@@ -308,6 +308,24 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MO
 let locations = JSON.parse(localStorage.getItem('dk_loc')||'null') || [];
 let items     = JSON.parse(localStorage.getItem('dk_items')||'null') || [];
 let history   = JSON.parse(localStorage.getItem('dk_hist')||'null') || [];
+// ===== idを文字列に統一する修復処理 =====
+(function fixHistoryIds(){
+  let changed = false;
+  history.forEach(function(h, i){
+    // idがない・undefined・null・"undefined"の場合は新しいidを付与
+    if(!h.id || h.id==='undefined' || h.id==='null'){
+      h.id = String(Date.now() + i);
+      changed = true;
+    } else if(typeof h.id !== 'string'){
+      h.id = String(h.id);
+      changed = true;
+    }
+  });
+  if(changed){
+    localStorage.setItem('dk_hist', JSON.stringify(history));
+    console.log('履歴IDを文字列に修復しました');
+  }
+})();
 let currentTab='ホーム', histFilter='all', histPeriod='all', searchVal='', moneyPeriod='month';
 
 function save(){
@@ -375,7 +393,10 @@ async function loadFromSheet(){
         localStorage.setItem('dk_items',JSON.stringify(items));
       }
       if(data.history&&data.history.length>0){
-        history=data.history;
+        history=data.history.map((h,i)=>{
+          if(h.id===undefined||h.id===null||h.id==='') h.id=Date.now()+i;
+          return h;
+        });
         localStorage.setItem('dk_hist',JSON.stringify(history));
       }
       render();
@@ -954,8 +975,8 @@ function showHistMenu(hid){
     <div class="sheet-title" style="color:#e8d5a3">✏️ 操作を選択</div>
     <div class="sheet-desc">${m.label}：${esc(h.itemName)}（${h.qty}${h.date}）</div>
     <div class="data-btn-row">
-      <button class="data-btn blue" onclick="closeModalForce();editHistModal(${hid})">✏️ この記録を編集する</button>
-      <button class="data-btn red" onclick="closeModalForce();cancelHist(${hid})">↩️ この操作を取り消す（在庫を元に戻す）</button>
+      <button class="data-btn blue" onclick="closeModalForce();editHistModal('${hid}')">✏️ この記録を編集する</button>
+      <button class="data-btn red" onclick="closeModalForce();cancelHist('${hid}')">↩️ この操作を取り消す（在庫を元に戻す）</button>
     </div>
     <button class="btn-cancel" style="width:100%;margin-top:10px" onclick="closeModalForce()">キャンセル</button>
   </div>`);
@@ -1010,7 +1031,7 @@ function editHistModal(hid){
     <label class="form-label">メモ</label><input class="form-input" type="text" id="eh-memo" value="${esc(h.memo||'')}"/>
     <div class="btn-row">
       <button class="btn-cancel" onclick="closeModalForce()">キャンセル</button>
-      <button class="btn-confirm blue" onclick="doEditHist(${hid})">保存する</button>
+      <button class="btn-confirm blue" onclick="doEditHist('${hid}')">保存する</button>
     </div>
   </div>`);
 }
@@ -1024,7 +1045,15 @@ function doEditHist(hid){
   const locInp=document.getElementById('eh-loc-inp');
   const newLocName=locSel?(locSel.value==='__other__'?(locInp?locInp.value.trim():''):locSel.value):h.locName;
   // 在庫数量を調整（場所変更・数量変更の両方に対応）
-  const item=items.find(i=>i.id===h.itemId||i.name===h.itemName);
+  let item=items.find(i=>i.id===h.itemId||i.name===h.itemName);
+  // 品目が見つからない場合は新規作成して在庫に追加
+  if(!item && h.type==='in'){
+    const newLocId2=locations.find(l=>l.name===h.locName)?.id||locations[0]?.id||'';
+    const stocks={};
+    if(newLocId2) stocks[newLocId2]=0;
+    item={id:h.itemId||('itm-'+Date.now()),name:h.itemName,unit:'個',category:'その他',basePrice:h.unitPrice||0,stocks,minStock:0,stockId:'',memo:''};
+    items.push(item);
+  }
   if(item){
     const oldLocId=locations.find(l=>l.name===h.locName)?.id;
     const newLocId=locations.find(l=>l.name===newLocName)?.id;
@@ -1034,18 +1063,43 @@ function doEditHist(hid){
         // 場所変更：旧場所からoldQty分戻して新場所にnewQty追加
         item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-oldQty);
         item.stocks[newLocId]=(item.stocks[newLocId]||0)+newQty;
-      } else if(oldLocId&&diff!==0){
+      } else if(oldLocId&&newLocId&&oldLocId===newLocId&&diff!==0){
         // 同じ場所で数量変更のみ
         item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)+diff);
+      } else if(!oldLocId&&newLocId){
+        // 旧場所が不明・新場所が設定された場合：新場所にnewQty追加
+        item.stocks[newLocId]=(item.stocks[newLocId]||0)+newQty;
+      } else if(oldLocId&&!newLocId){
+        // 新場所が不明の場合：旧場所でdiff調整
+        if(diff!==0) item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)+diff);
       }
     } else if(h.type==='out'||h.type==='use'){
+      // 出庫先（destName）の新しい値を取得
+      const destSel=document.getElementById('eh-dest-sel');
+      const destInp=document.getElementById('eh-dest-inp');
+      const newDestName=destSel?(destSel.value==='__new__'?(destInp?destInp.value.trim():''):destSel.value===''?'':destSel.value):h.destName||'';
+      const oldDestId=locations.find(l=>l.name===h.destName)?.id;
+      const newDestId=locations.find(l=>l.name===newDestName)?.id;
       if(oldLocId&&newLocId&&oldLocId!==newLocId){
-        // 場所変更：旧場所にoldQty分戻して新場所からnewQty減算
+        // 出庫元場所変更：旧場所にoldQty分戻して新場所からnewQty減算
         item.stocks[oldLocId]=(item.stocks[oldLocId]||0)+oldQty;
         item.stocks[newLocId]=Math.max(0,(item.stocks[newLocId]||0)-newQty);
       } else if(oldLocId&&diff!==0){
         item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-diff);
       }
+      // 出庫先在庫の調整
+      if(oldDestId&&newDestId&&oldDestId!==newDestId){
+        // 出庫先変更：旧出庫先からoldQty減算、新出庫先にnewQty追加
+        item.stocks[oldDestId]=Math.max(0,(item.stocks[oldDestId]||0)-oldQty);
+        item.stocks[newDestId]=(item.stocks[newDestId]||0)+newQty;
+      } else if(newDestId&&!oldDestId){
+        // 出庫先が新規設定された場合：新出庫先にnewQty追加
+        item.stocks[newDestId]=(item.stocks[newDestId]||0)+newQty;
+      } else if(oldDestId&&newDestId&&oldDestId===newDestId&&diff!==0){
+        // 同じ出庫先で数量変更のみ
+        item.stocks[oldDestId]=(item.stocks[oldDestId]||0)+diff;
+      }
+      h.destName=newDestName;
     } else if(h.type==='ret'&&oldLocId&&destId&&diff!==0){
       item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-diff);
       item.stocks[destId]=(item.stocks[destId]||0)+diff;
@@ -1059,15 +1113,6 @@ function doEditHist(hid){
   h.jobName=document.getElementById('eh-job').value.trim();
   h.supplier=document.getElementById('eh-supplier').value.trim();
   h.memo=document.getElementById('eh-memo').value.trim();
-  // 出庫先の保存（出庫・使用タイプのみ）
-  if(h.type==='out'||h.type==='use'){
-    const sel=document.getElementById('eh-dest-sel');
-    const inp=document.getElementById('eh-dest-inp');
-    if(sel){
-      h.destName = sel.value==='__new__' ? (inp?inp.value.trim():'') :
-                   sel.value===''        ? '' : sel.value;
-    }
-  }
   save();closeModalForce();render();
 }
 function cancelHist(hid){
