@@ -492,7 +492,7 @@ function importJSON(){
     let count=0;
     (d.items||[]).forEach((p,i)=>{
       if(!p.name)return;
-      const ex=items.find(x=>x.name===p.name&&x.vendor===vendor);
+      const ex=items.find(x=>x.name===p.name&&x.vendor===vendor&&(x.updatedAt||'').slice(0,10)===date);
       if(ex){ex.price=p.price||ex.price;ex.spec=p.spec||ex.spec;ex.unit=p.unit||ex.unit;ex.updatedAt=date;}
       else{items.push({id:'tk-'+Date.now()+'-'+i,cat:p.cat||'その他',name:p.name,vendor,price:p.price||0,spec:p.spec||'',code:p.code||'',unit:p.unit||'式',memo:p.memo||'',updatedAt:date});}
       count++;
