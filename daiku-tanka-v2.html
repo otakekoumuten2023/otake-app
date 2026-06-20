@@ -235,6 +235,8 @@ function render(){
       <div class="card-meta">
         <span class="badge badge-cat">${esc(item.cat)}</span>
         <span class="badge badge-vendor">${esc(item.vendor)}</span>
+        ${item.listPrice?`<span class="badge-date" style="color:#888">定価${fmtN(item.listPrice)}円</span>`:''}
+        ${item.discountRate!=null?`<span class="badge-date" style="color:#e8b050">掛率${item.discountRate}%</span>`:''}
         <span class="badge-date">${item.updatedAt?item.updatedAt.slice(0,10):''}</span>
       </div>
       ${item.spec?`<div class="card-spec">${esc(item.spec)}</div>`:''}
@@ -405,6 +407,10 @@ function openAdd(p){
       <div><label class="form-label">単価（税抜） *</label><input class="form-input" id="add-price" type="number" value="${p.price||''}" placeholder="0"/></div>
       <div><label class="form-label">単位</label><input class="form-input" id="add-unit" type="text" value="${esc(p.unit||'')}" placeholder="本・枚・m2"/></div>
     </div>
+    <div class="form-row">
+      <div><label class="form-label">定価（任意）</label><input class="form-input" id="add-listprice" type="number" value="${p.listPrice!=null?p.listPrice:''}" placeholder="例: 39900"/></div>
+      <div><label class="form-label">掛率%（任意）</label><input class="form-input" id="add-discount" type="number" value="${p.discountRate!=null?p.discountRate:''}" placeholder="例: 65"/></div>
+    </div>
     <label class="form-label">更新日</label>
     <input class="form-input" id="add-date" type="date" value="${p.updatedAt?p.updatedAt.slice(0,10):new Date().toISOString().slice(0,10)}"/>
     <label class="form-label">メモ</label>
@@ -428,6 +434,8 @@ function doAdd(){
     spec:document.getElementById('add-spec').value.trim(),
     code:document.getElementById('add-code').value.trim(),
     unit:document.getElementById('add-unit').value.trim()||'式',
+    listPrice:document.getElementById('add-listprice').value!==''?parseFloat(document.getElementById('add-listprice').value):null,
+    discountRate:document.getElementById('add-discount').value!==''?parseFloat(document.getElementById('add-discount').value):null,
     memo:document.getElementById('add-memo').value.trim(),
     updatedAt:document.getElementById('add-date').value||new Date().toISOString().slice(0,10)
   });
@@ -440,6 +448,8 @@ function openDetail(id){
     <div class="sheet-title">${esc(item.name)}</div>
     <div style="display:grid;gap:8px;font-size:12px;margin-bottom:12px">
       <div style="display:flex;justify-content:space-between"><span style="color:#666">単価</span><span style="color:#c8962a;font-size:18px;font-weight:700">${fmtN(item.price)}円<span style="font-size:11px;color:#666">/${esc(item.unit)}</span></span></div>
+      ${item.listPrice?`<div style="display:flex;justify-content:space-between"><span style="color:#666">定価</span><span>${fmtN(item.listPrice)}円</span></div>`:''}
+      ${item.discountRate!=null?`<div style="display:flex;justify-content:space-between"><span style="color:#666">掛率</span><span style="color:#e8b050">${item.discountRate}%</span></div>`:''}
       <div style="display:flex;justify-content:space-between"><span style="color:#666">工種</span><span style="color:#70c870">${esc(item.cat)}</span></div>
       <div style="display:flex;justify-content:space-between"><span style="color:#666">業者</span><span style="color:#70a8e8">${esc(item.vendor)}</span></div>
       ${item.spec?`<div style="display:flex;justify-content:space-between"><span style="color:#666">仕様</span><span>${esc(item.spec)}</span></div>`:''}
@@ -471,6 +481,8 @@ function doEdit(id){
     spec:document.getElementById('add-spec').value.trim(),
     code:document.getElementById('add-code').value.trim(),
     unit:document.getElementById('add-unit').value.trim()||'式',
+    listPrice:document.getElementById('add-listprice').value!==''?parseFloat(document.getElementById('add-listprice').value):null,
+    discountRate:document.getElementById('add-discount').value!==''?parseFloat(document.getElementById('add-discount').value):null,
     memo:document.getElementById('add-memo').value.trim(),
     updatedAt:document.getElementById('add-date').value};
   save();closeModal();render();toast('更新しました');
@@ -492,9 +504,15 @@ function importJSON(){
     let count=0;
     (d.items||[]).forEach((p,i)=>{
       if(!p.name)return;
-      const ex=items.find(x=>x.name===p.name&&x.vendor===vendor&&(x.updatedAt||'').slice(0,10)===date);
-      if(ex){ex.price=p.price||ex.price;ex.spec=p.spec||ex.spec;ex.unit=p.unit||ex.unit;ex.updatedAt=date;}
-      else{items.push({id:'tk-'+Date.now()+'-'+i,cat:p.cat||'その他',name:p.name,vendor,price:p.price||0,spec:p.spec||'',code:p.code||'',unit:p.unit||'式',memo:p.memo||'',updatedAt:date});}
+      const ex=items.find(x=>x.name===p.name&&x.vendor===vendor);
+      if(ex){
+        ex.price=p.price||ex.price;ex.spec=p.spec||ex.spec;ex.unit=p.unit||ex.unit;
+        ex.listPrice=p.listPrice!=null?p.listPrice:ex.listPrice;
+        ex.discountRate=p.discountRate!=null?p.discountRate:ex.discountRate;
+        ex.memo=p.memo||p.note||ex.memo;
+        ex.updatedAt=date;
+      }
+      else{items.push({id:'tk-'+Date.now()+'-'+i,cat:p.cat||p.category||'その他',name:p.name,vendor,price:p.price||0,spec:p.spec||'',code:p.code||'',unit:p.unit||'式',memo:p.memo||p.note||'',listPrice:p.listPrice!=null?p.listPrice:null,discountRate:p.discountRate!=null?p.discountRate:null,updatedAt:date});}
       count++;
     });
     save();render();
