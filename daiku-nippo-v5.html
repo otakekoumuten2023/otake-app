@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script src="otake-sync.js"></script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -1206,8 +1207,9 @@ function saveNippo(existingId, matListId){
 
   save();
 
-  // 在庫PWAへの反映（localStorage経由）
-  applyMaterialsToInventory(materials, record.date, record.jobName||record.jobCode||'');
+  // 在庫への反映は在庫アプリが行う（2026/10/22 修正）
+  // 以前はここで在庫を直接減らしていたため、保存し直すたびに在庫が減っていた。
+  // 在庫アプリを開くと、日報IDごとの差分だけが自動で反映される。
 
   closeModalForce();
   render();
@@ -1525,6 +1527,7 @@ function showJobDetail(jobId){
     <div style="background:#1a1810;border-radius:10px;padding:12px;border:1px solid #2e2a18;margin-bottom:10px">
       <div style="color:#888;font-size:9px;margin-bottom:8px;letter-spacing:1px">財務情報</div>
       <div class="info-row"><span class="info-label">請負金額（税抜）</span><span class="info-val" style="color:#c8962a">¥${uriage.toLocaleString()}</span></div>
+      ${(parseFloat(j.estDaikuGenka)||0)>0?`<div class="info-row"><span class="info-label">見積大工手間</span><span class="info-val">¥${Math.round(parseFloat(j.estDaikuGenka)).toLocaleString()}</span></div>`:''}
       ${genka>0?`<div class="info-row"><span class="info-label">原価（業者等）</span><span class="info-val" style="color:#e87050">¥${genka.toLocaleString()}</span></div>`:''}
       ${genka>0?`<div class="info-row"><span class="info-label">粗利</span><span class="info-val" style="color:#70c870">¥${arari.toLocaleString()}（${arariRate}%）</span></div>`:''}
     </div>`:''}
@@ -1663,7 +1666,8 @@ function saveJob(id){
 
   if(id){
     const idx = jobs.findIndex(x=>x.id===id);
-    if(idx>=0) jobs[idx]=record; else jobs.push(record);
+    // 画面にない項目（大工手間アプリからの見積大工手間・作成日など）を消さないよう、既存に上書きで重ねる
+    if(idx>=0) jobs[idx]=Object.assign({}, jobs[idx], record); else jobs.push(record);
   } else {
     jobs.unshift(record);
   }

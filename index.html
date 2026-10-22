@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script src="otake-sync.js"></script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -202,78 +203,40 @@ body{font-family:'Noto Sans JP',sans-serif;background:#111110;min-height:100vh;d
 // ▼ ここにファイルパスを設定してください
 const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
 
+// 2026/10/22 修正：この端末にデータがないアプリは送らない（空のデータでシートを消さない）
 async function syncAll(){
   const btn = document.getElementById('sync-all-btn');
   const status = document.getElementById('sync-all-status');
   btn.classList.add('syncing');
   btn.textContent = '⏳ 同期中...';
   status.textContent = '';
-
   const results = [];
-
-  // 在庫データ
-  try {
-    const zaiko = {
-      type: 'zaiko',
-      locations: JSON.parse(localStorage.getItem('dk_loc')||'[]'),
-      items:     JSON.parse(localStorage.getItem('dk_items')||'[]'),
-      history:   JSON.parse(localStorage.getItem('dk_hist')||'[]').slice(0,500)
-    };
-    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(zaiko)});
-    results.push('✅ 在庫');
-  } catch(e) { results.push('❌ 在庫'); }
-
-  // 原価データ
-  try {
-    const genka = {
-      type: 'genka',
-      cases: JSON.parse(localStorage.getItem('otake_cases_v2')||'[]'),
-      docs:  JSON.parse(localStorage.getItem('otake_docs_v2')||'[]')
-    };
-    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(genka)});
-    results.push('✅ 原価');
-  } catch(e) { results.push('❌ 原価'); }
-
-  // 日報データ
-  try {
-    const nippo = {
-      type: 'nippo',
-      nippos:  JSON.parse(localStorage.getItem('nip_nippos')||'[]'),
-      jobs:    JSON.parse(localStorage.getItem('nip_jobs')||'[]'),
-      workers: JSON.parse(localStorage.getItem('nip_workers')||'[]')
-    };
-    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(nippo)});
-    results.push('✅ 日報');
-  } catch(e) { results.push('❌ 日報'); }
-
-  // 手間データ
-  try {
-    const tema = {
-      type: 'tema',
-      autosave: JSON.parse(localStorage.getItem('otake_autosave')||'{}')
-    };
-    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(tema)});
-    results.push('✅ 手間');
-  } catch(e) { results.push('❌ 手間'); }
-
-  // 単価データ
-  try {
-    const tanka = {
-      type: 'tanka',
-      items: JSON.parse(localStorage.getItem('otake_tanka_v1')||'[]')
-    };
-    await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(tanka)});
-    results.push('✅ 単価');
-  } catch(e) { results.push('❌ 単価'); }
-
+  const arr = k => { try { const v = JSON.parse(localStorage.getItem(k)||'null'); return Array.isArray(v) ? v : []; } catch(e){ return []; } };
+  const obj = k => { try { const v = JSON.parse(localStorage.getItem(k)||'null'); return (v && typeof v==='object' && !Array.isArray(v)) ? v : null; } catch(e){ return null; } };
+  async function send(label, hasData, payload){
+    if(!hasData){ results.push('－ '+label+'（この端末にデータなし）'); return; }
+    try {
+      await fetch(GAS_URL, {method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      results.push('✅ '+label);
+    } catch(e) { results.push('❌ '+label); }
+  }
+  const zItems = arr('dk_items');
+  await send('在庫', zItems.length>0, {type:'zaiko', locations:arr('dk_loc'), items:zItems, history:arr('dk_hist'), nippoApplied:obj('dk_nippo_applied')});
+  const cases = arr('otake_cases_v2'), docs = arr('otake_docs_v2');
+  await send('原価', cases.length+docs.length>0, {type:'genka', cases, docs});
+  const nippos = arr('nip_nippos'), jobs = arr('nip_jobs');
+  await send('日報', nippos.length+jobs.length>0, {type:'nippo', nippos, jobs, workers:arr('nip_workers')});
+  const tema = obj('otake_autosave');
+  await send('手間', !!(tema && Object.keys(tema).length), {type:'tema', autosave:tema});
+  const tanka = arr('otake_tanka_v1');
+  await send('単価', tanka.length>0, {type:'tanka', items:tanka});
   btn.classList.remove('syncing');
   btn.innerHTML = '☁️ 全データをスプレッドシートに同期';
-  status.textContent = results.join(' ');
-  
-  // 3秒後にステータスをクリア
-  setTimeout(()=>{ status.textContent = '最終同期: '+new Date().toLocaleString('ja-JP'); }, 3000);
+  status.textContent = results.join('　');
+  if(!results.some(r=>r.startsWith('❌'))){
+    setTimeout(()=>{ status.textContent = results.join('　')+'　最終同期: '+new Date().toLocaleString('ja-JP'); }, 3000);
+  }
 }
-
 const APP_FILES = {
   nippo: 'daiku-nippo-v5.html',
   zaiko: 'daiku-otake-v14.html',

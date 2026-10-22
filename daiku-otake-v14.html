@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script src="otake-sync.js"></script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -29,7 +30,7 @@ function renderRenkeiTab(){
   // 日報同期
   html += '<div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:12px;padding:14px;margin-bottom:12px">';
   html += '<div style="color:#70c870;font-size:13px;font-weight:700;margin-bottom:8px">&#128203; 日報から在庫を同期</div>';
-  html += '<div style="color:#888;font-size:10px;margin-bottom:10px;line-height:1.6">日報アプリに記録された材料使用を在庫に一括反映します。</div>';
+  html += '<div style="color:#888;font-size:10px;margin-bottom:10px;line-height:1.6">日報アプリの材料使用を反映します（アプリを開いたときにも自動で反映）。同じ日報は二度引かず、修正した分だけ増減します。</div>';
   html += '<button onclick="syncFromNippo()" style="width:100%;background:#1e3a1e;color:#70c870;border:1px solid #2e4a2e;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#128229; 日報から在庫を同期</button>';
   html += '<div id="nippo-sync-msg" style="font-size:11px;margin-top:8px;color:#555"></div>';
   html += '</div>';
@@ -91,7 +92,7 @@ function importZaikoJSON(){
   }
 }
 
-function syncFromNippo(){
+function syncFromNippo_old_unused(){
   var msg = document.getElementById('nippo-sync-msg');
   try{
     var nippos = JSON.parse(localStorage.getItem('nip_nippos')||'[]');
@@ -345,7 +346,9 @@ function scheduleGasSync(){
   },5000); // 5秒後に変更がなければ送信
 }
 function pushToGAS(){
-  const data={type:'backup',locations,items,history:history.slice(0,500)};
+  let nippoApplied=null;
+  try{ nippoApplied=JSON.parse(localStorage.getItem('dk_nippo_applied')||'null'); }catch(e){}
+  const data={type:'backup',locations,items,history,nippoApplied};
   fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
     .then(()=>{ showSyncBadge('☁️ 同期完了','#70c870'); })
     .catch(()=>{ showSyncBadge('⚠️ オフライン（ローカル保存済）','#e8b050'); });
@@ -399,6 +402,9 @@ async function loadFromSheet(){
         });
         localStorage.setItem('dk_hist',JSON.stringify(history));
       }
+      if(data.nippoApplied && typeof data.nippoApplied==='object'){
+        localStorage.setItem('dk_nippo_applied',JSON.stringify(data.nippoApplied));
+      }
       render();
       showSyncBadge('☁️ GASから読み込み完了','#70c870');
       console.log('在庫データをスプレッドシートから読み込みました');
@@ -439,6 +445,7 @@ const TYPE_META={
   out:{label:'出庫',icon:'📤',cls:'hist-out',qcls:'qty-out',tcls:'type-out',sign:'-'},
   use:{label:'使用',icon:'🪚',cls:'hist-use',qcls:'qty-use',tcls:'type-use',sign:'-'},
   ret:{label:'返却',icon:'↩️',cls:'hist-ret',qcls:'qty-ret',tcls:'type-ret',sign:'+'},
+  adj:{label:'日報修正の戻し',icon:'🔁',cls:'hist-ret',qcls:'qty-ret',tcls:'type-ret',sign:'+'},
 };
 function periodFilter(h){
   const d=new Date(h.date),now=new Date();
@@ -2442,7 +2449,7 @@ function renderRenkeiTab(){
   // 日報同期
   html += '<div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:12px;padding:14px;margin-bottom:12px">';
   html += '<div style="color:#70c870;font-size:13px;font-weight:700;margin-bottom:8px">&#128203; 日報から在庫を同期</div>';
-  html += '<div style="color:#888;font-size:10px;margin-bottom:10px;line-height:1.6">日報アプリに記録された材料使用を在庫に一括反映します。</div>';
+  html += '<div style="color:#888;font-size:10px;margin-bottom:10px;line-height:1.6">日報アプリの材料使用を反映します（アプリを開いたときにも自動で反映）。同じ日報は二度引かず、修正した分だけ増減します。</div>';
   html += '<button onclick="syncFromNippo()" style="width:100%;background:#1e3a1e;color:#70c870;border:1px solid #2e4a2e;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#128229; 日報から在庫を同期</button>';
   html += '<div id="nippo-sync-msg" style="font-size:11px;margin-top:8px;color:#555"></div>';
   html += '</div>';
@@ -2504,41 +2511,101 @@ function importZaikoJSON(){
   }
 }
 
-function syncFromNippo(){
+// ===== 日報 → 在庫の反映（2026/10/22 差分方式に変更）=====
+// 日報IDごとに「反映済みの数量」を dk_nippo_applied に記録し、
+// 日報を修正したら差分だけ、同じ日報は二度と引かない。
+// 初めて動くときは、既存の日報を「反映済み」として記録するだけで在庫数は変えない。
+function syncFromNippo(silent){
   var msg = document.getElementById('nippo-sync-msg');
+  function say(t, c){ if(msg){ msg.style.color=c||'#70c870'; msg.textContent=t; } if(!silent && !msg) showSyncBadge(t, c||'#70c870'); }
   try{
     var nippos = JSON.parse(localStorage.getItem('nip_nippos')||'[]');
-    if(!nippos.length){ if(msg){ msg.style.color='#e87050'; msg.textContent='⚠️ 日報データがありません'; } return; }
-    var invItems = JSON.parse(localStorage.getItem('dk_items')||'[]');
-    var invHist  = JSON.parse(localStorage.getItem('dk_hist')||'[]');
-    var invLocs  = JSON.parse(localStorage.getItem('dk_loc')||'[]');
-    var synced = {};
-    invHist.filter(function(h){ return h.nippoId; }).forEach(function(h){ synced[h.nippoId]=true; });
-    var applied = 0;
-    nippos.forEach(function(n){
-      if(!n.materials || synced[n.id]) return;
-      var jobName = n.jobName||n.jobCode||'';
-      n.materials.filter(function(m){ return m.invItemId&&m.qty>0&&m.invAction!=='memo'; }).forEach(function(m){
-        var item = null;
-        for(var i=0;i<invItems.length;i++){ if(invItems[i].id==m.invItemId||invItems[i].name===m.name){ item=invItems[i]; break; } }
-        if(!item) return;
-        var locId = m.invLocId || Object.keys(item.stocks||{})[0] || '';
-        var cur = parseFloat((item.stocks||{})[locId]||0);
-        if(m.invAction==='use'||m.invAction==='out') item.stocks[locId] = Math.max(0, cur-(parseFloat(m.qty)||0));
-        var locName = '';
-        for(var i=0;i<invLocs.length;i++){ if(invLocs[i].id===locId){ locName=invLocs[i].name; break; } }
-        invHist.unshift({id:Date.now()+Math.random(),date:n.date,type:m.invAction==='out'?'out':'use',itemId:item.id,itemName:item.name,stockId:item.stockId||'',qty:parseFloat(m.qty)||0,locName:locName,jobName:jobName,memo:'日報同期',nippoId:n.id});
-        applied++;
+    if(!items.length){ if(!silent) say('⚠️ 在庫品目がまだありません（読み込み中か、データが空です）','#e8b050'); return; }
+    var applied = JSON.parse(localStorage.getItem('dk_nippo_applied')||'null');
+    var firstRun = !applied;
+    if(firstRun) applied = {};
+
+    function findItem(m){
+      for(var i=0;i<items.length;i++){ if(items[i].id==m.invItemId) return items[i]; }
+      for(var j=0;j<items.length;j++){ if(items[j].name===m.name) return items[j]; }
+      return null;
+    }
+    // その日報で「引くべき数量」を 品目|場所|種別 ごとに集計
+    function want(n, prev){
+      var w = {};
+      (n.materials||[]).forEach(function(m){
+        var qty = parseFloat(m.qty)||0;
+        if(m.invAction==='memo' || !m.invItemId || qty<=0) return;
+        var item = findItem(m); if(!item) return;
+        var type = m.invAction==='out' ? 'out' : 'use';
+        var locId = m.invLocId || '';
+        if(!locId){
+          // 以前の反映で使った場所があればそれを使う（場所がぶれないように）
+          Object.keys(prev||{}).some(function(k){ var p=k.split('|'); if(p[0]==String(item.id) && p[2]===type){ locId=p[1]; return true; } return false; });
+        }
+        if(!locId){
+          locId = Object.keys(item.stocks||{}).find(function(l){ return (item.stocks[l]||0)>0; }) || Object.keys(item.stocks||{})[0] || '';
+        }
+        var k = item.id+'|'+locId+'|'+type;
+        w[k] = (w[k]||0) + qty;
       });
+      return w;
+    }
+    function locName(id){ for(var i=0;i<locations.length;i++){ if(locations[i].id===id) return locations[i].name; } return ''; }
+    function itemById(id){ for(var i=0;i<items.length;i++){ if(String(items[i].id)===String(id)) return items[i]; } return null; }
+
+    if(firstRun){
+      nippos.forEach(function(n){ var w=want(n,null); if(Object.keys(w).length) applied[n.id]=w; });
+      localStorage.setItem('dk_nippo_applied', JSON.stringify(applied));
+      say('✅ 日報連携の準備をしました：既存の日報'+Object.keys(applied).length+'件は反映済みとして記録（在庫数は変えていません）');
+      scheduleGasSync();
+      return;
+    }
+
+    var changed = 0;
+    nippos.forEach(function(n){
+      var prev = applied[n.id] || {};
+      var w = want(n, prev);
+      var keys = {};
+      Object.keys(prev).forEach(function(k){ keys[k]=1; });
+      Object.keys(w).forEach(function(k){ keys[k]=1; });
+      Object.keys(keys).forEach(function(k){
+        var diff = (w[k]||0) - (prev[k]||0);
+        if(Math.abs(diff) < 1e-9) return;
+        var p = k.split('|'), item = itemById(p[0]), locId = p[1], type = p[2];
+        if(!item) return;
+        if(!item.stocks) item.stocks = {};
+        item.stocks[locId] = (parseFloat(item.stocks[locId])||0) - diff;
+        history.unshift({
+          id: Date.now()+Math.random(), date: n.date,
+          type: diff>0 ? type : 'adj',
+          itemId: item.id, itemName: item.name, stockId: item.stockId||'',
+          qty: Math.abs(diff), locName: locName(locId), destName: '',
+          jobName: n.jobName||n.jobCode||'', supplier: '',
+          memo: diff>0 ? '日報より自動反映' : '日報の修正で戻し',
+          unitPrice: item.basePrice||0, nippoId: n.id
+        });
+        changed++;
+      });
+      if(Object.keys(w).length) applied[n.id] = w; else delete applied[n.id];
     });
-    localStorage.setItem('dk_items', JSON.stringify(invItems));
-    localStorage.setItem('dk_hist',  JSON.stringify(invHist));
-    items = invItems; history = invHist; render();
-    if(msg){ msg.style.color='#70c870'; msg.textContent='✅ '+applied+'件の在庫操作を反映しました'; }
+
+    // 日報が見つからない反映（削除された・この端末に日報がない）は自動では戻さない
+    var ids = {}; nippos.forEach(function(n){ ids[n.id]=1; });
+    var missing = Object.keys(applied).filter(function(id){ return !ids[id]; }).length;
+
+    localStorage.setItem('dk_nippo_applied', JSON.stringify(applied));
+    if(changed>0){ save(); render(); }
+    var t = changed>0 ? '✅ 日報から '+changed+'件の在庫操作を反映しました' : '日報からの新しい反映はありません';
+    if(missing>0) t += '（この端末にない日報の反映が'+missing+'件あります。日報を削除した場合は在庫を手で直してください）';
+    if(changed>0 || !silent) say(t);
   }catch(e){
-    if(msg){ msg.style.color='#e87050'; msg.textContent='⚠️ 同期失敗: '+e.message; }
+    say('⚠️ 日報からの反映に失敗: '+e.message, '#e87050');
   }
 }
+
+// 起動時に自動で反映（日報アプリで保存した分）
+setTimeout(function(){ try{ syncFromNippo(true); }catch(e){} }, 2500);
 
 </script>
 </body>

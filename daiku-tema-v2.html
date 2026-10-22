@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script src="otake-sync.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>大工手間アプリ｜大竹工務店</title>
@@ -987,7 +988,8 @@ function sendToDaichou() {
       if(!confirm(`「${target.name}」が既に台帳にあります。\n見積人工・金額を上書きしますか？`)) return;
       target.estNinkuTotal = d.totalNinku;
       target.estNinkuByKouji = d.koujiMap;
-      target.genka = Math.round(d.total);
+      // 台帳の「原価」は材料・外注を含む総原価なので上書きしない（2026/10/22 修正）
+      target.estDaikuGenka = Math.round(d.total);
       target.updatedAt = new Date().toISOString();
       if(code) target.code = code;
       if(client) target.client = client;
@@ -1003,7 +1005,8 @@ function sendToDaichou() {
         status, address: '',
         kikanStart: '', kikanEnd: '',
         uriage: 0,
-        genka: Math.round(d.total),
+        genka: 0,
+        estDaikuGenka: Math.round(d.total),   // 見積大工手間（原価とは別の欄）
         estNinkuTotal: d.totalNinku,
         estNinkuByKouji: d.koujiMap,
         memo: `大工手間アプリより自動登録（難易度係数×${document.getElementById('coefBadge').textContent.replace('×','')}）`,
