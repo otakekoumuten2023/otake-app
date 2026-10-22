@@ -834,7 +834,6 @@ function printPage(target) {
   </head><body>${content}
   <div style="text-align:center;margin-top:20px;font-size:10px;color:#999;">大竹工務店　大工手間管理アプリ　出力日: ${new Date().toLocaleDateString('ja-JP')}</div>
   <script>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
 window.onload=()=>window.print();<\/script>
   </body></html>`);
   printWin.document.close();
@@ -1208,6 +1207,9 @@ function clearAllBackups() {
 // ===== START =====
 init();
 
+// スプレッドシート（GAS）の送り先（2026/10/22 修正：以前は印刷用ページの中に書かれていて、同期ボタンが動かなかった）
+const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
+
 // ===== GASから手動読み込み =====
 async function loadFromSheetManual(){
   const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
@@ -1227,6 +1229,7 @@ async function loadFromSheetManual(){
 }
 // ===== Googleスプレッドシート同期 =====
 function saveToGoogleDrive(){
+  autoSave();   // いま画面に入っている見積を保存してから送る
   const autosave = localStorage.getItem('otake_autosave') || '{}';
   const data = {
     type: 'tema',
