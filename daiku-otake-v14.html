@@ -2428,7 +2428,7 @@ function setupPWA(){
     }).catch(()=>{});
   }
 }
-loadFromSheet();
+// 起動時の読み込みは otake-sync.js が行う
 setupPWA();
 
 
@@ -2605,8 +2605,20 @@ function syncFromNippo(silent){
 }
 
 // 起動時に自動で反映（日報アプリで保存した分）
-setTimeout(function(){ try{ syncFromNippo(true); }catch(e){} }, 2500);
+// 起動時の同期（他の端末の在庫・日報反映の記録の取り込み）が終わってから、日報の反映を行う
+(window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(function(r){ try{ syncFromNippo(true); }catch(e){} });
 
+</script>
+<script>
+// ===== 2026/10/24 同期を共通部品（otake-sync.js v2）に切り替え =====
+function scheduleGasSync(){}            // 保存すると otake-sync.js が自動で同期する
+function pushToGAS(){ return OtakeSync.syncNow('zaiko'); }
+function saveToGoogleDrive(){ return OtakeSync.syncNow('zaiko'); }
+async function loadFromSheet(){}
+async function forceLoadFromSheet(){
+  if(!confirm('この端末の在庫データを捨てて、スプレッドシートから取り直します。\nまだ同期していない変更は失われます。よろしいですか？')) return;
+  return OtakeSync.pullFresh('zaiko');
+}
 </script>
 </body>
 </html>

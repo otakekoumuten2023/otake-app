@@ -112,8 +112,9 @@ body{font-family:'Noto Sans JP',sans-serif;background:#111110;min-height:100vh;d
   <div class="sync-row" id="sync-row"></div>
 
   <button class="sync-all-btn" id="sync-all-btn" onclick="syncAll()">
-    ☁️ 全データをスプレッドシートに同期
+    ☁️ 今すぐ全部同期（スマホ・PCと共通）
   </button>
+  <div style="text-align:center;margin:4px 12px 0"><button onclick="openSyncSettings()" style="background:none;border:none;color:#777;font-size:11px;text-decoration:underline;cursor:pointer">同期の設定</button></div>
   <div id="sync-all-status" style="text-align:center;font-size:10px;color:#444;padding:4px 12px;min-height:16px"></div>
   <div class="section-label">APPS</div>
   <div class="app-grid">
@@ -421,6 +422,39 @@ function setupPWA(){
   }
 }
 setupPWA();
+</script>
+<script>
+// ===== 2026/10/24 同期を共通部品（otake-sync.js v2）に切り替え =====
+async function syncAll(){
+  const btn = document.getElementById('sync-all-btn');
+  const status = document.getElementById('sync-all-status');
+  btn.classList.add('syncing'); btn.textContent = '⏳ 同期中...'; status.textContent = '';
+  const out = await OtakeSync.syncAll();
+  btn.classList.remove('syncing'); btn.innerHTML = '☁️ 今すぐ全部同期（スマホ・PCと共通）';
+  status.textContent = out.join('　') + '　' + new Date().toLocaleTimeString('ja-JP');
+  loadStatus();
+}
+function openSyncSettings(){
+  const label = {nippo:'日報',zaiko:'在庫',genka:'原価',tanka:'単価'};
+  const last = OtakeSync.apps.map(a=>{ const t=OtakeSync.lastSync(a); return label[a]+'：'+(t?new Date(t).toLocaleString('ja-JP'):'まだ'); }).join('<br>');
+  const html = `<div id="sync-settings" style="position:fixed;inset:0;background:#000a;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px" onclick="this.remove()">
+    <div style="background:#1e1e1a;border:1px solid #333;border-radius:14px;padding:16px;max-width:420px;width:100%;color:#e8d5a3;font-size:12px;line-height:1.7" onclick="event.stopPropagation()">
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px">同期の設定</div>
+      <div style="color:#999;margin-bottom:10px">最後の同期<br>${last}</div>
+      <button style="width:100%;margin:4px 0;padding:10px;border-radius:9px;border:1px solid #5a3a10;background:#2a1a0a;color:#f0a030;font-weight:700" onclick="authAll()">この端末の内容でシートを合わせる<br><span style="font-weight:400;font-size:10px">移行のとき、データがいちばんそろっている端末（PC）で1回だけ</span></button>
+      <button style="width:100%;margin:4px 0;padding:10px;border-radius:9px;border:1px solid #444;background:#222;color:#ccc" onclick="OtakeSync.resetToken()">合言葉を入れ直す</button>
+    </div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+async function authAll(){
+  if(!confirm('この端末の日報・在庫・原価・単価を「正」として、スプレッドシートを合わせます。\n\nこの端末にない記録は、シートと他の端末からも削除されます。\n移行のとき、データがいちばんそろっている端末で1回だけ実行してください。\n\n実行しますか？')) return;
+  const label = {nippo:'日報',zaiko:'在庫',genka:'原価',tanka:'単価'};
+  const res=[];
+  for(const a of OtakeSync.apps){ try{ await OtakeSync.makeAuthoritative(a); res.push('✅ '+label[a]); }catch(e){ res.push('❌ '+label[a]); } }
+  document.getElementById('sync-settings')?.remove();
+  alert('完了：'+res.join(' '));
+  loadStatus();
+}
 </script>
 </body>
 </html>

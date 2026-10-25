@@ -277,6 +277,20 @@ body{font-family:'Noto Sans JP',sans-serif;background:#111110;min-height:100vh;d
 .kouji-est-plan{color:#666}
 .kouji-est-diff.plus{color:#e87050;font-size:10px}
 .kouji-est-diff.minus{color:#70c870;font-size:10px}
+
+/* 作業・時間（任意） */
+.task-row{background:#161614;border:1px solid #2e2e28;border-radius:9px;padding:8px 10px;margin-bottom:6px}
+.task-top{display:flex;align-items:center;gap:6px}
+.task-name{flex:1;min-width:0;background:transparent;border:none;border-bottom:1px solid #3a3a30;color:#e8d5a3;font-size:12px;outline:none;font-family:inherit;padding:3px 0}
+.task-del{background:none;border:none;color:#555;font-size:14px;cursor:pointer;padding:2px 4px}
+.task-bottom{display:flex;align-items:center;gap:5px;margin-top:6px}
+.task-time{width:84px;background:#1a1a18;border:1px solid #2e2e28;border-radius:6px;color:#70d0c8;font-size:11px;outline:none;font-family:inherit;padding:4px 5px;color-scheme:dark}
+.task-hours{width:46px;background:#1a1a18;border:1px solid #2e2e28;border-radius:6px;color:#e8b050;font-size:11px;font-weight:700;text-align:right;outline:none;font-family:inherit;padding:4px 5px}
+.task-sep{color:#555;font-size:10px}
+.task-total{color:#70d0c8;font-size:11px;font-weight:700;text-align:right;margin:-2px 0 9px}
+.chip-time{background:#1a2e2c;color:#70d0c8}
+.draft-banner{background:#1a2a2a;border:1px solid #2a4a48;border-radius:9px;padding:9px 11px;margin-bottom:10px;color:#9ad8d0;font-size:10px;line-height:1.6}
+.draft-banner.warn{background:#2a1a10;border-color:#4a2a10;color:#e8a070}
 </style>
 </head>
 <body>
@@ -350,7 +364,7 @@ const KOUJI_TYPES = [
   // プライベート
   {id:'priv_kyuyo',   label:'休養',     icon:'😴', cat:'プライベート'},
   {id:'priv_kenkyu',  label:'学習・研究',icon:'📚', cat:'プライベート'},
-  {id:'priv_kensetsu',label:'自宅・家族',icon:'🏠', cat:'プライベート'},
+  {id:'priv_kensetsu',label:'自宅・家族',icon:'🏡', cat:'プライベート'},
   {id:'priv_other',   label:'その他',   icon:'🌿', cat:'プライベート'},
   // 打合せ
   {id:'mtg_uchiawase',label:'打合せ',   icon:'🤝', cat:'打合せ'},
@@ -358,23 +372,19 @@ const KOUJI_TYPES = [
   {id:'mtg_other',    label:'その他',   icon:'💬', cat:'打合せ'},
 ];
 
-function uid(prefix){
-  return prefix+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
-}
 function save(){
   localStorage.setItem('nip_nippos', JSON.stringify(nippos));
   localStorage.setItem('nip_workers', JSON.stringify(workers));
   localStorage.setItem('nip_jobs', JSON.stringify(jobs));
 }
 
-function today(){
-  // toISOString()はUTCを返すため、JST(UTC+9)の朝9時前に前日になるバグを修正
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
+// 端末の現地日付（日本時間）で今日を返す。toISOString()だと朝9時前に前日になるため
+function today(){ return localDateStr(new Date()); }
+// 重複しにくいID（2台で同時に作っても重ならない）
+function uid(prefix){
+  return prefix+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
 }
+function localDateStr(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ========== 在庫PWAとの連携 ==========
@@ -662,6 +672,9 @@ function renderHome(){
       <button onclick="switchTab('分析')" style="background:#1a2a3a;color:#70a8e8;border:1px solid #2a3a4a;border-radius:11px;padding:14px 8px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:4px">
         <span style="font-size:22px">📊</span><span style="font-size:11px;font-weight:700">分析を見る</span><span style="font-size:9px;opacity:.7">人工・工種集計</span>
       </button>
+      <button onclick="openPasteImport()" style="grid-column:1 / -1;background:#1a2e2c;color:#70d0c8;border:1px solid #2a4a48;border-radius:11px;padding:12px 8px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
+        <span style="font-size:20px">📥</span><span style="text-align:left"><span style="font-size:12px;font-weight:700;display:block">貼り付けて取り込む</span><span style="font-size:9px;opacity:.75">Claudeが整えた日報をそのまま入力</span></span>
+      </button>
     </div>`;
 
   return `
@@ -696,6 +709,12 @@ function nippoCardHtml(n, compact=false){
     return `<span class="nippo-chip chip-kouji">${kt?.icon||''} ${kt?.label||k}</span>`;
   }).join('');
   const matCount = (n.materials||[]).filter(m=>parseFloat(m.qty)>0).length;
+  const {tasks, rest: memoRest} = getNippoTasks(n);
+  const hours = tasksTotalHours(tasks);
+  const timeChip = hours>0 ? `<span class="nippo-chip chip-time">⏱ ${fmtHours(hours)}h</span>` : '';
+  const taskLine = tasks.length>0
+    ? `<div style="color:#b8b8a0;font-size:10px;margin-top:6px;line-height:1.6">🔨 ${tasks.map(t=>esc(t.name)+(t.hours>0?` <span style="color:#70d0c8">${fmtHours(t.hours)}h</span>`:'')).join('　')}</div>`
+    : '';
   return `
     <div class="nippo-card" onclick="showNippoDetail('${n.id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -709,8 +728,9 @@ function nippoCardHtml(n, compact=false){
           <div style="color:#555;font-size:9px">人工</div>
         </div>
       </div>
-      <div class="nippo-chips">${workerChips}${koujiChips}${matCount>0?`<span class="nippo-chip chip-zairyo">🪵 材料 ${matCount}品目</span>`:''}</div>
-      ${n.memo?`<div style="color:#666;font-size:10px;margin-top:6px;padding-top:6px;border-top:1px solid #2e2e28">📝 ${esc(n.memo)}</div>`:''}
+      <div class="nippo-chips">${workerChips}${koujiChips}${timeChip}${matCount>0?`<span class="nippo-chip chip-zairyo">🪵 材料 ${matCount}品目</span>`:''}</div>
+      ${taskLine}
+      ${memoRest?`<div style="color:#666;font-size:10px;margin-top:6px;padding-top:6px;border-top:1px solid #2e2e28;white-space:pre-line">📝 ${esc(memoRest)}</div>`:''}
     </div>`;
 }
 
@@ -731,7 +751,9 @@ function renderNippoList(){
     : filtered.map(n=>nippoCardHtml(n)).join('');
 
   return `
-    <div style="padding:8px 12px 2px"><div class="period-btns">${periodBtns}</div></div>
+    <div style="padding:8px 12px 2px"><div class="period-btns">${periodBtns}</div>
+      <button class="btn-sm" style="width:100%;padding:8px;background:#1a2e2c;color:#70d0c8;border:1px solid #2a4a48;margin-bottom:4px" onclick="openPasteImport()">📥 貼り付けて取り込む</button>
+    </div>
     <div style="padding:4px 14px 4px;display:flex;justify-content:space-between;align-items:center">
       <div style="color:#444;font-size:9px;font-weight:700;letter-spacing:2px">${filtered.length}件</div>
       <div style="color:#c8962a;font-size:11px;font-weight:700">合計 ${totalNinku.toFixed(1)} 人工</div>
@@ -878,8 +900,8 @@ function renderMaster(){
       <div class="data-card">
         <div class="data-card-title">🛠️ データ管理</div>
         <div class="data-btn-row">
-          <button class="data-btn" style="background:#1a3a2a;color:#70c870;border:1px solid #2a4a3a" onclick="saveToGoogleDrive()">☁️ スプレッドシートに同期（追記・安全）</button>
-          <button class="data-btn" style="background:#2a1a0a;color:#f0a030;border:1px solid #5a3a10" onclick="saveWithOverwrite()">⚠️ 削除を反映して同期（自動バックアップ付き）</button>
+          <button class="data-btn" style="background:#1a3a2a;color:#70c870;border:1px solid #2a4a3a" onclick="saveToGoogleDrive()">☁️ 今すぐ同期（スマホ・PCと共通）</button>
+          <button class="data-btn" style="background:#2a1a0a;color:#f0a030;border:1px solid #5a3a10" onclick="saveWithOverwrite()">⚠️ この端末の内容でシートを合わせる（移行時に1回だけ）</button>
           <button class="data-btn" style="background:#1a3a2a;color:#70e8a0;border:1px solid #2a4a3a" onclick="loadFromSheetManual()">🔄 スプレッドシートから読み込む</button>
           <button class="data-btn blue" onclick="importBackupJSON()">📂 バックアップから復元</button>
           <button class="data-btn" style="background:#2a1a3a;color:#e8b050;border:1px solid #4a3a10" onclick="removeDuplicateNippos()">🔄 重複日報を削除（同じIDを統合）</button>
@@ -896,9 +918,12 @@ function openNewNippo(preDate){
   openNippoModal(null, d);
 }
 
-function openNippoModal(nippoId, preDate){
-  const n = nippoId ? nippos.find(x=>x.id===nippoId) : null;
+function openNippoModal(nippoId, preDate, draft, draftNote){
+  // draft: 貼り付け取り込みで作った下書き（未保存）。既存日報の編集とは別扱い
+  const n = nippoId ? nippos.find(x=>x.id===nippoId) : (draft || null);
+  window._draftMode = !!draft;
   const date = n?.date || preDate || today();
+  const {tasks: initTasks, rest: initMemo} = getNippoTasks(n||{});
 
   // 作業者チェックボックス
   const workerInputs = workers.map(w=>{
@@ -927,16 +952,22 @@ function openNippoModal(nippoId, preDate){
     : '<option value="">在庫PWAを先に開いてください</option>';
 
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
-    <div class="sheet-title">📝 日報入力</div>
-    <div class="sheet-desc">作業内容・人工・材料を記録します</div>
+    <div class="sheet-title">${draft?'📥 取り込み内容の確認':'📝 日報入力'}</div>
+    <div class="sheet-desc">${draft?'内容を確認して「保存する」を押してください':'作業内容・人工・材料を記録します'}</div>
+    ${draftNote||''}
 
     <label class="form-label">作業日</label>
-    <input class="form-input" type="date" id="nip-date" value="${date}"/>
+    <input class="form-input" type="date" id="nip-date" value="${esc(date)}"/>
 
     <label class="form-label">工事名（マスタから選択 or 直接入力）</label>
     <select class="form-select" id="nip-job-sel" onchange="onJobSelChange()">${jobOpts}</select>
-    <input class="form-input" type="text" id="nip-job-name" placeholder="工事名を入力" value="${n?.jobName||''}" style="${!n?.jobCode&&n?.jobName?'':'display:none'}"/>
-    <input class="form-input" type="text" id="nip-job-code" placeholder="工事コード（例: 2025-001）" value="${n?.jobCode||''}" style="display:none"/>
+    <input class="form-input" type="text" id="nip-job-name" placeholder="工事名を入力" value="${esc(n?.jobName||'')}" style="${!n?.jobCode&&n?.jobName?'':'display:none'}"/>
+    <input class="form-input" type="text" id="nip-job-code" placeholder="工事コード（例: 2025-001）" value="${esc(n?.jobCode||'')}" style="display:none"/>
+
+    <label class="form-label">作業内容・時間（時間は任意）</label>
+    <div id="task-list">${initTasks.map(taskRowHtml).join('')}</div>
+    <button class="btn-sm" style="width:100%;margin-bottom:6px;padding:8px" onclick="addTaskRow()">＋ 作業を追加</button>
+    <div class="task-total" id="task-total"></div>
 
     <label class="form-label">工種（複数選択可）</label>
     <div id="kouji-grid">
@@ -985,7 +1016,7 @@ function openNippoModal(nippoId, preDate){
     </div>
 
     <label class="form-label">メモ・特記事項</label>
-    <textarea class="form-textarea" id="nip-memo" placeholder="作業内容の詳細、気づき等">${n?.memo||''}</textarea>
+    <textarea class="form-textarea" id="nip-memo" placeholder="材料・連絡・明日の予定・気づき等">${esc(initMemo)}</textarea>
 
     <div class="btn-row">
       <button class="btn-cancel" onclick="closeModalForce()">キャンセル</button>
@@ -993,10 +1024,11 @@ function openNippoModal(nippoId, preDate){
     </div>
     ${nippoId?`<button style="width:100%;margin-top:8px;background:#3a1a1a;color:#e87050;border:1px solid #4a2a2a;border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit" onclick="deleteNippo('${nippoId}')">🗑️ この日報を削除する</button>`:''}
   </div>`);
+  initMatSearch(matListId);
   // 日付フィールドをJSで確実に設定（HTMLのvalue属性だけでは反映されない場合があるため）
   const nipDateEl = document.getElementById('nip-date');
   if(nipDateEl) nipDateEl.value = date;
-  initMatSearch(matListId);
+  updateTaskTotal();
 }
 
 function matRowHtml(listId, idx, name, qty, unit, invAction, invItemId, invLocId){
@@ -1188,12 +1220,18 @@ function saveNippo(existingId, matListId){
     });
   }
 
-  const memo = document.getElementById('nip-memo')?.value.trim()||'';
+  // 作業・時間（任意）
+  const tasks = collectTasksFromForm();
+  const userMemo = document.getElementById('nip-memo')?.value.trim()||'';
+  // 作業行はメモの先頭にも書いておく（スプレッドシート・Excel側でも読めるように）
+  const workBlock = buildWorkBlock(tasks);
+  const memo = [workBlock, userMemo].filter(Boolean).join('\n\n');
 
   const record = {
     id: existingId || uid('nip'),
     date, jobCode, jobName, koujiTypes,
-    workers: workerMap, materials, memo,
+    workers: workerMap, materials, memo, tasks,
+    totalHours: tasksTotalHours(tasks),
     createdAt: existingId ? (nippos.find(x=>x.id===existingId)?.createdAt||new Date().toISOString()) : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1211,8 +1249,17 @@ function saveNippo(existingId, matListId){
   // 以前はここで在庫を直接減らしていたため、保存し直すたびに在庫が減っていた。
   // 在庫アプリを開くと、日報IDごとの差分だけが自動で反映される。
 
+  const wasDraft = window._draftMode;
   closeModalForce();
   render();
+
+  // 貼り付け取り込みで複数件ある場合は次の下書きへ
+  if(wasDraft && window._pasteQueue && window._pasteQueue.length>0){
+    setTimeout(openNextDraft, 80);
+  } else if(wasDraft){
+    window._pasteQueue = [];
+    showToast('✅ 日報を保存しました');
+  }
 }
 
 // ========== 在庫PWAへの反映 ==========
@@ -1311,6 +1358,16 @@ function showNippoDetail(nid){
     </div>`;
   }).join('');
 
+  const {tasks: dTasks, rest: memoRest} = getNippoTasks(n);
+  const taskHours = tasksTotalHours(dTasks);
+  const taskRows = dTasks.map(t=>{
+    const span = t.start&&t.end ? `${t.start}〜${t.end}` : (t.when||'');
+    return `<div class="info-row">
+      <span class="info-label">🔨 ${esc(t.name)}</span>
+      <span class="info-val" style="color:#70d0c8">${esc(span)}${t.hours>0?` ${fmtHours(t.hours)}h`:''}</span>
+    </div>`;
+  }).join('');
+
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title">📋 日報詳細</div>
     <div class="sheet-desc">${esc(n.date)}</div>
@@ -1319,8 +1376,9 @@ function showNippoDetail(nid){
     <div class="info-row"><span class="info-label">合計人工</span><span class="info-val" style="color:#c8962a;font-size:14px">${ninku.toFixed(1)} 人工</span></div>
     ${workerRows}
     ${koujiRows?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">${koujiRows}</div>`:''}
+    ${taskRows?`<div class="divider"></div><div style="color:#555;font-size:9px;padding:4px 0">作業内容${taskHours>0?`（計 ${fmtHours(taskHours)}h）`:''}</div>${taskRows}`:''}
     ${matRows?`<div class="divider"></div><div style="color:#555;font-size:9px;padding:4px 0">使用材料</div>${matRows}`:''}
-    ${n.memo?`<div class="divider"></div><div style="color:#888;font-size:11px;line-height:1.6">${esc(n.memo)}</div>`:''}
+    ${memoRest?`<div class="divider"></div><div style="color:#888;font-size:11px;line-height:1.6;white-space:pre-line">${esc(memoRest)}</div>`:''}
     <div class="btn-row" style="margin-top:14px">
       <button class="btn-cancel" onclick="closeModalForce()">閉じる</button>
       <button class="btn-confirm" style="background:#3a1a1a;color:#e87050;border:1px solid #5a2a2a" onclick="deleteNippo('${nid}')">🗑️ 削除</button>
@@ -1707,21 +1765,22 @@ function exportNippoExcel(){
     const mnips = nippos.filter(n=>{const d=new Date(n.date);return d.getFullYear()===year&&d.getMonth()===mi;}).sort((a,b)=>a.date.localeCompare(b.date));
     const rows = [
       [`大竹工務店 ${year}年${mn} 日報一覧`],[`出力日: ${now.toLocaleDateString('ja-JP')}`],[''],
-      ['作業日','工事コード','工事名','工種','合計人工',...workers.map(w=>w.name+'（人工）'),'使用材料','メモ'],
+      ['作業日','工事コード','工事名','工種','合計人工','作業時間(h)',...workers.map(w=>w.name+'（人工）'),'使用材料','メモ'],
     ];
     mnips.forEach(n=>{
       const ninku = Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0);
+      const hrs = tasksTotalHours(getNippoTasks(n).tasks);
       const koujiLabel = (n.koujiTypes||[]).map(k=>KOUJI_TYPES.find(x=>x.id===k)?.label||k).join('・');
       const matLabel = (n.materials||[]).filter(m=>parseFloat(m.qty)>0).map(m=>`${m.name}×${m.qty}`).join('、');
       rows.push([
         n.date, n.jobCode||'', n.jobName||'',
-        koujiLabel, ninku,
+        koujiLabel, ninku, hrs>0?hrs:'',
         ...workers.map(w=>parseFloat(n.workers?.[w.id])||0),
         matLabel, n.memo||''
       ]);
     });
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols']=[{wch:10},{wch:10},{wch:20},{wch:20},{wch:8},...workers.map(()=>({wch:10})),{wch:30},{wch:30}];
+    ws['!cols']=[{wch:10},{wch:10},{wch:20},{wch:20},{wch:8},{wch:10},...workers.map(()=>({wch:10})),{wch:30},{wch:40}];
     XLSX.utils.book_append_sheet(wb, ws, `${year}年${mn}`);
   });
 
@@ -1829,6 +1888,296 @@ function doReset(){
   nippos=[];jobs=[];save();closeModalForce();render();
 }
 
+// ========== 作業・時間（任意） ==========
+function fmtHours(h){ return String(Math.round((parseFloat(h)||0)*100)/100); }
+function tasksTotalHours(tasks){ return (tasks||[]).reduce((s,t)=>s+(parseFloat(t.hours)||0),0); }
+function padTime(h,m){ return `${String(parseInt(h,10)).padStart(2,'0')}:${String(parseInt(m||0,10)).padStart(2,'0')}`; }
+function hoursBetween(start,end){
+  if(!start||!end) return 0;
+  const [sh,sm]=start.split(':').map(Number), [eh,em]=end.split(':').map(Number);
+  const diff=(eh*60+em)-(sh*60+sm);
+  return diff>0 ? Math.round(diff/60*100)/100 : 0;
+}
+
+// メモ先頭の「【作業】」ブロック ⇔ tasks の変換
+function taskToLine(t){
+  const span = t.start&&t.end ? ` ${t.start.replace(/^0/,'')}〜${t.end.replace(/^0/,'')}` : '';
+  const hrs  = t.hours>0 ? `（${fmtHours(t.hours)}h）` : (t.when?`（${t.when}）`:'');
+  return `・${t.name}${span}${hrs}`;
+}
+function buildWorkBlock(tasks){
+  if(!tasks||tasks.length===0) return '';
+  const lines = ['【作業】', ...tasks.map(taskToLine)];
+  const total = tasksTotalHours(tasks);
+  if(total>0 && tasks.filter(t=>t.hours>0).length>1) lines.push(`　計 ${fmtHours(total)}h`);
+  return lines.join('\n');
+}
+function splitMemo(memo){
+  const text = String(memo||'');
+  if(!text.startsWith('【作業】')) return {tasks:[], rest:text};
+  const parts = text.split(/\n\s*\n/);
+  const block = parts.shift();
+  const tasks = block.split('\n').slice(1)
+    .map(l=>l.trim()).filter(l=>l && !/^計\s*[\d.]+\s*h/i.test(l))
+    .map(l=>parseTaskLine(l.replace(/^[・\-\*•●]\s*/,''))).filter(t=>t.name);
+  return {tasks, rest: parts.join('\n\n').trim()};
+}
+// 日報から作業一覧と「作業ブロックを除いたメモ」を取り出す
+function getNippoTasks(n){
+  const {tasks: memoTasks, rest} = splitMemo(n?.memo);
+  const tasks = Array.isArray(n?.tasks) && n.tasks.length>0 ? n.tasks : memoTasks;
+  return {tasks, rest};
+}
+
+function taskRowHtml(t){
+  t = t || {};
+  return `<div class="task-row">
+    <div class="task-top">
+      <input class="task-name" type="text" placeholder="作業名（例: 床下地）" value="${esc(t.name||'')}"/>
+      <button class="task-del" onclick="this.closest('.task-row').remove();updateTaskTotal()">✕</button>
+    </div>
+    <div class="task-bottom">
+      <span class="task-sep">⏱</span>
+      <input class="task-time task-start" type="time" value="${esc(t.start||'')}" onchange="onTaskTimeChange(this)"/>
+      <span class="task-sep">〜</span>
+      <input class="task-time task-end" type="time" value="${esc(t.end||'')}" onchange="onTaskTimeChange(this)"/>
+      <input class="task-hours" type="number" step="0.25" min="0" placeholder="—" value="${t.hours>0?t.hours:''}" oninput="updateTaskTotal()"/>
+      <span class="task-sep">h</span>
+    </div>
+    <input type="hidden" class="task-when" value="${esc(t.when||'')}"/>
+  </div>`;
+}
+function addTaskRow(){
+  const list = document.getElementById('task-list');
+  if(!list) return;
+  const div = document.createElement('div');
+  div.innerHTML = taskRowHtml({});
+  list.appendChild(div.firstElementChild);
+  list.lastElementChild.querySelector('.task-name')?.focus();
+}
+function onTaskTimeChange(el){
+  const row = el.closest('.task-row');
+  const s = row.querySelector('.task-start').value, e = row.querySelector('.task-end').value;
+  const h = hoursBetween(s,e);
+  if(h>0) row.querySelector('.task-hours').value = h;
+  updateTaskTotal();
+}
+function updateTaskTotal(){
+  const el = document.getElementById('task-total');
+  if(!el) return;
+  const total = collectTasksFromForm().reduce((s,t)=>s+(t.hours||0),0);
+  el.textContent = total>0 ? `作業時間 計 ${fmtHours(total)}h` : '';
+}
+function collectTasksFromForm(){
+  return [...document.querySelectorAll('#task-list .task-row')].map(row=>{
+    const name  = row.querySelector('.task-name')?.value.trim()||'';
+    const start = row.querySelector('.task-start')?.value||'';
+    const end   = row.querySelector('.task-end')?.value||'';
+    let hours   = parseFloat(row.querySelector('.task-hours')?.value)||0;
+    if(!hours && start && end) hours = hoursBetween(start,end);
+    const when  = row.querySelector('.task-when')?.value||'';
+    return {name, start, end, hours, when};
+  }).filter(t=>t.name);
+}
+
+// ========== 貼り付け取り込み ==========
+// 例）
+// 【9/29（火）】田中様邸
+// ・床下地 8:00〜12:00（4h）
+// ・合板張り（4h）
+// 【材料】ビス不足
+// 【明日】2階壁下地
+function parseJpDate(s){
+  s = String(s||'');
+  if(/今日|本日/.test(s)) return today();
+  if(/昨日/.test(s)){ const d=new Date(); d.setDate(d.getDate()-1); return localDateStr(d); }
+  const m = s.match(/(?:(\d{4})\s*[\/\-年.]\s*)?(\d{1,2})\s*[\/月.]\s*(\d{1,2})\s*日?/);
+  if(!m) return null;
+  const mo=parseInt(m[2],10), da=parseInt(m[3],10);
+  if(mo<1||mo>12||da<1||da>31) return null;
+  const now=new Date();
+  let y = m[1] ? parseInt(m[1],10) : now.getFullYear();
+  // 年が書いてなくて未来すぎる日付（例: 1月に12/28と書いた）は前年扱い
+  if(!m[1] && new Date(y,mo-1,da) - now > 30*86400000) y--;
+  return localDateStr(new Date(y,mo-1,da));
+}
+
+function parseTaskLine(s){
+  let name = String(s||'').trim(), start='', end='', hours=0, when='';
+  // 時刻の範囲: 8:00〜12:00 / 8時〜12時半 / 8時から12時まで
+  const T = '(\\d{1,2})(?:[:：](\\d{2})|時(?:(\\d{1,2})分|(半))?)';
+  const rangeRe = new RegExp(T+'\\s*(?:[〜~～\\-－ー]|から)\\s*'+T+'(?:\\s*まで)?');
+  const r = name.match(rangeRe);
+  if(r){
+    const sm = r[2]||r[3]||(r[4]?'30':'0'), em = r[6]||r[7]||(r[8]?'30':'0');
+    start = padTime(r[1], sm); end = padTime(r[5], em);
+    name = name.replace(r[0],' ');
+    hours = hoursBetween(start,end);
+  }
+  // 時間数: （4h） / 4時間 / 3.5h
+  const h = name.match(/[（(]?\s*(\d+(?:\.\d+)?)\s*(?:h|H|ｈ|時間)\s*[)）]?/);
+  if(h){ hours = parseFloat(h[1])||hours; name = name.replace(h[0],' '); }
+  // 午前・午後など
+  const w = name.match(/[（(]?\s*(午前中?|午後|終日|半日|一日|1日)\s*[)）]?(?:は|に)?/);
+  if(w && (r||h||/[（(]/.test(w[0]))){ when = w[1]; name = name.replace(w[0],' '); }
+  else if(w && !r && !h){ when = w[1]; name = name.replace(w[0],' '); }
+  name = name.replace(/[（(]\s*[)）]/g,'').replace(/[\s　]+/g,' ').replace(/^[、,。\s]+|[、,。\s]+$/g,'').trim();
+  return {name, start, end, hours, when};
+}
+
+const KOUJI_KEYWORDS = [
+  ['mtg_uchiawase', /打合せ|打ち合わせ|打合わせ|相談|施主様?と/],
+  ['mtg_presen',    /プレゼン|提案/],
+  ['jimu_shoruikeirens', /書類|見積|請求|図面|申請|領収/],
+  ['jimu_hacchu',   /発注|手配|注文|仕入/],
+  ['kaitai',        /解体|撤去|はつり|斫り/],
+  ['kiso',          /基礎/],
+  ['yane',          /屋根|ルーフィング|瓦|板金/],
+  ['gaiheki',       /外壁|サイディング|透湿/],
+  ['sakan',         /左官|モルタル/],
+  ['tosou',         /塗装|塗り/],
+  ['tobi',          /足場|土工|掘削/],
+  ['haikan',        /配管|給水|排水|水道/],
+  ['denki',         /電気|配線/],
+  ['sash',          /サッシ|建具|ドア|窓/],
+  ['naibu',         /クロス|内装|仕上げ|クッションフロア|CF/],
+  ['mokuko',        /大工|木工|下地|床|壁|天井|合板|造作|根太|梁|柱|土台|刻み|建方|上棟|断熱|ボード|垂木|胴縁|野地|補強/],
+];
+function guessKouji(texts){
+  const t = texts.join(' ');
+  return KOUJI_KEYWORDS.filter(([,re])=>re.test(t)).map(([id])=>id).filter(id=>KOUJI_TYPES.some(k=>k.id===id));
+}
+
+function matchJob(site){
+  if(!site) return null;
+  const norm = s=>String(s||'').replace(/[\s　]/g,'').replace(/様邸|様宅|様|邸|宅|新築|リフォーム|改修|工事|現場/g,'');
+  const exact = jobs.find(j=>j.name===site);
+  if(exact) return exact;
+  const ns = norm(site);
+  if(!ns) return null;
+  const order = {active:0, plan:1, done:2};
+  const hits = jobs.filter(j=>{ const nj=norm(j.name); return nj && (nj.includes(ns)||ns.includes(nj)); })
+    .sort((a,b)=>(order[a.status||'active']||0)-(order[b.status||'active']||0));
+  return hits[0]||null;
+}
+
+function parseNippoText(raw){
+  const text = String(raw||'').replace(/\r/g,'').replace(/```[a-z]*/g,'');
+  const blocks = [];
+  let cur = null, section = 'work';
+  const newBlock = (date, site)=>{
+    cur = {date: date||today(), site: site||'', tasks:[], sec:{材料:[],連絡:[],明日:[],その他:[]}};
+    blocks.push(cur); section = 'work';
+  };
+  const ensure = ()=>{ if(!cur) newBlock(today(),''); };
+  const add = (key, body)=>{
+    if(!body) return;
+    if(key==='work'){ const t=parseTaskLine(body); if(t.name) cur.tasks.push(t); }
+    else cur.sec[key].push(body);
+  };
+
+  text.split('\n').forEach(line=>{
+    const t = line.trim();
+    if(!t) return;
+    const hm = t.match(/^【\s*([^】]*)】\s*(.*)$/);
+    if(hm){
+      const label = hm[1].trim(), rest = hm[2].trim();
+      const labelDate = parseJpDate(label);
+      if(labelDate && !/材料|明日|予定/.test(label)){ newBlock(labelDate, rest); return; }
+      if(/日付/.test(label)){ newBlock(parseJpDate(rest)||today(), ''); return; }
+      ensure();
+      if(/現場/.test(label)){ if(!cur.site) cur.site = rest; else newBlock(cur.date, rest); section='work'; return; }
+      section = /材料/.test(label)?'材料' : /明日|予定/.test(label)?'明日' : /連絡|気づき|メモ|特記/.test(label)?'連絡'
+              : /作業|進捗/.test(label)?'work' : 'その他';
+      if(/進捗|作業者|作業時間|天気/.test(label)){ cur.sec.その他.push(`${label}: ${rest}`); section = /進捗/.test(label)?'その他':section; return; }
+      add(section, rest.replace(/^[・\-\*•●]\s*/,''));
+      return;
+    }
+    ensure();
+    if(/^計\s*[\d.]+\s*(h|時間)/i.test(t) || /^合計/.test(t)) return;
+    add(section, t.replace(/^[・\-\*•●◯○]\s*/,''));
+  });
+
+  return blocks.filter(b=>b.tasks.length>0 || Object.values(b.sec).some(a=>a.length>0) || b.site).map(b=>{
+    const job = matchJob(b.site);
+    const memoParts = [];
+    if(b.sec.材料.length) memoParts.push('【材料】\n'+b.sec.材料.join('\n'));
+    if(b.sec.連絡.length) memoParts.push('【連絡・気づき】\n'+b.sec.連絡.join('\n'));
+    if(b.sec.明日.length) memoParts.push('【明日】\n'+b.sec.明日.join('\n'));
+    if(b.sec.その他.length) memoParts.push(b.sec.その他.join('\n'));
+    // 人工は仮入力（1人目の作業者に1.0。確認画面で直せる）
+    const ninku = 1;
+    const w0 = workers[0];
+    return {
+      date: b.date,
+      jobCode: job ? job.id : '',
+      jobName: job ? job.name : b.site,
+      site: b.site,
+      jobMatched: !!job,
+      koujiTypes: guessKouji([...b.tasks.map(t=>t.name), b.site]),
+      workers: w0 ? {[w0.id]: ninku} : {},
+      materials: [],
+      tasks: b.tasks,
+      memo: memoParts.join('\n\n'),
+    };
+  });
+}
+
+function openPasteImport(){
+  window._pasteQueue = [];
+  showModal(`<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-title">📥 貼り付けて取り込む</div>
+    <div class="sheet-desc">Claudeが整えた日報をそのまま貼り付けてください。<br>時間は書いてあるときだけ取り込みます。保存前に確認画面が出ます。</div>
+    <button class="btn-sm" style="width:100%;margin-bottom:8px;padding:10px;background:#1a2e2c;color:#70d0c8;border:1px solid #2a4a48" onclick="pasteFromClipboard()">📋 コピーした内容を貼り付け</button>
+    <textarea class="form-textarea" id="paste-text" style="min-height:200px;font-size:13px;line-height:1.6" placeholder="【9/29（火）】田中様邸&#10;・床下地 8:00〜12:00（4h）&#10;・合板張り&#10;【明日】2階壁下地"></textarea>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModalForce()">キャンセル</button>
+      <button class="btn-confirm gold" onclick="runPasteImport()">読み取る</button>
+    </div>
+  </div>`);
+}
+async function pasteFromClipboard(){
+  try{
+    const txt = await navigator.clipboard.readText();
+    const ta = document.getElementById('paste-text');
+    if(ta && txt){ ta.value = txt; }
+    else alert('クリップボードが空です');
+  }catch(e){
+    alert('自動で貼り付けできませんでした。\n下の欄を長押しして「ペースト」してください。');
+    document.getElementById('paste-text')?.focus();
+  }
+}
+function runPasteImport(){
+  const txt = document.getElementById('paste-text')?.value||'';
+  const drafts = parseNippoText(txt);
+  if(drafts.length===0){ alert('日報の内容が読み取れませんでした'); return; }
+  window._pasteQueue = drafts.map((d,i)=>({...d, _idx:i+1, _total:drafts.length}));
+  closeModalForce();
+  openNextDraft();
+}
+function openNextDraft(){
+  const d = (window._pasteQueue||[]).shift();
+  if(!d) return;
+  const notes = [];
+  if(d._total>1) notes.push(`<b>${d._idx} / ${d._total} 件目</b>`);
+  const w0 = workers[0];
+  if(w0) notes.push(`人工は仮に「${esc(w0.name)} ${Object.values(d.workers)[0]}人工」を入れています。必要なら直してください。`);
+  if(d.site && !d.jobMatched) notes.push(`「${esc(d.site)}」は工事台帳に見つからなかったので、工事名を直接入力にしています。`);
+  if(d.koujiTypes.length===0) notes.push('工種は自動で判定できませんでした。選んでください。');
+  let html = `<div class="draft-banner">${notes.join('<br>')}</div>`;
+  const dup = nippos.some(n=>String(n.date||'').slice(0,10)===d.date && (n.jobName||'')===(d.jobName||''));
+  if(dup) html += `<div class="draft-banner warn">⚠️ ${esc(d.date)} の「${esc(d.jobName||'')}」の日報がすでにあります。二重登録に注意してください。</div>`;
+  openNippoModal(null, d.date, d, html);
+}
+
+function showToast(msg){
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#2a4a2a;color:#e8ffe8;padding:10px 18px;border-radius:20px;font-size:12px;font-weight:700;z-index:200;box-shadow:0 4px 14px #0008';
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2200);
+}
+
 // ========== モーダル共通 ==========
 function showModal(html){document.getElementById('modal-container').innerHTML=`<div class="overlay" id="modal-overlay" onclick="closeModal(event)">${html}</div>`;}
 function closeModal(e){if(!e||e.target.id==='modal-overlay')closeModalForce();}
@@ -1880,50 +2229,26 @@ function setupPWA(){
 setupPWA();
 
 
-// ===== 起動時スプレッドシートから読み込み（マージ方式） =====
-// アプリ側のデータを上書きしないよう、IDベースでマージする
+// ===== 起動時スプレッドシートから読み込み =====
 async function loadFromSheet(){
   try{
     const res = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
     const data = await res.json();
     if(data.status==='ok'){
-      let merged = false;
-
-      // 日報：IDが存在しないものだけ追加（上書きしない）
       if(data.nippos&&data.nippos.length>0){
-        const existingIds = new Set(nippos.map(n=>n.id));
-        const newOnes = data.nippos.filter(n=>!existingIds.has(n.id));
-        if(newOnes.length>0){
-          nippos = [...nippos, ...newOnes];
-          nippos.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-          localStorage.setItem('nip_nippos',JSON.stringify(nippos));
-          merged = true;
-        }
+        nippos=data.nippos;
+        localStorage.setItem('nip_nippos',JSON.stringify(nippos));
       }
-
-      // 工事台帳：IDが存在しないものだけ追加
       if(data.jobs&&data.jobs.length>0){
-        const existingJobIds = new Set(jobs.map(j=>j.id));
-        const newJobs = data.jobs.filter(j=>!existingJobIds.has(j.id));
-        if(newJobs.length>0){
-          jobs = [...jobs, ...newJobs];
-          localStorage.setItem('nip_jobs',JSON.stringify(jobs));
-          merged = true;
-        }
+        jobs=data.jobs;
+        localStorage.setItem('nip_jobs',JSON.stringify(jobs));
       }
-
-      // 作業者：ローカルが初期値のみなら上書き、そうでなければスキップ
-      if(data.workers&&data.workers.length>0 && workers.length<=3){
-        const isDefault = workers.every(w=>['w1','w2','w3'].includes(w.id));
-        if(isDefault){
-          workers = data.workers;
-          localStorage.setItem('nip_workers',JSON.stringify(workers));
-          merged = true;
-        }
+      if(data.workers&&data.workers.length>0){
+        workers=data.workers;
+        localStorage.setItem('nip_workers',JSON.stringify(workers));
       }
-
-      if(merged) render();
-      console.log('日報データをスプレッドシートからマージしました');
+      render();
+      console.log('日報データをスプレッドシートから読み込みました');
     }
   }catch(e){
     console.log('スプレッドシート読み込みエラー:',e);
@@ -1940,36 +2265,20 @@ async function saveWithOverwrite(){
     jobs:    jobs,
     workers: workers
   };
-  const origText2 = btn ? btn.textContent : '';
-  try{
-    await fetch(GAS_URL, {
-      method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(data)
-    });
-    if(btn) btn.textContent='⏳ 確認中...';
-    await new Promise(r=>setTimeout(r,2000));
-    try{
-      const check = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
-      const result = await check.json();
-      if(result.status==='ok'){
-        const sheetCount = result.nippos?.length || 0;
-        showToast(`✅ 削除反映同期完了！\nシート: ${sheetCount}件 / アプリ: ${nippos.length}件\nDriveにバックアップ保存済み`,'green');
-      } else {
-        showToast('⚠️ 送信しましたが確認できませんでした','gold');
-      }
-    }catch(e2){
-      showToast('⚠️ 送信済み（通信確認エラー）','gold');
-    }
-  }catch(err){
-    showToast('❌ エラー: '+err.message,'red');
-  }finally{
-    if(btn){ btn.textContent=origText2; btn.disabled=false; }
-  }
+  fetch(GAS_URL, {
+    method:'POST', mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(()=>{
+    if(btn){ btn.textContent='⚠️ 削除を反映して同期（自動バックアップ付き）'; btn.disabled=false; }
+    alert('✅ 完了\n削除を反映して同期しました。\nDriveの「大竹工務店_バックアップ」に\nバックアップが保存されました。');
+  }).catch(err=>{
+    if(btn){ btn.textContent='⚠️ 削除を反映して同期（自動バックアップ付き）'; btn.disabled=false; }
+    alert('❌ エラー: '+err.message);
+  });
 }
 
-// ===== GASから手動読み込み（マージ方式） =====
-// 完全上書きではなく、IDベースでマージして既存データを保護する
+// ===== GASから手動読み込み =====
 async function loadFromSheetManual(){
   const btn = document.querySelector('[onclick="loadFromSheetManual()"]');
   if(btn){ btn.textContent = '🔄 読み込み中...'; btn.disabled = true; }
@@ -1977,45 +2286,20 @@ async function loadFromSheetManual(){
     const res = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
     const data = await res.json();
     if(data.status==='ok'){
-      let addedNippo = 0, addedJob = 0;
-
-      // 日報：IDが存在しないものだけ追加（既存を上書きしない）
       if(data.nippos&&data.nippos.length>0){
-        const existingIds = new Set(nippos.map(n=>n.id));
-        const newOnes = data.nippos.filter(n=>!existingIds.has(n.id));
-        addedNippo = newOnes.length;
-        if(newOnes.length>0){
-          nippos = [...nippos, ...newOnes];
-          nippos.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-          localStorage.setItem('nip_nippos',JSON.stringify(nippos));
-        }
+        nippos=data.nippos;
+        localStorage.setItem('nip_nippos',JSON.stringify(nippos));
       }
-
-      // 工事台帳：IDが存在しないものだけ追加
       if(data.jobs&&data.jobs.length>0){
-        const existingJobIds = new Set(jobs.map(j=>j.id));
-        const newJobs = data.jobs.filter(j=>!existingJobIds.has(j.id));
-        addedJob = newJobs.length;
-        if(newJobs.length>0){
-          jobs = [...jobs, ...newJobs];
-          localStorage.setItem('nip_jobs',JSON.stringify(jobs));
-        }
+        jobs=data.jobs;
+        localStorage.setItem('nip_jobs',JSON.stringify(jobs));
       }
-
-      // 作業者：ローカルが初期値のみなら上書き
       if(data.workers&&data.workers.length>0){
-        const isDefault = workers.every(w=>['w1','w2','w3'].includes(w.id));
-        if(isDefault){
-          workers = data.workers;
-          localStorage.setItem('nip_workers',JSON.stringify(workers));
-        }
+        workers=data.workers;
+        localStorage.setItem('nip_workers',JSON.stringify(workers));
       }
-
       render();
-      const msg = addedNippo > 0 || addedJob > 0
-        ? `✅ 読み込み完了（マージ）\n新規追加: 日報 ${addedNippo}件 / 工事 ${addedJob}件\n合計: 日報 ${nippos.length}件 / 工事 ${jobs.length}件`
-        : `✅ 確認完了\n新しいデータはありませんでした\n（日報 ${nippos.length}件 / 工事 ${jobs.length}件）`;
-      alert(msg);
+      alert('✅ 読み込み完了\n日報:'+nippos.length+'件 / 工事:'+jobs.length+'件');
     } else {
       alert('❌ 読み込み失敗');
     }
@@ -2025,69 +2309,36 @@ async function loadFromSheetManual(){
     if(btn){ btn.textContent = '🔄 スプレッドシートから読み込む'; btn.disabled = false; }
   }
 }
-// ===== Googleスプレッドシート同期（追記・安全） =====
-async function saveToGoogleDrive(){
-  const btn = document.querySelector('[onclick="saveToGoogleDrive()"]');
-  const origText = btn ? btn.textContent : '';
-  if(btn){ btn.textContent='⏳ 送信中...'; btn.disabled=true; }
+// ===== Googleスプレッドシート同期 =====
+function saveToGoogleDrive(){
   const data = {
     type: 'nippo',
     nippos: nippos,
     jobs: jobs,
     workers: workers
   };
-  try{
-    // no-corsのため成功可否は直接わからない。送信後に読み込み確認する
-    await fetch(GAS_URL, {
-      method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(data)
-    });
-    // 2秒待ってからGASに確認読み込み
-    if(btn) btn.textContent='⏳ 確認中...';
-    await new Promise(r=>setTimeout(r,2000));
-    try{
-      const check = await fetch(GAS_URL+'?type=nippo',{mode:'cors'});
-      const result = await check.json();
-      if(result.status==='ok'){
-        const sheetCount = result.nippos?.length || 0;
-        showToast(`✅ 同期完了！シート: ${sheetCount}件 / アプリ: ${nippos.length}件`,'green');
-      } else {
-        showToast('⚠️ 送信しましたが確認できませんでした','gold');
-      }
-    }catch(e2){
-      showToast('⚠️ 送信済み（通信確認エラー）','gold');
-    }
-  }catch(err){
-    showToast('❌ 送信エラー: '+err.message,'red');
-  }finally{
-    if(btn){ btn.textContent=origText; btn.disabled=false; }
-  }
+  fetch(GAS_URL, {
+    method:'POST', mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(()=>{
+    alert('✅ 日報・工事台帳データをGoogleスプレッドシートに同期しました\n日報:'+nippos.length+'件 / 工事:'+jobs.length+'件');
+  }).catch(err=>{
+    alert('同期エラー: '+err.message);
+  });
 }
 
-// ===== トースト通知 =====
-function showToast(msg, color='green'){
-  const colors={green:'#1a3a1a',gold:'#3a2a10',red:'#3a1a1a'};
-  const borders={green:'#2a5a2a',gold:'#5a3a10',red:'#5a1a1a'};
-  const texts={green:'#70c870',gold:'#e8b050',red:'#e87050'};
-  const t=document.createElement('div');
-  t.style.cssText=`position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;
-    background:${colors[color]};border:1px solid ${borders[color]};border-radius:10px;
-    padding:10px 18px;color:${texts[color]};font-size:12px;font-weight:700;
-    max-width:340px;text-align:center;box-shadow:0 4px 16px #00000066;
-    animation:toastIn .2s ease;white-space:pre-line;font-family:inherit`;
-  t.textContent=msg;
-  if(!document.getElementById('toast-style')){
-    const s=document.createElement('style');
-    s.id='toast-style';
-    s.textContent='@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
-    document.head.appendChild(s);
-  }
-  document.body.appendChild(t);
-  setTimeout(()=>t.remove(),3500);
+// 起動時の読み込みは otake-sync.js が行う（他の端末の修正・削除も取り込む）
+</script>
+<script>
+// ===== 2026/10/24 同期を共通部品（otake-sync.js v2）に切り替え =====
+function loadFromSheet(){}
+function loadFromSheetManual(){ return OtakeSync.syncNow('nippo'); }
+function saveToGoogleDrive(){ return OtakeSync.syncNow('nippo'); }
+function saveWithOverwrite(){
+  if(!confirm('この端末の日報・工事台帳・作業者を「正」として、スプレッドシートを合わせます。\n\n・この端末にない日報は、シートと他の端末からも削除されます\n・移行のときに、いちばんデータがそろっている端末で1回だけ使ってください\n\n実行しますか？')) return;
+  return OtakeSync.makeAuthoritative('nippo');
 }
-
-loadFromSheet();
 </script>
 </body>
 </html>

@@ -200,7 +200,7 @@ function init(){
   const sel=document.getElementById('filter-cat');
   CATS.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
   render();
-  loadFromSheet();
+  // 起動時の読み込みは otake-sync.js が行う
 }
 function save(){localStorage.setItem(SK,JSON.stringify(items));}
 
@@ -644,6 +644,12 @@ function closeModal(){document.getElementById('modal-wrap').innerHTML='';}
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2500);}
 
 init();
+</script>
+<script>
+// ===== 2026/10/24 同期を共通部品（otake-sync.js v2）に切り替え =====
+async function loadFromSheet(){}
+async function saveToSheet(){ return OtakeSync.syncNow('tanka'); }
+async function loadFromSheetManual(){ return OtakeSync.syncNow('tanka'); }
 </script>
 </body>
 </html>
