@@ -229,6 +229,19 @@ body{font-family:'Noto Sans JP',sans-serif;background:#111110;min-height:100vh;d
 .cal-dot{width:5px;height:5px;border-radius:50%}
 .cal-dot-nippo{background:#c8962a}
 .cal-dot-missing{background:#e8705066;width:5px;height:5px;border-radius:50%}
+/* 休み（2026/10/25） */
+.cal-day.off-day{background:#2a303644}
+.cal-day.off-day .cal-day-num{color:#8a9aa8}
+.cal-off{color:#8a9aa8;font-size:9px;font-weight:700;line-height:1}
+.cal-dot-off{background:#8a9aa8}
+.nippo-card.off-card{background:#1c2024;border-color:#2e363c}
+.off-toggle{display:flex;align-items:center;gap:8px;background:#1c2024;border:1px solid #2e363c;color:#9aaab8;border-radius:9px;padding:10px 12px;margin:2px 0 10px;font-size:12px;font-weight:700;cursor:pointer}
+.off-toggle input{width:18px;height:18px;accent-color:#8a9aa8}
+.off-only{display:none;color:#8a9aa8;font-weight:400}
+.off-mode .off-only{display:inline}
+.off-mode .work-only,.off-mode #nip-job-sel,.off-mode #nip-job-name,.off-mode #nip-job-code,.off-mode .ninku-row,.off-mode .material-list,.off-mode .mat-search-wrap{display:none!important}
+.off-mode .kouji-chip:not(.priv){display:none}
+.off-mode .kouji-cat-label:not([style*="70c8a0"]){display:none}
 .cal-legend{display:flex;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid #2e2e28;flex-wrap:wrap}
 .cal-legend-item{display:flex;align-items:center;gap:4px;font-size:9px;color:#666}
 
@@ -405,8 +418,14 @@ function trySyncInventory(){
 }
 
 // ========== 集計ユーティリティ ==========
+// 休みの日（kind:'off'）は記録として残すが、人工・件数・工事の集計には入れない（2026/10/25）
+function isOff(n){ return !!n && n.kind==='off'; }
+function workNippos(){ return nippos.filter(n=>!isOff(n)); }
+function offDaysInMonth(y, m){
+  return new Set(nippos.filter(n=>isOff(n)&&(()=>{const d=new Date(String(n.date||'').slice(0,10));return d.getFullYear()===y&&d.getMonth()===m;})()).map(n=>String(n.date).slice(0,10))).size;
+}
 function totalNinkuForMonth(y, m){
-  return nippos.filter(n=>{
+  return workNippos().filter(n=>{
     const d=new Date(n.date);
     return d.getFullYear()===y && d.getMonth()===m;
   }).reduce((s,n)=>{
@@ -421,7 +440,7 @@ function nippoPeriodFilter(n){
   return true;
 }
 function getUniqueJobs(){
-  const jobIds = [...new Set(nippos.map(n=>n.jobCode).filter(Boolean))];
+  const jobIds = [...new Set(workNippos().map(n=>n.jobCode).filter(Boolean))];
   return jobIds.map(id=>{
     const j = jobs.find(x=>x.id===id);
     return j || {id, name: id};
@@ -429,7 +448,7 @@ function getUniqueJobs(){
 }
 function getNinkuByKouji(){
   const map = {};
-  nippos.forEach(n=>{
+  workNippos().forEach(n=>{
     const ninku = Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0);
     (n.koujiTypes||[]).forEach(k=>{
       map[k] = (map[k]||0) + ninku;
@@ -439,7 +458,7 @@ function getNinkuByKouji(){
 }
 function getNinkuByWorker(){
   const map = {};
-  nippos.forEach(n=>{
+  workNippos().forEach(n=>{
     Object.entries(n.workers||{}).forEach(([wid, val])=>{
       map[wid] = (map[wid]||0) + (parseFloat(val)||0);
     });
@@ -448,7 +467,7 @@ function getNinkuByWorker(){
 }
 function getNinkuByJob(){
   const map = {};
-  nippos.forEach(n=>{
+  workNippos().forEach(n=>{
     const key = n.jobCode || n.jobName || '未設定';
     const ninku = Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0);
     if(!map[key]) map[key] = {name: n.jobName||n.jobCode||'未設定', ninku:0, days:0};
@@ -462,13 +481,13 @@ function getNinkuByJob(){
 function updateHeader(){
   document.getElementById('today-date').textContent = new Date().toLocaleDateString('ja-JP') + ' · 工事日報管理';
   const now = new Date();
-  const todayNippos = nippos.filter(n=>String(n.date||'').slice(0,10)===today());
-  const monthNippos = nippos.filter(n=>{
+  const todayNippos = workNippos().filter(n=>String(n.date||'').slice(0,10)===today());
+  const monthNippos = workNippos().filter(n=>{
     const d=new Date(n.date);
     return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
   });
   const monthNinku = totalNinkuForMonth(now.getFullYear(), now.getMonth());
-  const uniqueJobs = new Set(nippos.filter(n=>n.jobCode||n.jobName).map(n=>n.jobCode||n.jobName));
+  const uniqueJobs = new Set(workNippos().filter(n=>n.jobCode||n.jobName).map(n=>n.jobCode||n.jobName));
   document.getElementById('s-today').textContent = todayNippos.length;
   document.getElementById('s-month').textContent = monthNippos.length;
   document.getElementById('s-ninku').textContent = monthNinku.toFixed(1);
@@ -512,12 +531,13 @@ function renderCalendar(){
     const firstDay = new Date(y, m, 1);
     const lastDay  = new Date(y, m+1, 0);
     const startDow = firstDay.getDay();
-    const nippoByDate = {};
+    const nippoByDate = {}, offByDate = {};
     nippos.forEach(n=>{
       const dateKey = String(n.date||'').slice(0,10); // YYYY-MM-DD に正規化
       const d = new Date(dateKey);
       if(d.getFullYear()===y && d.getMonth()===m){
-        nippoByDate[dateKey] = (nippoByDate[dateKey]||0) + 1;
+        if(isOff(n)) offByDate[dateKey] = true;
+        else nippoByDate[dateKey] = (nippoByDate[dateKey]||0) + 1;
       }
     });
     function isMissingDay(d){
@@ -525,7 +545,7 @@ function renderCalendar(){
       const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       if(dt > now) return false;
       if(dt.getDay()===0) return false;
-      return !nippoByDate[ds];
+      return !nippoByDate[ds] && !offByDate[ds];
     }
     let cells = '';
     for(let i=0;i<startDow;i++) cells+=`<div class="cal-day other-month"><span class="cal-day-num"></span></div>`;
@@ -535,7 +555,9 @@ function renderCalendar(){
       const isToday=dateStr===todayStr;
       const count=nippoByDate[dateStr]||0;
       const missing=isMissingDay(d);
+      const off=!!offByDate[dateStr];
       let cls='cal-day';
+      if(off && count===0) cls+=' off-day';
       if(isToday) cls+=' today-cell';
       if(count>0) cls+=' has-nippo';
       if(missing) cls+=' missing-day';
@@ -543,13 +565,16 @@ function renderCalendar(){
       if(dow===6) cls+=' weekend-sat';
       let dots='';
       if(count>0) dots=Array(Math.min(count,3)).fill('<div class="cal-dot cal-dot-nippo"></div>').join('');
+      else if(off) dots='<div class="cal-off">休</div>';
       else if(missing) dots='<div class="cal-dot cal-dot-missing"></div>';
+      if(off && count>0) dots+='<div class="cal-dot cal-dot-off"></div>';
       cells+=`<div class="${cls}" onclick="onCalDayClick('${dateStr}')"><span class="cal-day-num">${d}</span><div class="cal-dot-wrap">${dots}</div></div>`;
     }
     let missingCount=0;
     for(let d=1;d<=lastDay.getDate();d++) if(isMissingDay(d)) missingCount++;
+    const offCount=Object.keys(offByDate).length;
     return `<div style="margin-bottom:12px">
-      <div style="color:#e8d5a3;font-size:11px;font-weight:700;text-align:center;margin-bottom:6px">${MONTHS[m]}${missingCount>0?` <span style="color:#e87050;font-size:9px">⚠️${missingCount}日漏れ</span>`:''}</div>
+      <div style="color:#e8d5a3;font-size:11px;font-weight:700;text-align:center;margin-bottom:6px">${MONTHS[m]}${offCount>0?` <span style="color:#8a9aa8;font-size:9px">休${offCount}日</span>`:''}${missingCount>0?` <span style="color:#e87050;font-size:9px">⚠️${missingCount}日漏れ</span>`:''}</div>
       <div class="cal-grid">
         <div class="cal-dow sun">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div><div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow sat">土</div>
         ${cells}
@@ -600,6 +625,7 @@ function renderCalendar(){
     <div class="cal-legend">
       <div class="cal-legend-item"><div class="cal-dot cal-dot-nippo"></div>日報あり</div>
       <div class="cal-legend-item"><div class="cal-dot cal-dot-missing"></div>漏れ候補</div>
+      <div class="cal-legend-item"><div class="cal-off" style="font-size:8px">休</div>休み</div>
     </div>
   </div>`;
 }
@@ -631,8 +657,8 @@ function onCalDayClick(dateStr){
     showModal(`<div class="sheet" onclick="event.stopPropagation()">
       <div class="sheet-title">${dateStr} の日報（${list.length}件）</div>
       ${list.map(n=>`<div onclick="closeModalForce();showNippoDetail('${n.id}')" style="background:#161614;border:1px solid #2e2e28;border-radius:9px;padding:10px 12px;margin-bottom:6px;cursor:pointer">
-        <div style="color:#c8962a;font-size:12px;font-weight:700">${esc(n.jobName||'工事名未設定')}</div>
-        <div style="color:#888;font-size:10px;margin-top:2px">${Object.values(n.workers||{}).reduce((s,v)=>s+(parseFloat(v)||0),0).toFixed(1)}人工</div>
+        <div style="color:${isOff(n)?'#8a9aa8':'#c8962a'};font-size:12px;font-weight:700">${isOff(n)?'🌙 休み':esc(n.jobName||'工事名未設定')}</div>
+        <div style="color:#888;font-size:10px;margin-top:2px">${isOff(n)?'':Object.values(n.workers||{}).reduce((s,v)=>s+(parseFloat(v)||0),0).toFixed(1)+'人工'}</div>
       </div>`).join('')}
       <button class="btn-cancel" style="width:100%;margin-top:6px" onclick="closeModalForce()">閉じる</button>
     </div>`);
@@ -644,13 +670,14 @@ function renderHome(){
   const now = new Date();
   const mn = totalNinkuForMonth(now.getFullYear(), now.getMonth());
   const todayList = nippos.filter(n=>String(n.date||'').slice(0,10)===today());
+  const monthOff = offDaysInMonth(now.getFullYear(), now.getMonth());
 
   const syncHtml = invItems.length>0
     ? `<div class="sync-banner"><div><div class="sync-ok">🔗 在庫管理PWAと連携中</div><div style="color:#555;font-size:10px;margin-top:2px">${invItems.length}品目が参照可能</div></div><button class="btn-sm" onclick="trySyncInventory()">更新</button></div>`
     : `<div class="sync-banner" style="background:#2a1a10;border-color:#4a2a1044"><div><div class="sync-ng">⚠️ 在庫PWAと未連携</div><div style="color:#555;font-size:10px;margin-top:2px">在庫管理PWAと同じブラウザで開いてください</div></div><button class="btn-sm" onclick="trySyncInventory()">接続</button></div>`;
 
-  // 今月の集計
-  const monthNippos = nippos.filter(n=>{
+  // 今月の集計（休みの日は除く）
+  const monthNippos = workNippos().filter(n=>{
     const d=new Date(n.date);
     return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
   });
@@ -686,7 +713,7 @@ function renderHome(){
         <div class="sb-cell"><div class="sb-label">今月の総人工</div><div class="sb-val">${mn.toFixed(1)}<span class="sb-unit">人工</span></div></div>
         <div class="sb-cell"><div class="sb-label">今月の日報件数</div><div class="sb-val">${monthNippos.length}<span class="sb-unit">件</span></div></div>
         <div class="sb-cell"><div class="sb-label">稼働工事数</div><div class="sb-val">${new Set(monthNippos.map(n=>n.jobCode||n.jobName)).size}<span class="sb-unit">件</span></div></div>
-        <div class="sb-cell"><div class="sb-label">材料使用種類</div><div class="sb-val">${Object.keys(matUsed).length}<span class="sb-unit">品目</span></div></div>
+        <div class="sb-cell"><div class="sb-label">今月の休み</div><div class="sb-val" style="color:#8a9aa8">${monthOff}<span class="sb-unit">日</span></div></div>
       </div>
     </div>
     <div class="section-label">📅 日報カレンダー</div>
@@ -699,6 +726,18 @@ function renderHome(){
 
 // ========== 日報カードHTML ==========
 function nippoCardHtml(n, compact=false){
+  if(isOff(n)){
+    const {tasks: oTasks, rest: oRest} = getNippoTasks(n);
+    const lines = oTasks.map(t=>esc((t.when?t.when+' ':'')+t.name)).join('<br>');
+    return `<div class="nippo-card off-card" onclick="showNippoDetail('${n.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><div class="nippo-date">${esc(n.date)}</div><div class="nippo-job" style="color:#9aaab8">🌙 休み</div></div>
+        <div style="color:#5a6670;font-size:9px">人工に数えない</div>
+      </div>
+      ${lines?`<div style="color:#8a9aa8;font-size:11px;margin-top:6px;line-height:1.6">${lines}</div>`:''}
+      ${oRest?`<div style="color:#666;font-size:10px;margin-top:6px;white-space:pre-line">${esc(oRest)}</div>`:''}
+    </div>`;
+  }
   const ninku = Object.entries(n.workers||{}).reduce((s,[wid,v])=>s+(parseFloat(v)||0), 0);
   const workerChips = Object.entries(n.workers||{}).filter(([,v])=>parseFloat(v)>0).map(([wid,v])=>{
     const w = workers.find(x=>x.id===wid);
@@ -744,7 +783,7 @@ function renderNippoList(){
   ].map(p=>`<button class="period-btn${nippoPeriod===p.key?' active':''}" onclick="nippoPeriod='${p.key}';render()">${p.label}</button>`).join('');
 
   const filtered = [...nippos].filter(nippoPeriodFilter).sort((a,b)=>String(b.date||'').slice(0,10).localeCompare(String(a.date||'').slice(0,10)));
-  const totalNinku = filtered.reduce((s,n)=>s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0),0);
+  const totalNinku = filtered.filter(n=>!isOff(n)).reduce((s,n)=>s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0),0);
 
   const cards = filtered.length===0
     ? '<div class="empty-msg">この期間の日報はありません<br><button class="btn-sm" style="margin-top:8px" onclick="openNewNippo()">＋ 新規入力</button></div>'
@@ -959,12 +998,14 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
     <label class="form-label">作業日</label>
     <input class="form-input" type="date" id="nip-date" value="${esc(date)}"/>
 
-    <label class="form-label">工事名（マスタから選択 or 直接入力）</label>
+    <label class="off-toggle"><input type="checkbox" id="nip-off" ${isOff(n)?'checked':''} onchange="onOffToggle()"> 🌙 この日は休み（人工・集計に数えない）</label>
+
+    <label class="form-label work-only">工事名（マスタから選択 or 直接入力）</label>
     <select class="form-select" id="nip-job-sel" onchange="onJobSelChange()">${jobOpts}</select>
     <input class="form-input" type="text" id="nip-job-name" placeholder="工事名を入力" value="${esc(n?.jobName||'')}" style="${!n?.jobCode&&n?.jobName?'':'display:none'}"/>
     <input class="form-input" type="text" id="nip-job-code" placeholder="工事コード（例: 2025-001）" value="${esc(n?.jobCode||'')}" style="display:none"/>
 
-    <label class="form-label">作業内容・時間（時間は任意）</label>
+    <label class="form-label">作業内容・時間（時間は任意）<span class="off-only">　→ 休みの日は過ごし方を書く</span></label>
     <div id="task-list">${initTasks.map(taskRowHtml).join('')}</div>
     <button class="btn-sm" style="width:100%;margin-bottom:6px;padding:8px" onclick="addTaskRow()">＋ 作業を追加</button>
     <div class="task-total" id="task-total"></div>
@@ -987,10 +1028,10 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
       }).join('')}
     </div>
 
-    <label class="form-label">作業者・人工数</label>
+    <label class="form-label work-only">作業者・人工数</label>
     ${workerInputs}
 
-    <label class="form-label">使用材料</label>
+    <label class="form-label work-only">使用材料</label>
     <div id="${matListId}" class="material-list">
       ${mats.map((m,i)=>matRowHtml(matListId, i, m.name, m.qty, m.unit, m.invAction||'memo', m.invItemId||'', m.invLocId||'')).join('')}
     </div>
@@ -1010,7 +1051,7 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
     </div>
 
     <!-- 手入力 -->
-    <div style="display:flex;gap:6px;margin-bottom:9px">
+    <div class="work-only" style="display:flex;gap:6px;margin-bottom:9px">
       <input class="form-input" type="text" id="mat-custom" placeholder="材料名を直接入力（在庫外）" style="flex:1;margin-bottom:0"/>
       <button class="btn-sm" onclick="addMatCustom('${matListId}')" style="white-space:nowrap">追加</button>
     </div>
@@ -1029,6 +1070,14 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
   const nipDateEl = document.getElementById('nip-date');
   if(nipDateEl) nipDateEl.value = date;
   updateTaskTotal();
+  onOffToggle();
+}
+
+// 休みのチェック：工事・人工・材料の欄を隠す（記録は作業内容・メモに書く）
+function onOffToggle(){
+  const off = document.getElementById('nip-off')?.checked;
+  const sheet = document.getElementById('nip-off')?.closest('.sheet');
+  if(sheet) sheet.classList.toggle('off-mode', !!off);
 }
 
 function matRowHtml(listId, idx, name, qty, unit, invAction, invItemId, invLocId){
@@ -1195,14 +1244,18 @@ function saveNippo(existingId, matListId){
     jobName = j?.name||jobSel;
   }
 
+  const isOffDay = !!document.getElementById('nip-off')?.checked;
+  if(isOffDay){ jobCode=''; jobName='休み'; }
+
   // 工種
-  const koujiTypes = [...document.querySelectorAll('#kouji-grid .kouji-chip.selected')].map(el=>el.dataset.id);
+  let koujiTypes = [...document.querySelectorAll('#kouji-grid .kouji-chip.selected')].map(el=>el.dataset.id);
+  if(isOffDay) koujiTypes = koujiTypes.filter(k=>/^priv_/.test(k));
 
   // 人工
   const workerMap = {};
   workers.forEach(w=>{
     const v = parseFloat(document.getElementById('nk-'+w.id)?.value)||0;
-    if(v>0) workerMap[w.id] = v;
+    if(v>0 && !isOffDay) workerMap[w.id] = v;
   });
 
   // 材料
@@ -1216,7 +1269,7 @@ function saveNippo(existingId, matListId){
       const invAction = row.dataset.invAction || 'memo';
       const invItemId = row.dataset.invItemId || '';
       const invLocId  = row.dataset.invLocId  || '';
-      if(name) materials.push({name, qty, unit, invAction, invItemId, invLocId});
+      if(name && !isOffDay) materials.push({name, qty, unit, invAction, invItemId, invLocId});
     });
   }
 
@@ -1230,6 +1283,7 @@ function saveNippo(existingId, matListId){
   const record = {
     id: existingId || uid('nip'),
     date, jobCode, jobName, koujiTypes,
+    kind: isOffDay ? 'off' : 'work',
     workers: workerMap, materials, memo, tasks,
     totalHours: tasksTotalHours(tasks),
     createdAt: existingId ? (nippos.find(x=>x.id===existingId)?.createdAt||new Date().toISOString()) : new Date().toISOString(),
@@ -1369,11 +1423,11 @@ function showNippoDetail(nid){
   }).join('');
 
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
-    <div class="sheet-title">📋 日報詳細</div>
-    <div class="sheet-desc">${esc(n.date)}</div>
-    <div class="info-row"><span class="info-label">工事名</span><span class="info-val">${esc(n.jobName||'未設定')}</span></div>
+    <div class="sheet-title">${isOff(n)?'🌙 休みの記録':'📋 日報詳細'}</div>
+    <div class="sheet-desc">${esc(n.date)}${isOff(n)?'（人工・集計には数えません）':''}</div>
+    ${isOff(n)?'':`<div class="info-row"><span class="info-label">工事名</span><span class="info-val">${esc(n.jobName||'未設定')}</span></div>`}
     ${n.jobCode?`<div class="info-row"><span class="info-label">工事コード</span><span class="info-val">${esc(n.jobCode)}</span></div>`:''}
-    <div class="info-row"><span class="info-label">合計人工</span><span class="info-val" style="color:#c8962a;font-size:14px">${ninku.toFixed(1)} 人工</span></div>
+    ${isOff(n)?'':`<div class="info-row"><span class="info-label">合計人工</span><span class="info-val" style="color:#c8962a;font-size:14px">${ninku.toFixed(1)} 人工</span></div>`}
     ${workerRows}
     ${koujiRows?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">${koujiRows}</div>`:''}
     ${taskRows?`<div class="divider"></div><div style="color:#555;font-size:9px;padding:4px 0">作業内容${taskHours>0?`（計 ${fmtHours(taskHours)}h）`:''}</div>${taskRows}`:''}
@@ -1749,12 +1803,12 @@ function exportNippoExcel(){
   // 年間サマリー
   const sumRows = [
     [`大竹工務店 ${year}年 日報サマリー`],[`出力日: ${now.toLocaleDateString('ja-JP')}`],[''],
-    ['月','日報件数','合計人工','稼働工事数'],
+    ['月','日報件数','合計人工','稼働工事数','休み日数'],
   ];
   months.forEach((mn,mi)=>{
-    const mnips = nippos.filter(n=>{const d=new Date(n.date);return d.getFullYear()===year&&d.getMonth()===mi;});
+    const mnips = workNippos().filter(n=>{const d=new Date(n.date);return d.getFullYear()===year&&d.getMonth()===mi;});
     const totNinku = mnips.reduce((s,n)=>s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0),0);
-    sumRows.push([mn, mnips.length, totNinku, new Set(mnips.map(n=>n.jobCode||n.jobName).filter(Boolean)).size]);
+    sumRows.push([mn, mnips.length, totNinku, new Set(mnips.map(n=>n.jobCode||n.jobName).filter(Boolean)).size, offDaysInMonth(year, mi)]);
   });
   const wsSummary = XLSX.utils.aoa_to_sheet(sumRows);
   wsSummary['!cols']=[{wch:6},{wch:8},{wch:10},{wch:10}];
@@ -1861,7 +1915,7 @@ function removeDuplicateNippos(){
   // 人工数が0でworkersも空の日報を候補として表示
   const emptyNippos = nippos.filter(n => {
     const ninku = Object.values(n.workers||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
-    return ninku === 0 && (!n.memo || n.memo === '');
+    return !isOff(n) && ninku === 0 && (!n.memo || n.memo === '');
   });
   const after = nippos.length;
   const removed = before - after;
@@ -2099,6 +2153,15 @@ function parseNippoText(raw){
   });
 
   return blocks.filter(b=>b.tasks.length>0 || Object.values(b.sec).some(a=>a.length>0) || b.site).map(b=>{
+    // 【10/25（日）】休み → 休みの記録（人工0・工事なし）
+    if(/^(お?休み?|休日|公休|定休|オフ)/.test(String(b.site||'').trim())){
+      const memoOff = [...b.sec.材料, ...b.sec.連絡, ...b.sec.明日, ...b.sec.その他].join('\n');
+      const words = [...b.tasks.map(t=>t.name), b.site].join(' ');
+      const priv = /家族|子|娘|息子|長女|次女|長男|次男|妻|嫁|観戦|試合|旅行|帰省|自宅|家/.test(words) ? 'priv_kensetsu'
+                 : /勉強|研修|講習|学習|セミナー/.test(words) ? 'priv_kenkyu' : 'priv_kyuyo';
+      return { kind:'off', date:b.date, jobCode:'', jobName:'休み', site:b.site, jobMatched:true,
+        koujiTypes:[priv], workers:{}, materials:[], tasks:b.tasks, memo:memoOff };
+    }
     const job = matchJob(b.site);
     const memoParts = [];
     if(b.sec.材料.length) memoParts.push('【材料】\n'+b.sec.材料.join('\n'));
@@ -2161,7 +2224,8 @@ function openNextDraft(){
   const notes = [];
   if(d._total>1) notes.push(`<b>${d._idx} / ${d._total} 件目</b>`);
   const w0 = workers[0];
-  if(w0) notes.push(`人工は仮に「${esc(w0.name)} ${Object.values(d.workers)[0]}人工」を入れています。必要なら直してください。`);
+  if(d.kind==='off') notes.push('🌙 休みの記録として取り込みます。人工・集計には数えません。');
+  else if(w0) notes.push(`人工は仮に「${esc(w0.name)} ${Object.values(d.workers)[0]}人工」を入れています。必要なら直してください。`);
   if(d.site && !d.jobMatched) notes.push(`「${esc(d.site)}」は工事台帳に見つからなかったので、工事名を直接入力にしています。`);
   if(d.koujiTypes.length===0) notes.push('工種は自動で判定できませんでした。選んでください。');
   let html = `<div class="draft-banner">${notes.join('<br>')}</div>`;

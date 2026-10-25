@@ -101,7 +101,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:#111110;min-height:100vh;d
   </div>
 
   <div class="status-bar" id="status-bar">
-    <div class="status-chip"><div class="status-chip-val" id="st-nippo">—</div><div class="status-chip-label">今月の日報</div></div>
+    <div class="status-chip"><div class="status-chip-val" id="st-nippo">—</div><div class="status-chip-label" id="st-nippo-label">今月の日報</div></div>
     <div class="status-chip"><div class="status-chip-val" id="st-ninku">—</div><div class="status-chip-label">今月の人工</div></div>
     <div class="status-chip"><div class="status-chip-val" id="st-zaiko">—</div><div class="status-chip-label">在庫品目</div></div>
     <div class="status-chip"><div class="status-chip-val" id="st-jobs">—</div><div class="status-chip-label">工事件数</div></div>
@@ -328,10 +328,15 @@ function loadStatus(){
   try{
     const nippos = JSON.parse(localStorage.getItem('nip_nippos')||'[]');
     const jobs   = JSON.parse(localStorage.getItem('nip_jobs')||'[]');
-    const monthNippos = nippos.filter(n=>{
-      const d=new Date(n.date);
+    const monthAll = nippos.filter(n=>{
+      const d=new Date(String(n.date||'').slice(0,10));
       return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
     });
+    // 休みの日（kind:'off'）は件数・人工に入れず、日数だけ別に出す
+    const monthNippos = monthAll.filter(n=>n.kind!=='off');
+    const offDays = new Set(monthAll.filter(n=>n.kind==='off').map(n=>String(n.date).slice(0,10))).size;
+    const lbl = document.getElementById('st-nippo-label');
+    if(lbl) lbl.textContent = offDays ? '今月の日報・休'+offDays+'日' : '今月の日報';
     const monthNinku = monthNippos.reduce((s,n)=>
       s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0),0);
     document.getElementById('st-nippo').textContent = monthNippos.length+'件';
