@@ -1033,7 +1033,7 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
 
     <label class="form-label work-only">使用材料</label>
     <div id="${matListId}" class="material-list">
-      ${mats.map((m,i)=>matRowHtml(matListId, i, m.name, m.qty, m.unit, m.invAction||'memo', m.invItemId||'', m.invLocId||'')).join('')}
+      ${mats.map((m,i)=>matRowHtml(matListId, i, m.name, m.qty, m.unit, m.invAction||'memo', m.invItemId||'', m.invLocId||'', m.fromText?(m.rawText||' '):'')).join('')}
     </div>
 
     <!-- 材料検索・選択UI -->
@@ -1080,7 +1080,7 @@ function onOffToggle(){
   if(sheet) sheet.classList.toggle('off-mode', !!off);
 }
 
-function matRowHtml(listId, idx, name, qty, unit, invAction, invItemId, invLocId){
+function matRowHtml(listId, idx, name, qty, unit, invAction, invItemId, invLocId, rawText){
   invAction = invAction || 'memo';
   invItemId = invItemId || '';
   invLocId  = invLocId  || '';
@@ -1103,13 +1103,14 @@ function matRowHtml(listId, idx, name, qty, unit, invAction, invItemId, invLocId
   const btnOut  = `mat-inv-btn out${invAction==='out'?' active-out':''}`;
   const btnMemo = `mat-inv-btn memo${invAction==='memo'?' active-memo':''}`;
 
-  return `<div class="material-row" id="mat-row-${listId}-${idx}" data-inv-item-id="${invItemId}" data-inv-loc-id="${invLocId}" data-inv-action="${invAction}">
+  return `<div class="material-row" id="mat-row-${listId}-${idx}" data-inv-item-id="${invItemId}" data-inv-loc-id="${invLocId}" data-inv-action="${invAction}"${rawText?` data-raw-text="${esc(rawText)}"`:''}>
     <div class="material-row-top">
       <span class="material-name" title="${esc(name)}">${esc(name)}</span>
       <input class="material-qty" type="number" step="1" min="0" value="${qty||1}" placeholder="数量"/>
       <span class="material-unit">${esc(unit||'本')}</span>
       <button class="material-del" onclick="this.closest('.material-row').remove()">✕</button>
     </div>
+    ${rawText?`<div style="color:#5a8a6a;font-size:9px">🔗 【材料】の「${esc(rawText)}」から在庫アプリで反映</div>`:''}
     ${isInvItem ? `
     <div class="mat-inv-row">
       <span style="color:#555;font-size:9px">在庫へ:</span>
@@ -1269,7 +1270,10 @@ function saveNippo(existingId, matListId){
       const invAction = row.dataset.invAction || 'memo';
       const invItemId = row.dataset.invItemId || '';
       const invLocId  = row.dataset.invLocId  || '';
-      if(name && !isOffDay) materials.push({name, qty, unit, invAction, invItemId, invLocId});
+      const rawText   = row.dataset.rawText;
+      const mat = {name, qty, unit, invAction, invItemId, invLocId};
+      if(rawText!==undefined){ mat.fromText = true; mat.rawText = rawText.trim(); }
+      if(name && !isOffDay) materials.push(mat);
     });
   }
 
@@ -1286,6 +1290,8 @@ function saveNippo(existingId, matListId){
     kind: isOffDay ? 'off' : 'work',
     workers: workerMap, materials, memo, tasks,
     totalHours: tasksTotalHours(tasks),
+    // 在庫アプリが【材料】の文字を読んだ記録（2026/11/04）。保存し直しても消さない
+    ...(existingId ? (({matLines, matTextKey})=>Object.fromEntries(Object.entries({matLines, matTextKey}).filter(([,v])=>v!==undefined)))(nippos.find(x=>x.id===existingId)||{}) : {}),
     createdAt: existingId ? (nippos.find(x=>x.id===existingId)?.createdAt||new Date().toISOString()) : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

@@ -520,6 +520,7 @@ function renderHome(){
         <button class="quick-btn q-out" onclick="openOut()"><span class="q-icon">📤</span><span class="q-label">出庫</span><span class="q-desc">現場への搬出</span></button>
         <button class="quick-btn q-use" onclick="openUse()"><span class="q-icon">🪚</span><span class="q-label">使用記録</span><span class="q-desc">作業での消費</span></button>
         <button class="quick-btn q-ret" onclick="openRet()"><span class="q-icon">↩️</span><span class="q-label">返却</span><span class="q-desc">現場→倉庫へ戻す</span></button>
+        <button class="quick-btn" style="grid-column:1/-1;background:#1a2e2c;color:#70d0c8;flex-direction:row;justify-content:center;gap:8px" onclick="openChatOpsPaste()"><span class="q-icon">📋</span><span style="text-align:left"><span class="q-label" style="display:block">チャットの在庫操作を貼り付け</span><span class="q-desc">入庫・持出・使用・返却をまとめて</span></span></button>
       </div>
     </div>
     <div class="section-label">在庫不足アラート</div>${lowHtml}
@@ -2437,13 +2438,15 @@ setupPWA();
 function renderRenkeiTab(){
   var html = '<div style="padding:12px">';
   
-  // チャットJSONインポート
+  // チャットで整えた在庫操作を貼り付け（2026/11/04）
   html += '<div style="background:#2a1a10;border:1px solid #4a3a20;border-radius:12px;padding:14px;margin-bottom:12px">';
-  html += '<div style="color:#c8962a;font-size:13px;font-weight:700;margin-bottom:8px">&#128203; チャットからJSONで在庫操作</div>';
-  html += '<div style="color:#888;font-size:10px;margin-bottom:10px;line-height:1.6">Claudeのチャットで操作指示→JSONを受け取り貼り付け→在庫に反映します。</div>';
-  html += '<textarea id="zaiko-json-input" style="width:100%;min-height:120px;background:#1a1a16;border:1px solid #3a3218;border-radius:8px;padding:10px;color:#e8d5a3;font-size:11px;font-family:monospace;outline:none;resize:vertical" placeholder=\'{"action":"in","items":[{"name":"品名","qty":1,"unit":"個","locName":"倉庫名"}]}\'></textarea>';
-  html += '<button onclick="importZaikoJSON()" style="margin-top:8px;width:100%;background:#3a3218;color:#c8962a;border:1px solid #4a4228;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#10003; インポート</button>';
-  html += '<div id="zaiko-json-msg" style="font-size:11px;margin-top:6px;color:#555"></div>';
+  html += '<div style="color:#c8962a;font-size:13px;font-weight:700;margin-bottom:8px">&#128203; チャットの在庫操作を貼り付け</div>';
+  html += '<div style="color:#888;font-size:10px;margin-bottom:10px;line-height:1.6">チャットに「倉庫から作業場へ杉3本持っていく」のように送ると、【入庫】【持出】【使用】【返却】の形で返ってきます。それを貼り付けると、確認画面で品目と場所を確かめてから反映します。</div>';
+  html += '<button onclick="openChatOpsPaste()" style="width:100%;background:#3a3218;color:#e8b050;border:1px solid #4a4228;border-radius:8px;padding:11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#128229; 貼り付けて在庫を操作</button>';
+  html += '<details style="margin-top:10px"><summary style="color:#666;font-size:10px;cursor:pointer">以前のJSON形式で取り込む</summary>';
+  html += '<textarea id="zaiko-json-input" style="width:100%;min-height:90px;margin-top:6px;background:#1a1a16;border:1px solid #3a3218;border-radius:8px;padding:10px;color:#e8d5a3;font-size:11px;font-family:monospace;outline:none;resize:vertical" placeholder=\'{"action":"in","items":[{"name":"品名","qty":1,"unit":"個","locName":"倉庫名"}]}\'></textarea>';
+  html += '<button onclick="importZaikoJSON()" style="margin-top:6px;width:100%;background:#2e2e28;color:#c8c8b0;border:none;border-radius:8px;padding:8px;font-size:11px;cursor:pointer;font-family:inherit">JSONをインポート</button>';
+  html += '<div id="zaiko-json-msg" style="font-size:11px;margin-top:6px;color:#555"></div></details>';
   html += '</div>';
 
   // 日報同期
@@ -2554,6 +2557,10 @@ function syncFromNippo(silent){
     function locName(id){ for(var i=0;i<locations.length;i++){ if(locations[i].id===id) return locations[i].name; } return ''; }
     function itemById(id){ for(var i=0;i<items.length;i++){ if(String(items[i].id)===String(id)) return items[i]; } return null; }
 
+    // 【材料】の文字を読む（決まったものは日報の材料に書き足す）
+    var tm = firstRun ? {changed:false, pending:[]} : prepareTextMaterials(nippos);
+    if(tm.changed) tmSaveNippos(nippos);
+
     if(firstRun){
       nippos.forEach(function(n){ var w=want(n,null); if(Object.keys(w).length) applied[n.id]=w; });
       localStorage.setItem('dk_nippo_applied', JSON.stringify(applied));
@@ -2579,7 +2586,7 @@ function syncFromNippo(silent){
         history.unshift({
           id: Date.now()+Math.random(), date: n.date,
           type: diff>0 ? type : 'adj',
-          itemId: item.id, itemName: item.name, stockId: item.stockId||'',
+          itemId: item.id, itemName: item.name, stockId: item.stockId||'', unit: item.unit||'',
           qty: Math.abs(diff), locName: locName(locId), destName: '',
           jobName: n.jobName||n.jobCode||'', supplier: '',
           memo: diff>0 ? '日報より自動反映' : '日報の修正で戻し',
@@ -2598,10 +2605,480 @@ function syncFromNippo(silent){
     if(changed>0){ save(); render(); }
     var t = changed>0 ? '✅ 日報から '+changed+'件の在庫操作を反映しました' : '日報からの新しい反映はありません';
     if(missing>0) t += '（この端末にない日報の反映が'+missing+'件あります。日報を削除した場合は在庫を手で直してください）';
-    if(changed>0 || !silent) say(t);
+    if(tm.pending.length) t += '\n⚠️ 日報の【材料】に、品目を選ぶ必要があるものが'+tm.pending.length+'品あります'+(silent?'（連携タブの「日報から在庫を同期」で選べます）':'');
+    var willOpen = tm.pending.length && !silent && !window._tmNoModal;
+    if(willOpen){ if(msg){ msg.style.color='#e8b050'; msg.textContent=t; } }
+    else if(changed>0 || !silent || tm.pending.length) say(t, tm.pending.length?'#e8b050':'#70c870');
+    if(tm.pending.length && silent) showSyncBadge('⚠️ 日報の材料で選ぶものが'+tm.pending.length+'品あります（連携タブ）', '#e8b050');
+    if(tm.pending.length && !silent && !window._tmNoModal) openTextMatModal(tm.pending);
   }catch(e){
     say('⚠️ 日報からの反映に失敗: '+e.message, '#e87050');
   }
+}
+
+// ===== 2026/11/04 日報の【材料】の文字も読んで在庫に反映する =====
+// 貼り付け取り込みの日報は、材料が「【材料】杉KD 39×75×4010 2本、…」という文字で入っている。
+// ここで1品ずつに分けて在庫品目と照合し、決まったものは日報の materials に「使用」として書き足す
+// （日報アプリにも同期される）。あとは今までどおりの差分の仕組みで在庫を減らす。
+var TEXT_MAT_FROM = '2026-10-20';   // これより前の日報のメモは読まない（昔のメモ書きを拾わないため）
+var TM_UNITS = '本|枚|個|箱|袋|缶|巻|束|式|kg|L|ℓ|m|㎡|m2|セット|組|ケース|丁|梱|坪|台|足|脚|把|束|ロール|パック|リットル|キロ|メートル';
+function tmNorm(s){
+  s = String(s||'');
+  try{ s = s.normalize('NFKC'); }catch(e){}
+  return s.toLowerCase().replace(/[×✕✖＊*]/g,'x').replace(/[\s　]+/g,'').replace(/[‐－―ー−]/g,'-');
+}
+function tmMatText(memo){
+  var lines = String(memo||'').replace(/\r/g,'').split('\n'), out = [], on = false;
+  lines.forEach(function(l){
+    var t = l.trim();
+    var h = t.match(/^【\s*([^】]*)】\s*(.*)$/);
+    if(h){ on = /材料/.test(h[1]); if(on && h[2]) out.push(h[2]); return; }
+    if(on && t) out.push(t);
+  });
+  return out.join('\n');
+}
+function tmParse(text){
+  var res = [];
+  String(text||'').split(/[、,，;；\n]/).forEach(function(raw){
+    var s = raw.replace(/^[・\-\*•●◯○\s]+/,'').trim();
+    if(!s) return;
+    var n = s; try{ n = s.normalize('NFKC'); }catch(e){}
+    var re = new RegExp('^(.*?)\\s*(\\d+(?:\\.\\d+)?)\\s*('+TM_UNITS+')$');
+    var m = n.match(re), name = n, qty = null, unit = '';
+    if(m && m[1].trim()){ name = m[1].trim(); qty = parseFloat(m[2]); unit = m[3]; }
+    else {
+      var m2 = n.match(/^(.*\S)\s+(\d+(?:\.\d+)?)$/);       // 単位なし「ビス 2」
+      if(m2){ name = m2[1].trim(); qty = parseFloat(m2[2]); }
+    }
+    res.push({raw: s, name: name, qty: qty, unit: unit});
+  });
+  return res;
+}
+function tmTotal(item){ return Object.values(item.stocks||{}).reduce(function(a,b){ return a+(parseFloat(b)||0); },0); }
+function tmDims(n){ return (n.match(/\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)+/g)||[]); }
+function tmBigram(a,b){
+  if(a.length<2||b.length<2) return 0;
+  var A={},hit=0,i; for(i=0;i<a.length-1;i++){ var k=a.substr(i,2); A[k]=(A[k]||0)+1; }
+  for(i=0;i<b.length-1;i++){ var k2=b.substr(i,2); if(A[k2]>0){ A[k2]--; hit++; } }
+  return 2*hit/((a.length-1)+(b.length-1));
+}
+function tmExact(name){ var k = tmNorm(name); return items.filter(function(it){ return tmNorm(it.name)===k; }); }
+function tmCandidates(name, limit){
+  var k = tmNorm(name), dims = tmDims(k);
+  return items.map(function(it){
+    var n = tmNorm(it.name), sc = tmBigram(k, n);
+    if(dims.length && tmDims(n).some(function(d){ return dims.indexOf(d)>=0; })) sc += 0.5;
+    if(n.indexOf(k)>=0 || k.indexOf(n)>=0) sc += 0.3;
+    return {it: it, sc: sc};
+  }).filter(function(x){ return x.sc>=0.35; }).sort(function(a,b){ return b.sc-a.sc; }).slice(0, limit||8).map(function(x){ return x.it; });
+}
+// 減らす場所：在庫がある場所が1つならそこ。なければ品目に登録された場所が1つならそこ
+function tmAutoLoc(item){
+  var st = item.stocks||{};
+  var withStock = Object.keys(st).filter(function(l){ return (parseFloat(st[l])||0)>0; });
+  if(withStock.length===1) return withStock[0];
+  if(withStock.length>1) return null;
+  var keys = Object.keys(st);
+  if(keys.length===1) return keys[0];
+  if(locations.length===1) return locations[0].id;
+  return null;
+}
+function tmLocOptions(item){
+  var st = (item&&item.stocks)||{};
+  var list = locations.map(function(l){ return {id:l.id, name:l.name, icon:l.icon||'', qty: parseFloat(st[l.id])||0, known: st[l.id]!==undefined}; });
+  list.sort(function(a,b){ return (b.qty-a.qty) || ((b.known?1:0)-(a.known?1:0)); });
+  return list;
+}
+function tmApplyLine(n, idx, item, locId, qty){
+  var L = n.matLines[idx];
+  L.state = 'done'; L.itemId = item.id; L.locId = locId; L.qty = qty;
+  n.materials = n.materials || [];
+  n.materials.push({name: item.name, qty: qty, unit: item.unit || L.unit || '', invAction: 'use',
+    invItemId: item.id, invLocId: locId, fromText: true, rawText: L.raw});
+}
+// 全日報の【材料】を読んで、自動で決まるものは反映用に書き足す。迷うものは pending に返す
+function prepareTextMaterials(nippos){
+  var changed = false, pending = [];
+  nippos.forEach(function(n){
+    if(n.kind==='off') return;
+    if(String(n.date||'') < TEXT_MAT_FROM) return;
+    var ch = false;
+    var text = tmMatText(n.memo);
+    var key = tmNorm(text);
+    if(!key){
+      if(n.matTextKey){ n.materials = (n.materials||[]).filter(function(m){ return !m.fromText; }); delete n.matLines; delete n.matTextKey; ch = true; }
+    } else {
+      if(n.matTextKey !== key){
+        // 【材料】の文字が変わった（または初めて読む）→ 前回この仕組みで足した材料を外して読み直す
+        n.materials = (n.materials||[]).filter(function(m){ return !m.fromText; });
+        // 日報アプリで在庫品目を選んで入れた材料と同じものは二重にしない
+        var picked = {}; n.materials.forEach(function(m){ if(m.invItemId) picked[tmNorm(m.name)] = 1; });
+        // 前回選んだ品目・場所は、同じ品名の行に引き継ぐ（数量だけ直したときに選び直さなくてよいように）
+        var prevSel = {}; (n.matLines||[]).forEach(function(L){ if(L.state==='done'||L.state==='skip') prevSel[tmNorm(L.name)] = L; });
+        n.matLines = tmParse(text).map(function(L){ if(picked[tmNorm(L.name)]) L.state = 'manual'; return L; });
+        n.matLines.forEach(function(L, idx){
+          var pv = prevSel[tmNorm(L.name)]; if(!pv || L.state) return;
+          if(pv.state==='skip'){ L.state = 'skip'; return; }
+          var it = items.find(function(x){ return String(x.id)===String(pv.itemId); });
+          if(it && L.qty) tmApplyLine(n, idx, it, pv.locId, L.qty);
+        });
+        n.matTextKey = key; ch = true;
+      }
+      (n.matLines||[]).forEach(function(L, idx){
+        if(L.state) return;
+        var ex = tmExact(L.name);
+        if(L.qty && ex.length===1){
+          var loc = tmAutoLoc(ex[0]);
+          if(loc){ tmApplyLine(n, idx, ex[0], loc, L.qty); ch = true; return; }
+        }
+        pending.push({n: n, idx: idx, L: L, exact: ex});
+      });
+    }
+    if(ch){ n.updatedAt = new Date().toISOString(); changed = true; }
+  });
+  return {changed: changed, pending: pending};
+}
+function tmSaveNippos(nippos){ localStorage.setItem('nip_nippos', JSON.stringify(nippos)); }
+
+// ---- 選ぶ画面 ----
+var _tmPending = [];
+function tmItemLabel(it){ return it.name+'｜'+yen(it.basePrice||0)+'/'+(it.unit||'')+'｜在庫 '+tmTotal(it)+(it.unit||''); }
+function tmItemOptions(list, selId){
+  return list.map(function(it){ return '<option value="'+esc(it.id)+'"'+(String(it.id)===String(selId)?' selected':'')+'>'+esc(tmItemLabel(it))+'</option>'; }).join('');
+}
+function openTextMatModal(pending){
+  _tmPending = pending;
+  var groups = {}, order = [];
+  pending.forEach(function(p, i){ var g = p.n.id; if(!groups[g]){ groups[g] = []; order.push(g); } groups[g].push(i); });
+  var html = '<div class="sheet" onclick="event.stopPropagation()" style="max-height:88vh;overflow-y:auto">'
+    + '<div class="sheet-title">📥 日報の材料を在庫に反映</div>'
+    + '<div class="sheet-desc">【材料】の文字から、在庫品目を決めきれなかったものです。品目と場所を選んで「反映する」を押してください。決めないものは、次の同期でまた出てきます。</div>';
+  order.forEach(function(g){
+    var n = pending[groups[g][0]].n;
+    html += '<div style="color:#c8962a;font-size:12px;font-weight:700;margin:12px 0 4px">'+esc(n.date)+'　'+esc(n.jobName||'工事名なし')+'</div>';
+    groups[g].forEach(function(i){
+      var p = pending[i], L = p.L;
+      var list = p.exact.length>1 ? p.exact : (p.exact.length===1 ? p.exact : tmCandidates(L.name, 8));
+      var reason = p.exact.length>1 ? '同じ名前の品目が'+p.exact.length+'つあります。単価で選んでください'
+                 : p.exact.length===1 ? (L.qty ? '減らす場所を選んでください' : '数量を入れてください')
+                 : (list.length ? '同じ名前の品目がありません。近いものから選ぶか、品名で探してください' : '同じ名前の品目がありません。品名で探してください');
+      var sel = p.exact.length===1 ? list[0].id : '';   // 名前が違う候補は自動で選ばない（押し間違い防止）
+      html += '<div class="tm-row" data-i="'+i+'" style="background:#161614;border:1px solid #2e2e28;border-radius:10px;padding:10px;margin-bottom:8px">'
+        + '<div style="color:#e8d5a3;font-size:12px;font-weight:600">「'+esc(L.raw)+'」</div>'
+        + '<div style="color:#e8b050;font-size:10px;margin:3px 0 6px">'+esc(reason)+'</div>'
+        + '<select class="form-select tm-item" onchange="tmOnItem('+i+')" style="font-size:12px;margin-bottom:5px">'
+        +   '<option value="">-- 品目を選ぶ --</option>'+tmItemOptions(list, sel)
+        +   '<option value="__skip__">反映しない（メモのまま残す）</option></select>'
+        + '<input class="form-input tm-search" placeholder="🔍 品名で探す（例：杉 39×75）" oninput="tmOnSearch('+i+')" style="font-size:12px;margin-bottom:5px"/>'
+        + '<div style="display:flex;gap:6px;align-items:center">'
+        +   '<input class="form-input tm-qty" type="number" step="any" min="0" value="'+(L.qty!=null?L.qty:'')+'" placeholder="数量" style="width:80px;margin:0;font-size:12px"/>'
+        +   '<span class="tm-unit" style="color:#888;font-size:11px">'+esc(L.unit||'')+'</span>'
+        +   '<select class="form-select tm-loc" style="flex:1;margin:0;font-size:12px"></select>'
+        + '</div></div>';
+    });
+  });
+  html += '<div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">あとで</button>'
+    + '<button class="btn-confirm green" onclick="tmApplyChoices()">反映する</button></div></div>';
+  showModal(html);
+  pending.forEach(function(p, i){ tmOnItem(i); });
+}
+function tmRow(i){ return document.querySelector('.tm-row[data-i="'+i+'"]'); }
+function tmOnSearch(i){
+  var row = tmRow(i), q = tmNorm(row.querySelector('.tm-search').value);
+  if(!q) return;
+  var parts = q.split(/x/).filter(Boolean);
+  var hits = items.filter(function(it){ var n = tmNorm(it.name); return n.indexOf(q)>=0 || (parts.length>1 && parts.every(function(pt){ return n.indexOf(pt)>=0; })); }).slice(0, 30);
+  if(!hits.length) hits = tmCandidates(q, 10);
+  var sel = row.querySelector('.tm-item');
+  sel.innerHTML = '<option value="">-- 品目を選ぶ（'+hits.length+'件） --</option>'+tmItemOptions(hits,'')+'<option value="__skip__">反映しない（メモのまま残す）</option>';
+  tmOnItem(i);
+}
+function tmOnItem(i){
+  var row = tmRow(i); if(!row) return;
+  var id = row.querySelector('.tm-item').value;
+  var it = null; for(var k=0;k<items.length;k++){ if(String(items[k].id)===String(id)){ it = items[k]; break; } }
+  var locSel = row.querySelector('.tm-loc');
+  if(!it){ locSel.innerHTML = '<option value="">場所</option>'; locSel.disabled = true; return; }
+  locSel.disabled = false;
+  var opts = tmLocOptions(it), auto = tmAutoLoc(it);
+  locSel.innerHTML = opts.map(function(o){ return '<option value="'+esc(o.id)+'"'+(o.id===auto?' selected':'')+'>'+esc(o.icon+' '+o.name)+'（在庫 '+o.qty+(it.unit||'')+'）</option>'; }).join('');
+  if(!auto && opts.length>1 && opts[0].qty>0 && opts[1].qty>0) locSel.insertAdjacentHTML('afterbegin','<option value="" selected>-- 場所を選ぶ --</option>');
+  row.querySelector('.tm-unit').textContent = it.unit || _tmPending[i].L.unit || '';
+}
+function tmApplyChoices(){
+  var nippos = JSON.parse(localStorage.getItem('nip_nippos')||'[]'), done = 0, skip = 0, left = 0;
+  _tmPending.forEach(function(p, i){
+    var row = tmRow(i); if(!row) return;
+    var n = nippos.find(function(x){ return x.id===p.n.id; });
+    if(!n || !n.matLines || !n.matLines[p.idx] || n.matLines[p.idx].state || n.matTextKey!==p.n.matTextKey){ return; }
+    var id = row.querySelector('.tm-item').value;
+    if(id==='__skip__'){ n.matLines[p.idx].state = 'skip'; n.updatedAt = new Date().toISOString(); skip++; return; }
+    var it = null; for(var k=0;k<items.length;k++){ if(String(items[k].id)===String(id)){ it = items[k]; break; } }
+    var qty = parseFloat(row.querySelector('.tm-qty').value);
+    var loc = row.querySelector('.tm-loc').value;
+    if(!it || !(qty>0) || !loc){ left++; return; }
+    tmApplyLine(n, p.idx, it, loc, qty); n.updatedAt = new Date().toISOString(); done++;
+  });
+  tmSaveNippos(nippos);
+  closeModalForce();
+  window._tmNoModal = true;
+  try{ syncFromNippo(false); } finally { window._tmNoModal = false; }
+  var t = '✅ 材料 '+done+'品を反映'+(skip?'、'+skip+'品は反映しない':'')+(left?'。'+left+'品は未選択のため次回また確認します':'');
+  showSyncBadge(t, left?'#e8b050':'#70c870');
+}
+
+// ===== 2026/11/04 チャットで整えた文を貼り付けて在庫を操作する =====
+// 例）
+// 【在庫】11/4（火）雨漏り修繕工事
+// 【入庫】倉庫（ジョイフル本田）
+// ・構造用合板 12mm 10枚 @1,800
+// 【持出】倉庫→作業場
+// ・杉・スギ 役・□・無 26×40×3640 3本
+// 【使用】作業場
+// ・ビス 1箱
+// 【返却】作業場→倉庫
+// ・杉・スギ 役・□・無 26×40×3640 1本
+var CO_TYPES = {in:'📥 入庫', out:'📤 持出', use:'🪚 使用', ret:'↩️ 返却'};
+var CO_COLOR = {in:'#70c870', out:'#70a8e8', use:'#e8b050', ret:'#c870e8'};
+function coHash(s){ var h=0x811c9dc5; s=String(s); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h+((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24)))>>>0; } return h.toString(36); }
+function coDate(s){
+  var m = String(s||'').normalize('NFKC').match(/(?:(\d{4})[\/\-年.])?(\d{1,2})[\/月.](\d{1,2})/);
+  if(!m) return null;
+  var now = new Date(), y = m[1] ? +m[1] : now.getFullYear();
+  if(!m[1] && new Date(y, +m[2]-1, +m[3]) - now > 30*86400000) y--;
+  return y+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0');
+}
+function coFindLoc(name){
+  var k = tmNorm(name); if(!k) return null;
+  var ex = locations.filter(function(l){ return tmNorm(l.name)===k; });
+  if(ex.length===1) return ex[0];
+  var part = locations.filter(function(l){ var n=tmNorm(l.name); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); });
+  return part.length===1 ? part[0] : null;
+}
+function coJobs(){ try{ return JSON.parse(localStorage.getItem('nip_jobs')||'[]'); }catch(e){ return []; } }
+function coFindJob(name){
+  var norm = function(s){ return tmNorm(s).replace(/様邸|様宅|様|邸|宅|新築|リフォーム|改修|工事|現場/g,''); };
+  var k = norm(name); if(!k) return null;
+  var js = coJobs();
+  return js.find(function(j){ return tmNorm(j.name)===tmNorm(name); }) || js.find(function(j){ var n=norm(j.name); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }) || null;
+}
+function coParseLine(s){
+  var n = s; try{ n = s.normalize('NFKC'); }catch(e){}
+  var price = null;
+  var pm = n.match(/\s*(?:@\s*([\d,]+(?:\.\d+)?)|単価\s*([\d,]+(?:\.\d+)?)\s*円?)\s*(?:\/\s*\S+)?/);
+  if(pm){ price = parseFloat((pm[1]||pm[2]).replace(/,/g,'')); n = n.replace(pm[0],' ').trim(); }
+  var r = tmParse(n)[0] || {raw:n, name:n, qty:null, unit:''};
+  r.price = price; return r;
+}
+function parseZaikoText(raw){
+  var text = String(raw||'').replace(/\r/g,'').replace(/```[a-z]*/g,'');
+  var res = {date: today(), job: '', ops: []}, cur = null;
+  text.split('\n').forEach(function(line, li){
+    var t = line.trim(); if(!t) return;
+    var h = t.match(/^【\s*([^】]*)】\s*(.*)$/);
+    if(h){
+      var label = h[1].trim(), rest = h[2].trim(), d;
+      if(/在庫/.test(label) || coDate(label)){
+        d = coDate(label) || coDate(rest); if(d) res.date = d;
+        var jr = rest.replace(/^(?:\d{4}[\/\-年.])?\d{1,2}[\/月.]\d{1,2}日?\s*(?:[（(][^）)]*[）)])?/, '').trim();
+        if(jr) res.job = jr;
+        cur = null; return;
+      }
+      if(/現場|工事名/.test(label)){ res.job = rest; return; }
+      var type = /入庫|仕入|購入|入荷/.test(label) ? 'in' : /持出|持ち出|出庫|搬出|移動/.test(label) ? 'out' : /使用|使った|消費/.test(label) ? 'use' : /返却|戻し|返品|戻す/.test(label) ? 'ret' : null;
+      if(!type){ cur = null; return; }
+      var sup = ''; var sm = rest.match(/[（(]([^）)]*)[）)]\s*$/); if(sm){ sup = sm[1].trim(); rest = rest.replace(sm[0],'').trim(); }
+      var parts = rest.split(/\s*(?:→|->|⇒|＞|>|から)\s*/);
+      cur = {type: type, from: '', to: '', supplier: sup};
+      if(type==='in') cur.to = parts[0]||'';
+      else if(type==='use') cur.from = parts[0]||'';
+      else { cur.from = parts[0]||''; cur.to = parts[1]||''; }
+      return;
+    }
+    if(!cur) return;
+    t.replace(/^[・\-\*•●◯○\s]+/,'').split(/[、，]/).forEach(function(piece, pi){
+      var s = piece.trim(); if(!s) return;
+      var L = coParseLine(s);
+      res.ops.push({type: cur.type, from: cur.from, to: cur.to, supplier: cur.supplier, raw: s, name: L.name, qty: L.qty, unit: L.unit, price: L.price, key: li+'-'+pi});
+    });
+  });
+  return res;
+}
+
+var _coState = null;
+function openChatOpsPaste(){
+  showModal('<div class="sheet" onclick="event.stopPropagation()">'
+    + '<div class="sheet-title">📥 チャットの在庫操作を貼り付け</div>'
+    + '<div class="sheet-desc">チャットで整えた【入庫】【持出】【使用】【返却】の文を貼り付けてください。反映する前に確認画面が出ます。</div>'
+    + '<button class="btn-sm" style="width:100%;margin-bottom:8px;padding:10px;background:#1a2e2c;color:#70d0c8" onclick="coPasteClipboard()">📋 コピーした内容を貼り付け</button>'
+    + '<textarea class="form-input" id="co-text" style="min-height:200px;font-size:12px;line-height:1.6" placeholder="【在庫】11/4（火）雨漏り修繕工事&#10;【持出】倉庫→作業場&#10;・杉・スギ 役・□・無 26×40×3640 3本"></textarea>'
+    + '<div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">キャンセル</button><button class="btn-confirm gold" onclick="coRun()">読み取る</button></div></div>');
+}
+async function coPasteClipboard(){
+  try{ var t = await navigator.clipboard.readText(); document.getElementById('co-text').value = t; }
+  catch(e){ alert('自動で貼り付けできませんでした。下の欄を長押しして「ペースト」してください。'); }
+}
+function coRun(){
+  var raw = (document.getElementById('co-text')||{}).value || '';
+  if(/^\s*[\[{]/.test(raw)){   // 以前のJSON形式もそのまま使える
+    var box = document.getElementById('zaiko-json-input');
+    closeModalForce(); switchTab && switchTab('連携');
+    setTimeout(function(){ var b=document.getElementById('zaiko-json-input'); if(b){ b.value=raw; importZaikoJSON(); } },50);
+    return;
+  }
+  var r = parseZaikoText(raw);
+  if(!r.ops.length){ alert('【入庫】【持出】【使用】【返却】の行が読み取れませんでした'); return; }
+  var base = coHash(tmNorm(raw));
+  var doneKeys = {}; history.forEach(function(h){ if(h.chatKey) doneKeys[h.chatKey] = 1; });
+  r.ops.forEach(function(o){ o.chatKey = base+':'+o.key; o.already = !!doneKeys[o.chatKey]; });
+  _coState = r;
+  coOpenConfirm();
+}
+function coLocSel(cls, selId, item, allowText, mode, textName){
+  var opts = '<option value="">-- '+(mode==='to'?'行き先':'場所')+'を選ぶ --</option>';
+  var st = (item&&item.stocks)||{};
+  locations.forEach(function(l){
+    var q = parseFloat(st[l.id])||0;
+    opts += '<option value="loc:'+esc(l.id)+'"'+('loc:'+l.id===selId?' selected':'')+'>'+esc((l.icon||'')+' '+l.name)+(item?'（在庫 '+q+(item.unit||'')+'）':'')+'</option>';
+  });
+  if(allowText) opts += '<option value="txt:"'+(String(selId).indexOf('txt:')===0?' selected':'')+'>✏️ '+esc(textName||'場所一覧にない現場')+'（場所一覧にない現場・在庫からは消える）</option>';
+  return '<select class="form-select '+cls+'" style="margin:0;font-size:12px;flex:1" onchange="coOnLoc(this)">'+opts+'</select>';
+}
+function coOpenConfirm(){
+  var r = _coState, job = coFindJob(r.job);
+  var jobOpts = '<option value="">-- 現場（工事）を選ぶ --</option>' + coJobs().map(function(j){ return '<option value="'+esc(j.id)+'"'+(job&&job.id===j.id?' selected':'')+'>'+esc((j.code?j.code+' ':'')+j.name)+'</option>'; }).join('')
+    + '<option value="__none__"'+(!r.job?' selected':'')+'>現場なし（倉庫の整理など）</option>';
+  var html = '<div class="sheet" onclick="event.stopPropagation()" style="max-height:90vh;overflow-y:auto">'
+    + '<div class="sheet-title">📥 在庫操作の確認</div>'
+    + '<div class="sheet-desc">品目・数量・場所を確かめて「反映する」を押してください。'+(r.job&&!job?'<br><span style="color:#e8b050">「'+esc(r.job)+'」は工事台帳に見つかりませんでした。選んでください。</span>':'')+'</div>'
+    + '<div style="display:flex;gap:6px"><input class="form-input" type="date" id="co-date" value="'+esc(r.date)+'" style="width:150px"/><select class="form-select" id="co-job" style="flex:1">'+jobOpts+'</select></div>';
+  r.ops.forEach(function(o, i){
+    var ex = tmExact(o.name);
+    var list = ex.length ? ex : tmCandidates(o.name, 8);
+    var sel = ex.length===1 ? ex[0] : null;
+    var reason = o.already ? '✅ この行は前に反映済みです（二重にしません）'
+      : ex.length>1 ? '同じ名前の品目が'+ex.length+'つあります。単価で選んでください'
+      : ex.length===1 ? '' : (o.type==='in' ? '在庫品目にありません。近いものを選ぶか、新しい品目として登録します' : '同じ名前の品目がありません。近いものから選ぶか、品名で探してください');
+    var fromLoc = coFindLoc(o.from), toLoc = coFindLoc(o.to);
+    var fromSel = fromLoc ? 'loc:'+fromLoc.id : (sel && (o.type==='use'||o.type==='out') && tmAutoLoc(sel) ? 'loc:'+tmAutoLoc(sel) : '');
+    var toSel = toLoc ? 'loc:'+toLoc.id : (o.type==='out' && o.to ? 'txt:'+o.to : (o.type==='in' && locations.length===1 ? 'loc:'+locations[0].id : ''));
+    o._toText = (o.type==='out' && o.to && !toLoc) ? o.to : '';
+    html += '<div class="co-row tm-row" data-i="'+i+'" style="background:#161614;border:1px solid #2e2e28;border-left:3px solid '+CO_COLOR[o.type]+';border-radius:10px;padding:10px;margin-bottom:8px;'+(o.already?'opacity:.55':'')+'">'
+      + '<div style="display:flex;justify-content:space-between;gap:6px"><span style="color:'+CO_COLOR[o.type]+';font-size:11px;font-weight:700">'+CO_TYPES[o.type]+'</span>'
+      + '<span style="color:#888;font-size:10px">'+esc(o.from||'')+(o.from&&o.to?' → ':'')+esc(o.to||'')+(o.supplier?'（'+esc(o.supplier)+'）':'')+'</span></div>'
+      + '<div style="color:#e8d5a3;font-size:12px;font-weight:600;margin-top:3px">「'+esc(o.raw)+'」</div>'
+      + (reason?'<div style="color:'+(o.already?'#70c870':'#e8b050')+';font-size:10px;margin:3px 0 4px">'+esc(reason)+'</div>':'')
+      + '<select class="form-select tm-item" onchange="tmOnItem('+i+');coOnItem('+i+')" style="font-size:12px;margin:5px 0">'
+      +   '<option value="">-- 品目を選ぶ --</option>'+tmItemOptions(list, sel?sel.id:'')
+      +   (o.type==='in'?'<option value="__new__"'+(!ex.length&&!list.length?' selected':'')+'>＋ 新しい品目として登録「'+esc(o.name)+'」</option>':'')
+      +   '<option value="__skip__"'+(o.already?' selected':'')+'>反映しない</option></select>'
+      + '<input class="form-input tm-search" placeholder="🔍 品名で探す" oninput="tmOnSearch('+i+')" style="font-size:12px;margin-bottom:5px"/>'
+      + '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">'
+      +   '<input class="form-input tm-qty" type="number" step="any" min="0" value="'+(o.qty!=null?o.qty:'')+'" placeholder="数量" style="width:76px;margin:0;font-size:12px"/>'
+      +   '<span class="tm-unit" style="color:#888;font-size:11px;min-width:16px">'+esc((sel&&sel.unit)||o.unit||'')+'</span>'
+      +   (o.type==='in' ? '<input class="form-input co-price" type="number" placeholder="単価（税抜）" value="'+(o.price!=null?o.price:(sel?sel.basePrice||'':''))+'" style="flex:1;margin:0;font-size:12px"/>' : '')
+      + '</div>'
+      + '<div style="display:flex;gap:6px;align-items:center">'
+      +   (o.type==='in' ? '<span style="color:#666;font-size:10px">入れる場所</span>'+coLocSel('co-to', toSel, sel, false, 'to')
+        : o.type==='use' ? '<span style="color:#666;font-size:10px">使った場所</span>'+coLocSel('co-from', fromSel, sel, false)
+        : '<div style="flex:1;display:flex;flex-direction:column;gap:4px">'+coLocSel('co-from', fromSel, sel, false)+'<div style="color:#666;font-size:10px;text-align:center">↓</div>'+coLocSel('co-to', toSel, sel, o.type==='out', 'to', o._toText)+'</div>')
+      + '</div>'
+      + '<div class="co-err" style="color:#e87050;font-size:10px;margin-top:4px"></div>'
+      + '</div>';
+  });
+  html += '<div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">キャンセル</button><button class="btn-confirm green" onclick="coApply()">反映する</button></div></div>';
+  _tmPending = r.ops.map(function(o){ return {L: {unit: o.unit}}; });   // tmOnItem が単位を表示するため
+  showModal(html);
+  r.ops.forEach(function(o, i){ coOnItem(i); });
+}
+function coItemOf(i){
+  var row = tmRow(i), id = row.querySelector('.tm-item').value;
+  for(var k=0;k<items.length;k++){ if(String(items[k].id)===String(id)) return items[k]; }
+  return null;
+}
+// 品目を変えたら、場所の在庫数の表示と単価を入れ直す（tmOnItem が作った場所の選択は使わない）
+function coOnItem(i){
+  var row = tmRow(i); if(!row) return;
+  var o = _coState.ops[i], it = coItemOf(i);
+  var old = row.querySelector('.tm-loc'); if(old) old.remove();
+  ['co-from','co-to'].forEach(function(cls){
+    var s = row.querySelector('.'+cls); if(!s) return;
+    var cur = s.value;
+    if(!cur && cls==='co-from' && it && (o.type==='use'||o.type==='out'||o.type==='ret')){ var a = tmAutoLoc(it); if(a) cur = 'loc:'+a; }
+    var tmp = document.createElement('div');
+    tmp.innerHTML = coLocSel(cls, cur, it, cls==='co-to' && o.type==='out', cls==='co-to'?'to':'', o._toText);
+    s.replaceWith(tmp.firstChild);
+  });
+  var pr = row.querySelector('.co-price'); if(pr && it && !pr.value) pr.value = it.basePrice||'';
+  row.querySelector('.tm-unit').textContent = (it&&it.unit) || o.unit || '';
+}
+function coOnLoc(sel){
+  if(sel.value==='txt:'){
+    var i = +sel.closest('.co-row').dataset.i, o = _coState.ops[i];
+    var name = prompt('行き先の現場名', o._toText || o.to || '');
+    if(name===null){ sel.value=''; return; }
+    o._toText = name.trim();
+    sel.options[sel.selectedIndex].textContent = '✏️ '+(o._toText||'現場')+'（場所一覧にない現場・在庫からは消える）';
+  }
+}
+function coApply(){
+  var r = _coState, date = document.getElementById('co-date').value || today();
+  var jobSel = document.getElementById('co-job').value;
+  var job = coJobs().find(function(j){ return j.id===jobSel; });
+  var jobName = job ? job.name : (jobSel==='__none__' ? '' : r.job||'');
+  var jobCode = job ? job.id : '';
+  var plan = [], bad = 0;
+  // 上の行から順に反映したときの在庫で足りるかを見る（持出してから使う、など）
+  var sim = {};
+  var simGet = function(it, loc){ var k = it.id+'|'+loc; if(!(k in sim)) sim[k] = parseFloat((it.stocks||{})[loc])||0; return sim[k]; };
+  var simAdd = function(it, loc, q){ simGet(it, loc); sim[it.id+'|'+loc] += q; };
+  r.ops.forEach(function(o, i){
+    var row = tmRow(i), err = row.querySelector('.co-err'); err.textContent = '';
+    var id = row.querySelector('.tm-item').value;
+    if(id==='__skip__') return;
+    var qty = parseFloat(row.querySelector('.tm-qty').value);
+    var f = (row.querySelector('.co-from')||{}).value||'', t = (row.querySelector('.co-to')||{}).value||'';
+    var fromId = f.indexOf('loc:')===0 ? f.slice(4) : '', toId = t.indexOf('loc:')===0 ? t.slice(4) : '';
+    var toText = t==='txt:' ? (o._toText||'') : '';
+    var it = coItemOf(i), price = parseFloat((row.querySelector('.co-price')||{}).value);
+    var e = '';
+    if(!it && id!=='__new__') e = '品目を選んでください';
+    else if(!(qty>0)) e = '数量を入れてください';
+    else if(o.type==='in' && !toId) e = '入れる場所を選んでください';
+    else if(o.type!=='in' && !fromId) e = '場所を選んでください';
+    else if((o.type==='out'||o.type==='ret') && !toId && !toText) e = '行き先を選んでください';
+    else if(fromId && toId && fromId===toId) e = '元と行き先が同じです';
+    else if(it && fromId && simGet(it, fromId) < qty - 1e-9) e = '在庫が足りません（'+locations.find(function(l){return l.id===fromId;}).name+'に '+simGet(it, fromId)+(it.unit||'')+'）。数量か場所を直すか「反映しない」にしてください';
+    if(e){ err.textContent = '⚠️ '+e; bad++; return; }
+    if(it){ if(o.type==='in') simAdd(it, toId, qty); else { simAdd(it, fromId, -qty); if(toId) simAdd(it, toId, qty); } }
+    plan.push({o:o, it:it, isNew: id==='__new__', qty:qty, fromId:fromId, toId:toId, toText:toText, price: price});
+  });
+  if(bad){ showSyncBadge('⚠️ 直すところが'+bad+'行あります', '#e87050'); return; }
+  if(!plan.length){ closeModalForce(); return; }
+  var lname = function(id){ var l = locations.find(function(x){ return x.id===id; }); return l ? l.name : ''; };
+  plan.forEach(function(p){
+    var it = p.it, o = p.o;
+    if(p.isNew){
+      it = {id:'itm-'+Date.now()+'-'+Math.floor(Math.random()*100000), name:o.name, unit:o.unit||'個', category:'その他', basePrice:p.price||0, stocks:{}, minStock:0, stockId:'', memo:'チャットから登録'};
+      items.push(it);
+    }
+    if(!it.stocks) it.stocks = {};
+    var up = o.type==='in' ? (p.price>0 ? p.price : (it.basePrice||0)) : (it.basePrice||0);
+    if(o.type==='in'){ it.stocks[p.toId] = (parseFloat(it.stocks[p.toId])||0) + p.qty; if(p.price>0) it.basePrice = p.price; }
+    else {
+      it.stocks[p.fromId] = (parseFloat(it.stocks[p.fromId])||0) - p.qty;
+      if(p.toId) it.stocks[p.toId] = (parseFloat(it.stocks[p.toId])||0) + p.qty;
+    }
+    history.unshift({id: Date.now()+Math.random(), date: date, type: o.type, itemId: it.id, itemName: it.name, stockId: it.stockId||'',
+      unit: it.unit||'', qty: p.qty,
+      locName: o.type==='in' ? lname(p.toId) : lname(p.fromId),
+      destName: o.type==='in' ? '' : (p.toId ? lname(p.toId) : (p.toText || (o.type==='use' ? jobName : ''))),
+      destLocId: p.toId && o.type!=='in' ? p.toId : '',
+      jobName: jobName, jobCode: jobCode, supplier: o.type==='in' ? (o.supplier||'') : '',
+      memo: 'チャットから', unitPrice: up, chatKey: o.chatKey});
+  });
+  save(); closeModalForce(); render();
+  showSyncBadge('✅ 在庫操作 '+plan.length+'件を反映しました', '#70c870');
 }
 
 // 起動時に自動で反映（日報アプリで保存した分）

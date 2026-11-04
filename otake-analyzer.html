@@ -1089,22 +1089,29 @@ function inventoryCostDocs() {
   try { nips = JSON.parse(localStorage.getItem('nip_nippos') || '[]'); } catch(e){}
   const nipById = {}; nips.forEach(n => nipById[n.id] = n);
   const caseFor = (jobCode, jobName) => cases.find(c => (jobCode && (c.jobCode === jobCode || c.nippoCode === jobCode)) || (jobName && c.name === jobName));
-  const sums = {};
+  const sums = {}, mats = {};
   hist.forEach(h => {
     const qty = parseFloat(h.qty) || 0, price = parseFloat(h.unitPrice) || 0;
     if (!qty || !price) return;
     let sign = 0;
-    if (h.type === 'use' || h.type === 'out') sign = 1;
+    // 使用＝現場の仕入。出庫は「場所一覧にない現場へ持ち出した」ときだけ（倉庫→作業場などの移動は数えない）
+    if (h.type === 'use' || (h.type === 'out' && !h.destLocId)) sign = 1;
     else if (h.type === 'adj') sign = -1;          // 日報の修正で戻した分
     if (!sign) return;
     const n = h.nippoId ? nipById[h.nippoId] : null;
-    const c = caseFor(n ? n.jobCode : '', n ? n.jobName : (h.jobName || ''));
+    const c = caseFor(n ? n.jobCode : (h.jobCode || ''), n ? n.jobName : (h.jobName || ''));
     if (!c) return;
     sums[c.id] = (sums[c.id] || 0) + sign * qty * price;
+    // 明細：品目・単価ごとに数量をまとめる（2026/11/04）
+    const mk = (h.itemName || '') + '|' + price;
+    const cm = mats[c.id] = mats[c.id] || {};
+    if (!cm[mk]) cm[mk] = { name: h.itemName || '', qty: 0, unit: h.unit || '', unitPrice: price, amount: 0 };
+    cm[mk].qty += sign * qty; cm[mk].amount += sign * qty * price;
   });
   return Object.keys(sums).filter(id => Math.round(sums[id]) !== 0).map(id => ({
     id: 'inv-' + id, dtype: 'buy', doctype: '在庫使用', party: '在庫', name: '在庫から使った材料',
-    amount: Math.round(sums[id]), caseId: id, materials: [], _virtual: true
+    amount: Math.round(sums[id]), caseId: id, _virtual: true,
+    materials: Object.values(mats[id] || {}).filter(m => Math.abs(m.qty) > 1e-9).map(m => ({ ...m, amount: Math.round(m.amount) }))
   }));
 }
 // 集計用：書類＋在庫から使った材料
