@@ -109,6 +109,11 @@ body{font-family:'Noto Sans JP',sans-serif;background:#111110;min-height:100vh;d
     <div class="status-chip"><div class="status-chip-val" id="st-profit" style="color:#fbbf24">—</div><div class="status-chip-label">粗利合計</div></div>
   </div>
 
+  <button onclick="openInbox()" style="display:flex;align-items:center;justify-content:center;gap:10px;width:calc(100% - 24px);margin:10px 12px 0;padding:15px 12px;border-radius:14px;border:1px solid #4a3a20;background:linear-gradient(135deg,#3a2a10,#2a2010);color:#e8b050;font-family:inherit;cursor:pointer">
+    <span style="font-size:24px">📋</span>
+    <span style="text-align:left"><span style="display:block;font-size:14px;font-weight:700">チャットの内容を貼り付け <span id="inbox-badge" style="display:none;background:#e87050;color:#fff;font-size:10px;border-radius:10px;padding:1px 7px;margin-left:4px"></span></span>
+    <span style="display:block;font-size:10px;opacity:.75;margin-top:2px">日報・在庫・レシート・請求書・単価・予算をここ1か所に</span></span>
+  </button>
   <div class="sync-row" id="sync-row"></div>
 
   <button class="sync-all-btn" id="sync-all-btn" onclick="syncAll()">
@@ -460,6 +465,146 @@ async function authAll(){
   alert('完了：'+res.join(' '));
   loadStatus();
 }
+</script>
+<script>
+// ===== 2026/11/04 まとめて貼り付け（入力を一か所に） =====
+// チャットで整えた文やJSONをここに貼ると、日報・在庫・原価・単価DBのどれ向けかを自動で見分けて、
+// そのアプリの取り込み画面を開く（中身の確認と保存は、それぞれのアプリの確認画面で行う）。
+const INBOX_KEY = 'otake_inbox';
+const INBOX_APPS = {
+  nippo: {label:'日報', icon:'📋', color:'#e8b050', file:'daiku-nippo-v5.html', how:'日報アプリの確認画面で人工・工種を見て保存'},
+  zaiko: {label:'在庫', icon:'📦', color:'#70c870', file:'daiku-otake-v14.html', how:'在庫アプリの確認画面で品目・場所を見て反映'},
+  genka: {label:'原価', icon:'📊', color:'#70a8e8', file:'otake-analyzer.html', how:'原価アプリで「インポート」を押す'},
+  tanka: {label:'単価DB', icon:'💴', color:'#70d0c8', file:'daiku-tanka-v2.html', how:'単価DBで「取込」を押す'},
+};
+function inboxLoad(){ try{ return JSON.parse(localStorage.getItem(INBOX_KEY)||'[]'); }catch(e){ return []; } }
+function inboxSave(list){ try{ localStorage.setItem(INBOX_KEY, JSON.stringify(list.slice(-40))); }catch(e){} }
+function inboxEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// 貼り付けた内容を、アプリごとのかたまりに分ける
+function inboxSplit(raw){
+  const text = String(raw||'').replace(/\r/g,'');
+  const segs = [];
+  // 1) JSON（{ … } を文字列に気をつけて切り出す）
+  let rest = '', i = 0;
+  while(i < text.length){
+    if(text[i]==='{' && (i===0 || /\n|\s/.test(text[i-1]) || text[i-1]==='`')){
+      let depth=0, j=i, inStr=false, esc=false;
+      for(; j<text.length; j++){
+        const ch = text[j];
+        if(inStr){ if(esc) esc=false; else if(ch==='\\') esc=true; else if(ch==='"') inStr=false; continue; }
+        if(ch==='"') inStr=true; else if(ch==='{') depth++; else if(ch==='}'){ depth--; if(depth===0) break; }
+      }
+      const cand = text.slice(i, j+1);
+      try{ const obj = JSON.parse(cand); segs.push({kind:'json', text:cand, obj}); i = j+1; continue; }catch(e){}
+    }
+    rest += text[i]; i++;
+  }
+  // 2) 文（見出し【…】で日報か在庫かを見分ける）
+  const ZA = /^【\s*(在庫|入庫|仕入|購入|入荷|持出|持ち出|出庫|搬出|移動|使用|使った|消費|返却|戻し|返品)/;
+  const DATEH = /^【\s*(?:\d{4}[\/\-年.])?\d{1,2}[\/月.]\d{1,2}/;
+  let cur = null;
+  rest.replace(/```[a-z]*/g,'').split('\n').forEach(line=>{
+    const t = line.trim();
+    if(!t){ if(cur) cur.lines.push(''); return; }
+    if(/^【\s*在庫/.test(t)){ cur = {kind:'zaiko', lines:[t]}; segs.push(cur); return; }
+    if(ZA.test(t)){ if(!cur || cur.kind!=='zaiko'){ cur = {kind:'zaiko', lines:[]}; segs.push(cur); } cur.lines.push(t); return; }
+    if(DATEH.test(t)){ if(!cur || cur.kind!=='nippo'){ cur = {kind:'nippo', lines:[]}; segs.push(cur); } cur.lines.push(t); return; }
+    if(cur) cur.lines.push(t);
+  });
+  // 3) アプリを決める
+  return segs.map(s=>{
+    if(s.kind==='json'){
+      const o = s.obj||{};
+      let app = null, title = '';
+      if(o.budget){ app='genka'; title='実行予算：'+((o.budget.case||{}).name||''); }
+      else if(o.vendorQuote){ app='genka'; title='業者見積：'+(o.vendorQuote.kouji||'')+' '+(o.vendorQuote.vendor||''); }
+      else if(o.entries||o.case||o.doc||Array.isArray(o)){ app='genka'; const es = Array.isArray(o)?o:(o.entries||[o]); title='仕入・売上の書類 '+es.length+'件（'+[...new Set(es.map(e=>(e.case||{}).name).filter(Boolean))].join('・')+'）'; }
+      else if(o.vendor && Array.isArray(o.items)){ app='tanka'; title='単価：'+o.vendor+' '+o.items.length+'品'; }
+      else if(o.action && Array.isArray(o.items)){ app='zaiko'; title='在庫（以前のJSON） '+o.items.length+'品'; }
+      return {app, text:s.text, title: title || 'JSON'};
+    }
+    const body = s.lines.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+    if(s.kind==='nippo'){
+      const heads = s.lines.filter(l=>DATEH.test(l));
+      return {app:'nippo', text:body, title:'日報 '+heads.length+'件（'+heads.map(h=>h.replace(/^【[^】]*】\s*/,'')).join('・')+'）'};
+    }
+    const ops = s.lines.filter(l=>/^[・\-]/.test(l)).length;
+    const head = (s.lines.find(l=>/^【\s*在庫/.test(l))||'').replace(/^【[^】]*】\s*/,'');
+    return {app:'zaiko', text:body, title:'在庫の操作 '+ops+'行'+(head?'（'+head+'）':'')};
+  }).filter(x=>x.text);
+}
+
+function openInbox(){
+  document.getElementById('inbox-modal')?.remove();
+  const html = `<div id="inbox-modal" style="position:fixed;inset:0;background:#000b;z-index:9999;display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)this.remove()">
+    <div style="background:#1e1e1a;border:1px solid #333;border-radius:16px 16px 0 0;padding:16px;max-width:520px;width:100%;max-height:92vh;overflow-y:auto;color:#e8d5a3" onclick="event.stopPropagation()">
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px">📋 チャットの内容を貼り付け</div>
+      <div style="color:#888;font-size:11px;line-height:1.6;margin-bottom:10px">日報・在庫の操作・レシートや請求書（原価）・単価・実行予算のどれでも、チャットから返ってきた内容をそのまま貼ってください。どのアプリ向けかを見分けて、そのアプリの確認画面を開きます。いくつか混ざっていても大丈夫です。</div>
+      <button onclick="inboxClip()" style="width:100%;padding:11px;border-radius:9px;border:1px solid #2a4a48;background:#1a2e2c;color:#70d0c8;font-weight:700;font-size:13px;margin-bottom:8px;font-family:inherit">📋 コピーした内容を貼り付け</button>
+      <textarea id="inbox-text" style="width:100%;min-height:150px;background:#141412;border:1px solid #333;border-radius:9px;color:#e8d5a3;padding:10px;font-size:12px;line-height:1.6;font-family:inherit" placeholder="【11/4（水）】雨漏り修繕工事&#10;・下地補修 8:00〜12:00（4h）&#10;【材料】杉KD 39×75×4010 2本"></textarea>
+      <button onclick="inboxRead()" style="width:100%;padding:12px;border-radius:9px;border:none;background:#c8962a;color:#1a1a16;font-weight:700;font-size:14px;margin-top:8px;font-family:inherit">読み取る</button>
+      <div id="inbox-list" style="margin-top:12px"></div>
+    </div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  inboxRenderList();
+}
+async function inboxClip(){
+  try{ const t = await navigator.clipboard.readText(); document.getElementById('inbox-text').value = t; inboxRead(); }
+  catch(e){ alert('自動で貼り付けできませんでした。下の欄を長押しして「ペースト」してください。'); }
+}
+function inboxRead(){
+  const raw = document.getElementById('inbox-text').value;
+  const segs = inboxSplit(raw);
+  if(!segs.length){ alert('日報・在庫・原価・単価のどれとも読み取れませんでした。\nチャットから返ってきた形のまま貼ってください。'); return; }
+  const list = inboxLoad(), now = new Date().toISOString();
+  const ORDER = {nippo:1, zaiko:2, genka:3, tanka:4};   // 日報→在庫→原価→単価DB の順に取り込む
+  segs.sort((a,b)=>(ORDER[a.app]||9)-(ORDER[b.app]||9));
+  segs.forEach((s,k)=>list.push({id:'ib-'+Date.now().toString(36)+'-'+k, app:s.app, title:s.title, text:s.text, createdAt:now}));
+  inboxSave(list);
+  document.getElementById('inbox-text').value = '';
+  inboxRenderList();
+  // 1つだけなら、そのままアプリを開く
+  if(segs.length===1 && segs[0].app){ inboxGo(list[list.length-1].id); }
+  return segs;
+}
+function inboxRenderList(){
+  const box = document.getElementById('inbox-list'); if(!box) return;
+  const list = inboxLoad().filter(x=>!x.cleared);
+  if(!list.length){ box.innerHTML = ''; inboxBadge(); return; }
+  // 新しく貼ったものを上に。同じときに貼ったものは 日報→在庫→原価→単価DB の順
+  const view = list.map((x,k)=>({x,k})).sort((a,b)=> a.x.createdAt===b.x.createdAt ? a.k-b.k : String(b.x.createdAt).localeCompare(String(a.x.createdAt))).map(v=>v.x);
+  box.innerHTML = `<div style="color:#888;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:6px">読み取った内容（上から順に取り込んでください）</div>` + view.map(x=>{
+    const a = INBOX_APPS[x.app];
+    const st = x.opened ? '<span style="color:#70c870">✓ 開きました</span>' : '<span style="color:#e8b050">まだ</span>';
+    return `<div style="background:#161614;border:1px solid #2e2e28;border-left:3px solid ${a?a.color:'#e87050'};border-radius:10px;padding:10px;margin-bottom:7px">
+      <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px"><b style="color:${a?a.color:'#e87050'}">${a?a.icon+' '+a.label:'⚠️ 不明'}</b><span style="font-size:10px">${st}</span></div>
+      <div style="font-size:12px;margin:3px 0 6px;color:#e8d5a3">${inboxEsc(x.title)}</div>
+      ${a?`<div style="color:#666;font-size:10px;margin-bottom:6px">${inboxEsc(a.how)}</div>`:'<div style="color:#e87050;font-size:10px;margin-bottom:6px">どのアプリ向けか分かりませんでした</div>'}
+      <div style="display:flex;gap:6px">
+        ${a?`<button onclick="inboxGo('${x.id}')" style="flex:1;padding:9px;border-radius:8px;border:none;background:${x.opened?'#2e2e28':a.color};color:${x.opened?'#c8c8b0':'#1a1a16'};font-weight:700;font-size:12px;font-family:inherit">${x.opened?'もう一度開く':a.label+'アプリで取り込む →'}</button>`:''}
+        <button onclick="inboxClear('${x.id}')" style="padding:9px 12px;border-radius:8px;border:1px solid #333;background:none;color:#888;font-size:11px;font-family:inherit">消す</button>
+      </div></div>`;
+  }).join('') + `<button onclick="inboxClear('*')" style="width:100%;padding:8px;border-radius:8px;border:1px solid #333;background:none;color:#666;font-size:11px;margin-top:4px;font-family:inherit">一覧をすべて消す</button>`;
+  inboxBadge();
+}
+function inboxGo(id){
+  const x = inboxLoad().find(v=>v.id===id); if(!x || !INBOX_APPS[x.app]) return;
+  location.href = INBOX_APPS[x.app].file + '?inbox=' + encodeURIComponent(id);
+}
+function inboxClear(id){
+  let list = inboxLoad();
+  list = id==='*' ? [] : list.filter(x=>x.id!==id);
+  inboxSave(list); inboxRenderList();
+}
+// まだ開いていないものがあれば、ランチャーのボタンに件数を出す
+function inboxBadge(){
+  const b = document.getElementById('inbox-badge'); if(!b) return;
+  const n = inboxLoad().filter(x=>!x.opened && !x.cleared).length;
+  b.textContent = n ? n+'件 まだ' : ''; b.style.display = n ? 'inline-block' : 'none';
+}
+document.addEventListener('DOMContentLoaded', ()=>{ inboxBadge(); if(/[?&]inbox=open/.test(location.search)){ history.replaceState(null,'',location.pathname); openInbox(); } });
+
 </script>
 </body>
 </html>

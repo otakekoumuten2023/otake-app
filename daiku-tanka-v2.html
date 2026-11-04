@@ -651,5 +651,31 @@ async function loadFromSheet(){}
 async function saveToSheet(){ return OtakeSync.syncNow('tanka'); }
 async function loadFromSheetManual(){ return OtakeSync.syncNow('tanka'); }
 </script>
+
+<script>
+// ===== 2026/11/04 ランチャーの「まとめて貼り付け」から開いたとき、その内容で取り込み画面を開く =====
+(function(){
+  var m = location.search.match(/[?&]inbox=([^&]+)/); if(!m) return;
+  var id = decodeURIComponent(m[1]);
+  function backBtn(){
+    if(document.getElementById('_inbox_back')) return;
+    var b = document.createElement('a'); b.id = '_inbox_back'; b.href = 'index.html?inbox=open';
+    b.textContent = '↩ 貼り付けの一覧へ';
+    b.style.cssText = 'position:fixed;left:10px;bottom:84px;z-index:2147483000;background:#c8962a;color:#1a1a16;font-weight:700;font-size:12px;padding:9px 13px;border-radius:20px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.5);font-family:sans-serif';
+    document.body.appendChild(b);
+  }
+  (window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(function(){ setTimeout(function(){
+    var list = []; try{ list = JSON.parse(localStorage.getItem('otake_inbox')||'[]'); }catch(e){}
+    var it = list.find(function(x){ return x.id===id; });
+    try{ history.replaceState(null,'',location.pathname); }catch(e){}
+    backBtn();
+    if(!it) return;
+    try{ (function(text){ switchTab('json'); setTimeout(function(){ document.getElementById('json-input').value = text; document.getElementById('json-input').scrollIntoView({block:'center'}); }, 50); })(it.text); }
+    catch(e){ alert('貼り付けた内容を開けませんでした：'+e.message); return; }
+    it.opened = new Date().toISOString();
+    try{ localStorage.setItem('otake_inbox', JSON.stringify(list)); }catch(e){}
+  }, 400); });
+})();
+</script>
 </body>
 </html>
