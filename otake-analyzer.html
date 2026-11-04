@@ -1162,7 +1162,10 @@ function inventoryCostDocs() {
 // 集計用：書類＋在庫から使った材料
 // 売上・仕入の書類だけ（予算・追加変更・請求は別の種類として docs に入っている）
 function realDocs() { return docs.filter(d => d.dtype === 'sell' || d.dtype === 'buy'); }
-function costDocs() { return realDocs().concat(inventoryCostDocs()); }
+// 自社の見積は「契約」のものだけ売上に数える（「提出のみ」の版は履歴として残す）。業者見積（quote）は原価に数えない（2026/11/04）
+function sellCounted(d) { return d.dtype === 'sell' && d.sellStatus !== '提出のみ'; }
+function listDocs() { return docs.filter(d => d.dtype === 'sell' || d.dtype === 'buy' || d.dtype === 'quote'); }
+function costDocs() { return docs.filter(d => sellCounted(d) || d.dtype === 'buy').concat(inventoryCostDocs()); }
 
 /* ─── CASES TABLE ─── */
 function renderCases() {
@@ -1308,19 +1311,24 @@ function renderVendors() {
 }
 
 /* ─── DOCS TABLE ─── */
+function docBadge(d) {
+  if (d.dtype === 'sell') return d.sellStatus === '提出のみ' ? '<span class="tag tag-e">📤 見積（提出のみ）</span>' : '<span class="tag tag-s">📤 売上（契約）</span>';
+  if (d.dtype === 'quote') return `<span class="tag" style="background:rgba(136,150,179,.15);color:var(--text2)">📨 業者見積・${d.status||'検討中'}</span>`;
+  return '<span class="tag tag-b">📥 仕入</span>';
+}
 function renderDocs() {
   const body = document.getElementById('doc-body');
-  document.getElementById('doc-empty').style.display = realDocs().length ? 'none' : 'block';
-  body.innerHTML = realDocs().slice().reverse().map(d => {
+  document.getElementById('doc-empty').style.display = listDocs().length ? 'none' : 'block';
+  body.innerHTML = listDocs().slice().reverse().map(d => {
     const cn = cases.find(c=>c.id===d.caseId);
     const hasMat = d.materials && d.materials.length > 0;
     return `<tr style="cursor:pointer" onclick="openDetail('${d.id}')">
-      <td><span class="tag ${d.dtype==='sell'?'tag-s':'tag-b'}">${d.dtype==='sell'?'📤 売上':'📥 仕入'}</span></td>
+      <td>${docBadge(d)}</td>
       <td>${d.doctype}</td>
       <td>${d.name}${hasMat?'<span style="font-size:10px;color:var(--text3);margin-left:4px">📋'+d.materials.length+'項目</span>':''}</td>
       <td>${d.party||'—'}</td>
       <td><span class="tag tag-e">${d.wtype||'—'}</span></td>
-      <td class="num" style="color:${d.dtype==='sell'?'var(--sell)':'var(--buy)'}">${fmtS(d.amount)}</td>
+      <td class="num" style="color:${d.dtype==='sell'?'var(--sell)':d.dtype==='quote'?'var(--text2)':'var(--buy)'}">${fmtS(d.amount)}</td>
       <td>${d.date||'—'}</td>
       <td>${cn?cn.name:'—'}</td>
       <td><button class="del" onclick="event.stopPropagation();deleteDoc('${d.id}')">削除</button></td>
@@ -1384,6 +1392,8 @@ function importJSON() {
           memo: docData.memo || '',
           materials: docData.materials || [],
           kouji: docData.kouji || '',
+          ...(docData.dtype === 'quote' ? { status: docData.status || '検討中' } : {}),
+          ...(docData.dtype === 'sell' && docData.sellStatus ? { sellStatus: docData.sellStatus } : {}),
           caseId,
           createdAt: new Date().toISOString()
         };
@@ -1391,6 +1401,16 @@ function importJSON() {
         const dup = docs.find(x => x.caseId === doc.caseId && x.dtype === doc.dtype && (x.date||'') === (doc.date||'') &&
                                    (x.party||'') === (doc.party||'') && Math.abs((x.amount||0) - (doc.amount||0)) < 1);
         if (dup && !confirm(`同じ書類がすでに登録されています。\n\n${doc.date}　${doc.party}　¥${Math.round(doc.amount).toLocaleString()}\n\nそれでも登録しますか？（「キャンセル」でこの1件を飛ばします）`)) { skipped++; return; }
+        // 自社の見積がすでに「契約」であるとき、新しい見積を契約にするか聞く（2026/11/04）
+        if (doc.dtype === 'sell' && !doc.sellStatus) {
+          const prev = docs.filter(x => x.caseId === doc.caseId && sellCounted(x));
+          if (prev.length) {
+            if (confirm(`この案件には、売上に数えている見積がすでにあります（${prev.map(x=>x.name+' '+fmtS(x.amount)).join('、')}）。\n\n新しい見積「${doc.name}」を契約の見積にしますか？\n・OK：新しい見積を契約にして、前の見積は「提出のみ」にします\n・キャンセル：新しい見積は「提出のみ」として残します`)) {
+              prev.forEach(x => { x.sellStatus = '提出のみ'; x.updatedAt = new Date().toISOString(); });
+              doc.sellStatus = '契約';
+            } else doc.sellStatus = '提出のみ';
+          }
+        }
         docs.push(doc);
         docCount++;
       });
@@ -1413,7 +1433,7 @@ function openDetail(id) {
   const d = docs.find(x => x.id === id);
   if (!d) return;
   const cn = cases.find(c => c.id === d.caseId);
-  const badge = d.dtype==='sell' ? '<span class="tag tag-s">📤 売上</span>' : '<span class="tag tag-b">📥 仕入</span>';
+  const badge = docBadge(d);
   let html = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
       <div><span style="color:var(--text3);font-size:11px">種別</span><div style="margin-top:3px">${badge}</div></div>
@@ -1452,8 +1472,25 @@ function openDetail(id) {
   }
 
   document.getElementById('dm-title').innerHTML = d.name + ' <span style="font-size:12px;color:var(--text2)">- ' + (d.party||'') + '</span>';
-  // 仕入の明細を単価DBへ送る（2026/11/04）
-  if (d.dtype === 'buy' && (d.materials||[]).some(m => (+m.unitPrice||0) > 0)) {
+  // 自社の見積：契約か提出のみか（2026/11/04）
+  if (d.dtype === 'sell') {
+    html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px"><button class="btn btn-q btn-sm" onclick="setSellStatus('${d.id}','${d.sellStatus==='提出のみ'?'契約':'提出のみ'}')">${d.sellStatus==='提出のみ'?'✅ この見積を契約にする（売上に数える）':'この見積を「提出のみ」にする（売上に数えない）'}</button><span class="ps" style="margin:0">売上に数えるのは「契約」の見積だけです</span></div>`;
+  }
+  // 業者見積：工種・採用（2026/11/04）
+  if (d.dtype === 'quote') {
+    const gs = budGroups(d.caseId);
+    html += `<div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <div class="fg"><label>工種（予算の工種）</label><select onchange="setQuoteKouji('${d.id}',this.value)"><option value="">-- 工種を選ぶ --</option>${gs.map(g=>`<option${g.kouji===d.kouji?' selected':''}>${bEsc(g.kouji)}</option>`).join('')}</select></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-g btn-sm" onclick="adoptQuote('${d.id}')">✅ この見積を採用（予算を確定にする）</button>
+        <button class="btn btn-q btn-sm" onclick="setQuoteStatus('${d.id}','不採用')">不採用にする</button>
+        <button class="btn btn-q btn-sm" onclick="setQuoteStatus('${d.id}','検討中')">検討中に戻す</button>
+      </div>
+      ${d.adoptedAt?`<div class="ps" style="margin:0">採用：${bEsc(String(d.adoptedAt).slice(0,10))}</div>`:''}
+    </div>`;
+  }
+  // 仕入の明細を単価DBへ送る（2026/11/04）。業者見積は「見積」の単価として送る
+  if ((d.dtype === 'buy' || d.dtype === 'quote') && (d.materials||[]).some(m => (+m.unitPrice||0) > 0)) {
     html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px"><button class="btn btn-q btn-sm" onclick="sendDocToTanka('${d.id}')">📚 この明細の単価を単価DBへ送る</button><span class="ps" style="margin:0">次の見積で「確定」の単価として使えます</span></div>`;
   }
   document.getElementById('dm-body').innerHTML = html;
@@ -1468,25 +1505,28 @@ function sendDocToTanka(id) {
   let items = []; try { items = JSON.parse(localStorage.getItem('otake_tanka_v1') || '[]'); } catch(e) {}
   const date = d.date || new Date().toISOString().slice(0,10), ym = date.slice(0,7).replace('-','/');
   const vendor = d.party || '不明';
+  const st = d.dtype === 'quote' ? '見積' : '確定';
   let add = 0, upd = 0, old = 0;
   mats.forEach((m, i) => {
     const txt = m.name + ' ' + (d.kouji||'') + ' ' + (d.wtype||'');
     const cat = (TANKA_CAT_RULES.find(([,re]) => re.test(txt)) || ['その他'])[0];
-    const memo = `【確定】${date} ${d.doctype||'仕入'} 税抜（原価アプリから）`;
+    const memo = `【${st}】${date} ${d.doctype||(st==='見積'?'業者見積':'仕入')} 税抜（原価アプリから）`;
     const ex = items.find(x => x.name === m.name && x.vendor === vendor);
     if (ex) {
       if ((ex.updatedAt||'') > date) { old++; return; }   // もっと新しい単価が入っていれば残す
-      Object.assign(ex, { price: +m.unitPrice, unit: m.unit || ex.unit, updatedAt: date, priceDate: date, status: '確定', source: '原価アプリ '+(d.doctype||''), memo });
-      if (!/^【/.test(ex.spec||'')) ex.spec = `【確定】${ym}` + (ex.spec ? ' ' + ex.spec : '');
+      if (st === '見積' && ex.status === '確定') { old++; return; }   // 請求書の「確定」単価は、見積の単価で上書きしない
+      Object.assign(ex, { price: +m.unitPrice, unit: m.unit || ex.unit, updatedAt: date, priceDate: date, status: st, source: '原価アプリ '+(d.doctype||''), memo, collectedFrom: d.id });
+      ex.spec = String(ex.spec||'').replace(/^【[^】]*】\S*\s*/, '');
+      ex.spec = `【${st}】${ym}` + (ex.spec ? ' ' + ex.spec : '');
       upd++;
     } else {
-      items.push({ id: 'tk-gk-'+Date.now()+'-'+i, cat, name: m.name, vendor, price: +m.unitPrice, spec: `【確定】${ym}`, code: '', unit: m.unit || '式', memo,
-        listPrice: null, discountRate: null, updatedAt: date, priceDate: date, status: '確定', source: '原価アプリ '+(d.doctype||''), collectedFrom: d.id });
+      items.push({ id: 'tk-gk-'+Date.now()+'-'+i, cat, name: m.name, vendor, price: +m.unitPrice, spec: `【${st}】${ym}`, code: '', unit: m.unit || '式', memo,
+        listPrice: null, discountRate: null, updatedAt: date, priceDate: date, status: st, source: '原価アプリ '+(d.doctype||''), collectedFrom: d.id });
       add++;
     }
   });
   localStorage.setItem('otake_tanka_v1', JSON.stringify(items));
-  toast(`✅ 単価DBへ：${add}品を追加、${upd}品を更新${old?`（${old}品はもっと新しい単価があるので残しました）`:''}`, 'ok');
+  toast(`✅ 単価DBへ（${st}）：${add}品を追加、${upd}品を更新${old?`（${old}品は新しい単価か確定の単価があるので残しました）`:''}`, 'ok');
 }
 function closeDetailModal() { document.getElementById('detailModal').classList.remove('show'); }
 
@@ -1611,7 +1651,8 @@ function renderAnalyze() {
       if (nameF  && !m.name.toLowerCase().includes(nameF)) return;
       if (partyF && !(d.party||'').toLowerCase().includes(partyF)) return;
       if (unitF  && m.unit !== unitF) return;
-      rows.push({ ...m, party: d.party||'不明', date: d.date||'', caseName: cn?cn.name:'—', docId: d.id });
+      rows.push({ ...m, party: d.party||'不明', date: d.date||'', caseName: cn?cn.name:'—', docId: d.id,
+        kind: d.dtype==='quote' ? '見積' : d.dtype==='sell' ? '自社見積' : '' });
     });
   });
 
@@ -1626,7 +1667,7 @@ function renderAnalyze() {
     const upColor = r.unitPrice ? 'color:var(--profit)' : 'color:var(--text3)';
     return `<tr onclick="openDetail('${r.docId}')" style="cursor:pointer">
       <td><b>${r.name}</b></td>
-      <td>${r.party}</td>
+      <td>${r.party}${r.kind?` <span class="tag ${r.kind==='見積'?'tag-e':'tag-s'}">${r.kind}</span>`:''}</td>
       <td class="num">${r.qty||'—'}</td>
       <td>${r.unit||'—'}</td>
       <td class="num" style="${upColor}">${r.unitPrice?fmtS(r.unitPrice):'—'}</td>
@@ -1700,9 +1741,9 @@ function renderAnalyze() {
 function exportCSV() {
   if (!realDocs().length) { toast('データがありません','err'); return; }
   const h = ['種別','書類種類','案件名','発行元/宛先','工事種別','金額（税抜）','日付','案件','登録日'];
-  const rows = realDocs().map(d => {
+  const rows = listDocs().map(d => {
     const cn = cases.find(c=>c.id===d.caseId);
-    return [d.dtype==='sell'?'売上':'仕入',d.doctype,d.name,d.party,d.wtype,d.amount,d.date,cn?cn.name:'',fmtDate(d.createdAt)];
+    return [d.dtype==='sell'?(d.sellStatus==='提出のみ'?'見積（提出のみ）':'売上'):d.dtype==='quote'?'業者見積（'+(d.status||'検討中')+'）':'仕入',d.doctype,d.name,d.party,d.wtype,d.amount,d.date,cn?cn.name:'',fmtDate(d.createdAt)];
   });
   const csv = '\uFEFF'+[h,...rows].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -1828,7 +1869,7 @@ function budActuals(c){
 }
 function budSummary(c){
   const A = budActuals(c);
-  const sell = docs.filter(d=>d.dtype==='sell'&&d.caseId===c.id).reduce((s,d)=>s+(+d.amount||0),0);
+  const sell = docs.filter(d=>sellCounted(d)&&d.caseId===c.id).reduce((s,d)=>s+(+d.amount||0),0);
   const ch = docs.filter(d=>d.dtype==='change'&&d.caseId===c.id&&d.status!=='取りやめ');
   const chSell = ch.reduce((s,d)=>s+(+d.sell||0),0), chCost = ch.reduce((s,d)=>s+(+d.cost||0),0);
   let budget=0, est=0, actual=A.un.total, forecast=A.un.total, ownerBud=0;
@@ -1897,6 +1938,13 @@ function renderBudget(){
     U.labor.forEach(l=>{ h += `<div class="bud-act"><div><b>日報の人工：${bEsc(l.cat)}</b><div class="ps" style="margin:0">${l.ninku.toFixed(1)}人工</div></div><div class="num">${budYen(l.amount)}</div><span class="ps" style="margin:0">「大工工事」の工種を作ると自動で入ります</span></div>`; });
     h += `</div></div>`;
   }
+  // 工種が決まっていない業者見積
+  const uq = docs.filter(d=>d.dtype==='quote'&&d.caseId===c.id&&!A.groups.some(g=>g.kouji===d.kouji));
+  if(uq.length){
+    h += `<div class="card"><div class="card-t">📨 工種が決まっていない業者見積（${uq.length}通）</div><div style="padding:10px 14px;display:flex;flex-direction:column;gap:8px">`;
+    uq.forEach(q=>{ h += `<div class="bud-act"><div style="cursor:pointer" onclick="openDetail('${q.id}')"><b>${bEsc(q.party||'')}　${bEsc(q.date||'')}</b><div class="ps" style="margin:0">${bEsc(q.name||'')}・${(q.materials||[]).length}行・${bEsc(q.status||'検討中')}</div></div><div class="num">${budYen(q.amount)}</div><select onchange="setQuoteKouji('${q.id}',this.value)"><option value="">-- 工種を選ぶ --</option>${A.groups.map(g=>`<option>${bEsc(g.kouji)}</option>`).join('')}</select></div>`; });
+    h += `</div></div>`;
+  }
   // 日報の人工（大工の区分ごと）
   if(A.lab.ninku){
     h += `<div class="card"><div class="card-t">👷 日報の人工（大工の区分ごと・${A.lab.days}日分）</div><table class="tbl"><thead><tr><th>区分</th><th>人工</th><th>金額</th><th>日数</th></tr></thead><tbody>`;
@@ -1928,6 +1976,7 @@ function budDetailHtml(c, g, act){
     h += `<div class="bud-line" onclick="event.stopPropagation();openBudLine('${g.id}',${i})">
       <div class="bud-l1"><span class="tag ${l.status==='確定'?'tag-s':'tag-e'}">${bEsc(l.status||'仮')}</span> <b>${bEsc(l.name)}</b>${l.vendor?' <span class="ps" style="margin:0;display:inline">（'+bEsc(l.vendor)+'）</span>':''}${l.laborCat?' <span class="tag tag-b">日報:'+bEsc(l.laborCat)+'</span>':''}</div>
       ${l.spec?`<div class="bud-spec">${bEsc(l.spec)}</div>`:''}
+      ${(l.hist||[]).length?`<div class="bud-l3">✏️ 変更 ${l.hist.length}回（最後：${bEsc(String(l.hist[l.hist.length-1].at).slice(0,10))} ${bEsc(l.hist[l.hist.length-1].by)}）</div>`:''}
       <div class="bud-l2"><span>${(+l.qty||0).toLocaleString()} ${bEsc(l.unit||'')} × ${budYen(l.price)}</span><b>${budYen(amt)}</b></div>
       ${est?`<div class="bud-l3">見積時 ${(+l.estQty||+l.qty||0).toLocaleString()} ${bEsc(l.unit||'')} × ${budYen(l.estPrice)} ＝ ${budYen(est)}${diff?` <span style="color:${diff>0?'var(--danger)':'var(--sell)'}">（${diff>0?'+':''}${Math.round(diff).toLocaleString()}）</span>`:''}</div>`:''}
     </div>`;
@@ -1936,6 +1985,11 @@ function budDetailHtml(c, g, act){
     <button class="btn btn-q btn-sm" onclick="event.stopPropagation();budToggleDone('${g.id}')">${g.done?'完了を取り消す':'この工種を完了にする'}</button>
     <button class="btn btn-q btn-sm" onclick="event.stopPropagation();budRenameGroup('${g.id}')">工種名を変える</button>
     ${/大工/.test(g.kouji) && budJobOf(c) && budJobOf(c).estByCat ? `<button class="btn btn-q btn-sm" onclick="event.stopPropagation();budSplitCarp('${g.id}')">大工手間アプリの見積で区分ごとに分ける</button>` : ''}</div>`;
+  const qs = docs.filter(d=>d.dtype==='quote'&&d.caseId===c.id&&d.kouji===g.kouji);
+  if(qs.length){
+    h += `<div class="bud-sub">業者見積（${qs.length}通）</div>`;
+    qs.forEach(q=>{ h += `<div class="bud-act2" onclick="event.stopPropagation();openDetail('${q.id}')" style="cursor:pointer"><div class="bud-l2"><span><span class="tag ${q.status==='採用'?'tag-s':q.status==='不採用'?'tag-b':'tag-e'}">${bEsc(q.status||'検討中')}</span> <b>${bEsc(q.party||'')}</b>　${bEsc(q.date||'')}　${(q.materials||[]).length}行</span><b>${budYen(q.amount)}</b></div></div>`; });
+  }
   h += `<div class="bud-sub">実績（${budYen(act.total)}）</div>`;
   if(!act.buy.length && !act.inv && !act.labor.length) h += `<div class="ps" style="margin:0 0 6px">まだありません。請求書・レシートを取り込むときに工種を付けると、ここに入ります。</div>`;
   act.buy.forEach(({doc:d, auto})=>{
@@ -2007,6 +2061,8 @@ function openBudLine(gid, idx){
       <div class="frow"><div class="fg"><label>状態</label><select id="bl-status">${BUD_STATUS.map(s=>`<option${(l.status||'仮')===s?' selected':''}>${s}</option>`).join('')}</select></div><div class="fg"><label>業者</label><input id="bl-vendor" value="${bEsc(l.vendor||'')}" placeholder="例：杉山板金"></div></div>
       <div class="frow"><div class="fg"><label>日報の大工の区分（自社の手間の行だけ）</label><select id="bl-cat"><option value="">なし</option>${BUD_LABOR_CATS.map(k=>`<option${l.laborCat===k?' selected':''}>${k}</option>`).join('')}</select></div><div class="fg"><label>うち としさんの手間（円）</label><input id="bl-owner" type="number" value="${l.ownerAmount??''}"></div></div>
       <div class="fg"><label>根拠・メモ</label><textarea id="bl-note" style="min-height:44px">${bEsc(l.note||'')}</textarea></div>
+      ${idx>=0?`<div class="fg"><label>今回変える理由（履歴に残ります）</label><input id="bl-why" placeholder="例：11/10 施主と打合せで数量変更"></div>`:'<input id="bl-why" type="hidden" value="">'}
+      ${(l.hist||[]).length?`<div><div class="ps" style="margin:0 0 4px">変更の履歴</div>${l.hist.slice().reverse().map(h=>`<div class="bud-l3">${bEsc(String(h.at).slice(0,10))}　${bEsc(h.by)}：${h.from&&h.from.amount!=null?budYen(h.from.amount)+'（'+(h.from.qty??'')+(h.from.unit||'')+'×'+budYen(h.from.price)+'・'+bEsc(h.from.status||'')+'）':'（新しい行）'} → ${budYen(h.to.amount)}（${h.to.qty??''}${bEsc(h.to.unit||'')}×${budYen(h.to.price)}・${bEsc(h.to.status||'')}）</div>`).join('')}</div>`:''}
       ${l.estAmount?`<div class="ps" style="margin:0">見積時：${(+l.estQty||+l.qty||0).toLocaleString()} ${bEsc(l.unit||'')} × ${budYen(l.estPrice)} ＝ ${budYen(l.estAmount)}（見積時の数字は変わりません）</div>`:''}
       <div class="brow"><button class="btn btn-g" onclick="saveBudLine('${gid}',${idx})">保存</button>${idx>=0?`<button class="btn btn-d" onclick="delBudLine('${gid}',${idx})">この行を削除</button>`:''}</div>
     </div>`);
@@ -2015,10 +2071,12 @@ function saveBudLine(gid, idx){
   const g = docs.find(x=>x.id===gid); if(!g) return;
   const name = budV('bl-name').trim(); if(!name){ alert('品目を入れてください'); return; }
   const l = idx>=0 ? g.lines[idx] : {id:budId('bl')};
+  const before = idx>=0 ? budSnap(l) : {};
   l.name=name; l.spec=budV('bl-spec').trim(); l.qty=parseFloat(budV('bl-qty'))||0; l.unit=budV('bl-unit').trim(); l.price=parseFloat(budV('bl-price'))||0;
   l.amount = Math.round(l.qty*l.price); l.status=budV('bl-status'); l.vendor=budV('bl-vendor').trim(); l.laborCat=budV('bl-cat');
   const ow = budV('bl-owner'); if(ow==='') delete l.ownerAmount; else l.ownerAmount = parseFloat(ow)||0;
   l.note=budV('bl-note').trim();
+  budHist(l, '手入力'+(budV('bl-why').trim()?'：'+budV('bl-why').trim():''), before);
   if(idx<0){ g.lines = g.lines||[]; g.lines.push(l); }
   budTouch(g); budClose(); budSave(); toast('✅ 予算を保存しました','ok');
 }
@@ -2117,20 +2175,20 @@ function budApplyImport(j){
     return {caseId:c.id, msg:`${c.name} の予算を取り込みました（${(B.groups||[]).length}工種・${n}行）`};
   }
   if(j.vendorQuote){
+    // 業者見積は書類として残す（相見積・出し直しも全部残る）。採用すると予算の行を確定にする（2026/11/04）
     const V = j.vendorQuote; const c = budFindCase(V.case); if(!c) return {error:'案件が見つかりません'};
-    const g = budGroups(c.id).find(x=>x.kouji===V.kouji) || budGroups(c.id).find(x=>budNorm(x.kouji).indexOf(budNorm(V.kouji).replace(/工事$/,''))>=0);
-    if(!g) return {error:'工種「'+V.kouji+'」が予算にありません'};
-    let upd=0, add=0, rem=0;
-    const seen = {};
-    (V.lines||[]).forEach(v=>{
-      const qty=+v.qty||0, price=+v.price||0, amount = v.amount!=null?+v.amount:Math.round(qty*price);
-      const l = (g.lines||[]).find(x=>!seen[x.id] && budNorm(x.name)===budNorm(v.name));
-      if(l){ Object.assign(l,{qty,unit:v.unit||l.unit,price,amount,status:'確定',vendor:V.vendor||l.vendor}); if(v.spec) l.spec=v.spec; l.note=(l.note?l.note+'／':'')+(V.vendor||'')+' 見積 '+(V.date||''); seen[l.id]=1; upd++; }
-      else { const x={id:budId('bl'),name:v.name||'',spec:v.spec||'',qty,unit:v.unit||'',price,amount,status:'確定',vendor:V.vendor||'',note:(V.vendor||'')+' 見積 '+(V.date||''),estQty:0,estPrice:0,estAmount:0}; g.lines.push(x); seen[x.id]=1; add++; }
-    });
-    if(V.replace){ const before=g.lines.length; g.lines = g.lines.filter(x=>seen[x.id]); rem = before-g.lines.length; }
-    budTouch(g);
-    return {caseId:c.id, msg:`${g.kouji}：${V.vendor||''}の見積で ${upd}行を確定、${add}行を追加${rem?'、'+rem+'行を外しました':''}`};
+    const g = budFindGroup(c.id, V.kouji);
+    const mats = (V.lines||[]).map(v=>{ const qty=+v.qty||0, price=+v.price||0; return {name:v.name||'', spec:v.spec||'', qty, unit:v.unit||'', unitPrice:price, amount: v.amount!=null?+v.amount:Math.round(qty*price)}; });
+    const q = {id:budId('quo'), dtype:'quote', doctype:'業者見積', caseId:c.id, kouji: g?g.kouji:(V.kouji||''), party:V.vendor||'', name:(V.kouji||'')+' 見積'+(V.no?' '+V.no:''),
+      date:V.date||'', amount: V.total!=null?+V.total:mats.reduce((s2,m)=>s2+m.amount,0), materials:mats, replace:!!V.replace, memo:V.memo||'', status:'検討中', createdAt:now, updatedAt:now};
+    const dup = docs.find(x=>x.dtype==='quote'&&x.caseId===c.id&&x.party===q.party&&(x.date||'')===(q.date||'')&&Math.abs((+x.amount||0)-q.amount)<1);
+    if(dup && !confirm(`同じ業者見積がすでにあります（${q.party} ${q.date} ${budYen(q.amount)}）。それでも登録しますか？`)) return {error:'同じ見積なので登録しませんでした'};
+    docs.push(q);
+    let msg = `${c.name}：${q.party||''}の${q.kouji||''}見積（${budYen(q.amount)}）を書類に残しました`;
+    if(g && V.adopt!==false && confirm(`${msg}。\n\nこの見積を採用して、予算の「${g.kouji}」を確定にしますか？\n（あとで書類一覧から採用することもできます）`)){
+      const r = budAdoptQuote(q); msg = r.msg;
+    } else if(!g) msg += '（予算に工種「'+(V.kouji||'')+'」がないので、採用は工種を選んでから）';
+    return {caseId:c.id, msg};
   }
   return {error:'"budget" か "vendorQuote" が見つかりません'};
 }
@@ -2149,6 +2207,49 @@ function budAutoCases(){
 }
 try{ renderAll(); }catch(e){ console.error(e); }
 (window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(()=>{ try{ if(budAutoCases()){ persist(); renderAll(); } }catch(e){ console.error(e); } });
+function budFindGroup(caseId, kouji){
+  const gs = budGroups(caseId); if(!kouji) return null;
+  return gs.find(x=>x.kouji===kouji) || gs.find(x=>budNorm(x.kouji).indexOf(budNorm(kouji).replace(/工事$/,''))>=0) || null;
+}
+// 予算の行の変更履歴（いつ・何から何に・理由）
+function budHist(l, by, before){
+  const to = {qty:l.qty, unit:l.unit, price:l.price, amount:l.amount, status:l.status, vendor:l.vendor};
+  const from = before || {};
+  if(['qty','price','amount','status','vendor','unit'].every(k=>String(from[k]??'')===String(to[k]??''))) return;
+  l.hist = (l.hist||[]).concat([{at:new Date().toISOString(), by, from, to}]).slice(-20);
+}
+function budSnap(l){ return l ? {qty:l.qty, unit:l.unit, price:l.price, amount:l.amount, status:l.status, vendor:l.vendor} : {}; }
+// 業者見積を採用：同じ品目の行を確定にして数量・単価を差し替え、ない品目は行を足す（見積時の数字は残る）
+function budAdoptQuote(q){
+  const g = budFindGroup(q.caseId, q.kouji); if(!g) return {msg:'予算に工種がありません'};
+  let upd=0, add=0, rem=0; const seen = {}; const by = '業者見積 '+(q.party||'')+' '+(q.date||'');
+  (q.materials||[]).forEach(v=>{
+    const qty=+v.qty||0, price=+v.unitPrice||0, amount=+v.amount||Math.round(qty*price);
+    const l = (g.lines||[]).find(x=>!seen[x.id] && budNorm(x.name)===budNorm(v.name));
+    if(l){ const b0 = budSnap(l); Object.assign(l,{qty,unit:v.unit||l.unit,price,amount,status:'確定',vendor:q.party||l.vendor,quoteId:q.id}); if(v.spec) l.spec=v.spec; budHist(l, by, b0); seen[l.id]=1; upd++; }
+    else { const x={id:budId('bl'),name:v.name||'',spec:v.spec||'',qty,unit:v.unit||'',price,amount,status:'確定',vendor:q.party||'',note:by,estQty:0,estPrice:0,estAmount:0,quoteId:q.id}; budHist(x, by, {}); g.lines.push(x); seen[x.id]=1; add++; }
+  });
+  if(q.replace){ const before=g.lines.length; g.lines = g.lines.filter(x=>seen[x.id]); rem = before-g.lines.length; }
+  q.status='採用'; q.adoptedAt=new Date().toISOString(); q.updatedAt=q.adoptedAt; q.kouji=g.kouji;
+  budTouch(g);
+  return {msg:`${g.kouji}：${q.party||''}の見積を採用。${upd}行を確定、${add}行を追加${rem?'、'+rem+'行を外しました':''}`};
+}
+function adoptQuote(id){
+  const q = docs.find(x=>x.id===id); if(!q) return;
+  if(!budFindGroup(q.caseId, q.kouji)){ alert('先に「工種（予算の工種）」を選んでください'); return; }
+  if(!confirm(`${q.party||''}の見積（${budYen(q.amount)}）を採用して、予算の「${q.kouji}」を確定にしますか？`)) return;
+  const r = budAdoptQuote(q); persist(); renderAll(); if(typeof closeDetailModal==='function') closeDetailModal(); toast('✅ '+r.msg,'ok');
+}
+function setQuoteStatus(id, st){ const q = docs.find(x=>x.id===id); if(!q) return; q.status = st; budTouch(q); persist(); renderAll(); openDetail(id); }
+function setQuoteKouji(id, k){ const q = docs.find(x=>x.id===id); if(!q) return; q.kouji = k; budTouch(q); persist(); renderAll(); }
+function setSellStatus(id, st){
+  const d = docs.find(x=>x.id===id); if(!d) return;
+  if(st==='契約'){
+    const prev = docs.filter(x=>x.id!==id && x.caseId===d.caseId && sellCounted(x));
+    if(prev.length && confirm(`ほかに売上に数えている見積があります（${prev.map(x=>x.name).join('、')}）。\nそちらを「提出のみ」にしますか？（「キャンセル」で両方とも売上に数えます。追加の見積などのとき）`)) prev.forEach(x=>{ x.sellStatus='提出のみ'; budTouch(x); });
+  }
+  d.sellStatus = st; budTouch(d); persist(); renderAll(); openDetail(id); toast(st==='契約'?'✅ 契約の見積にしました':'「提出のみ」にしました（売上に数えません）','ok');
+}
 function budLinkJob(c){
   if(c.jobCode) return;
   try{
