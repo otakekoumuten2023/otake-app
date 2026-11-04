@@ -529,8 +529,28 @@ function renderHome(){
 }
 
 // ========== 在庫 ==========
+// 検索：入力するたびに画面全体を作り直すと、入力欄が作り直されて1文字ずつしか打てず、変換もできなかった（2026/11/04 修正）
+// 一覧の部分だけを書き換え、変換中（IME）は待つ。全角・半角、×とx、空白区切りの複数の言葉でも探せる
+function stockMatch(i, q){
+  if(!q) return true;
+  const norm = s => (typeof tmNorm==='function' ? tmNorm(s) : String(s||'').toLowerCase());
+  const hay = norm((i.stockId||'')+' '+i.name+' '+(i.category||''));
+  return String(q).split(/[\s\u3000]+/).filter(Boolean).every(w => hay.indexOf(norm(w)) >= 0);
+}
+let _stockComposing = false, _stockTimer = null;
+function onStockSearch(el, ev){
+  if(_stockComposing || (ev && ev.isComposing)) return;
+  searchVal = el.value;
+  clearTimeout(_stockTimer);
+  _stockTimer = setTimeout(()=>{ const box = document.getElementById('stock-results'); if(box) box.innerHTML = renderStockList(); }, 120);
+}
 function renderStock(){
-  const filtered=items.filter(i=>!searchVal||i.name.includes(searchVal)||(i.stockId||'').includes(searchVal)||i.category.includes(searchVal));
+  return `<input class="search-box" id="stock-search" type="search" enterkeyhint="search" autocomplete="off" placeholder="🔍 品番・品名で検索（例：杉 39×75）" value="${esc(searchVal)}"
+    oninput="onStockSearch(this,event)" oncompositionstart="_stockComposing=true" oncompositionend="_stockComposing=false;onStockSearch(this)"/>
+  <div id="stock-results">${renderStockList()}</div>`;
+}
+function renderStockList(){
+  const filtered=items.filter(i=>stockMatch(i, searchVal));
   const cards=filtered.map(item=>{
     const warn=isLow(item);
     const nonZeroLocs=locations.filter(l=>(item.stocks[l.id]||0)>0);
@@ -558,8 +578,7 @@ function renderStock(){
       </div>
     </div>`;
   }).join('');
-  return `<input class="search-box" placeholder="🔍 品番・品名で検索…" value="${esc(searchVal)}" oninput="searchVal=this.value;render()"/>
-  <div class="section-label">全品目 (${filtered.length}件)</div>
+  return `<div class="section-label">${searchVal?'検索結果':'全品目'} (${filtered.length}件)</div>
   ${cards||'<div class="empty-msg2">該当なし</div>'}`;
 }
 
