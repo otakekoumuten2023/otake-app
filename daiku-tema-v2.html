@@ -895,6 +895,7 @@ function collectSendData() {
 
   let tGd=0, tJd=0, tGc=0, tJc=0;
   const koujiMap = {}; // 日報PWAの工種ID → 人工合計
+  const catMap = {};   // 大工手間の区分（解体工事・床工事など）→ {ninku, cost, owner}。原価アプリの予算で大工工事を分けるのに使う（2026/11/04）
 
   STD_WORKS.forEach(w => {
     const qEl = document.getElementById('qty_' + w.id);
@@ -908,6 +909,10 @@ function collectSendData() {
     const cost = adj * rate;
     if(who==='g'){ tGd+=adj; tGc+=cost; } else { tJd+=adj; tJc+=cost; }
 
+    const ck = w.cat || '雑工事';
+    if(!catMap[ck]) catMap[ck] = {ninku:0, cost:0, owner:0};
+    catMap[ck].ninku += adj; catMap[ck].cost += cost; if(who!=='g') catMap[ck].owner += cost;
+
     // 工種マッピング
     const koujiId = CAT_TO_KOUJI[w.cat] || 'mokuko';
     koujiMap[koujiId] = (koujiMap[koujiId]||0) + adj;
@@ -917,11 +922,13 @@ function collectSendData() {
   const zd = Math.ceil(tGd * 0.15 * 10) / 10;
   tGd += zd; tGc += zd * rG;
   koujiMap['mokuko'] = (koujiMap['mokuko']||0) + zd;
+  if(zd > 0){ if(!catMap['雑工事']) catMap['雑工事'] = {ninku:0, cost:0, owner:0}; catMap['雑工事'].ninku += zd; catMap['雑工事'].cost += zd * rG; }
+  Object.values(catMap).forEach(v=>{ v.ninku = Math.round(v.ninku*10)/10; v.cost = Math.round(v.cost); v.owner = Math.round(v.owner); });
 
   const total = tGc + tJc;
   const totalNinku = tGd + tJd;
 
-  return { tGd, tJd, tGc, tJc, total, totalNinku, koujiMap };
+  return { tGd, tJd, tGc, tJc, total, totalNinku, koujiMap, catMap, rateG: rG, rateJ: rJ };
 }
 
 function previewSendToDaichou() {
@@ -987,6 +994,7 @@ function sendToDaichou() {
       if(!confirm(`「${target.name}」が既に台帳にあります。\n見積人工・金額を上書きしますか？`)) return;
       target.estNinkuTotal = d.totalNinku;
       target.estNinkuByKouji = d.koujiMap;
+      target.estByCat = d.catMap;
       // 台帳の「原価」は材料・外注を含む総原価なので上書きしない（2026/10/22 修正）
       target.estDaikuGenka = Math.round(d.total);
       target.updatedAt = new Date().toISOString();
@@ -1008,6 +1016,7 @@ function sendToDaichou() {
         estDaikuGenka: Math.round(d.total),   // 見積大工手間（原価とは別の欄）
         estNinkuTotal: d.totalNinku,
         estNinkuByKouji: d.koujiMap,
+        estByCat: d.catMap,
         memo: `大工手間アプリより自動登録（難易度係数×${document.getElementById('coefBadge').textContent.replace('×','')}）`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

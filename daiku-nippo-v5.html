@@ -885,7 +885,7 @@ function renderAnalysis(){
 function renderMaster(){
   const workerRows = workers.map(w=>`
     <div class="info-row">
-      <span class="info-val">👷 ${esc(w.name)}</span>
+      <span class="info-val">👷 ${esc(w.name)}${w.owner?' <span style="color:#c8962a;font-size:9px">本人</span>':''}<span style="color:${w.wage==null?'#e87050':'#888'};font-size:10px;margin-left:6px">${w.wage==null?'日当未設定':'日当 ¥'+Number(w.wage).toLocaleString()}</span></span>
       <div style="display:flex;gap:5px">
         <button class="btn-sm" onclick="editWorker('${w.id}')">編集</button>
         <button class="btn-sm" style="color:#e87050" onclick="deleteWorker('${w.id}')">削除</button>
@@ -1454,6 +1454,10 @@ function addWorkerModal(id){
     <div class="sheet-title">${w?'作業者を編集':'作業者を追加'}</div>
     <label class="form-label">名前</label>
     <input class="form-input" type="text" id="wk-name" value="${esc(w?.name||'')}"/>
+    <label class="form-label">日当（円・税抜）</label>
+    <input class="form-input" type="number" id="wk-wage" value="${w?.wage??''}" placeholder="例：28750"/>
+    <div style="color:#666;font-size:10px;margin:-4px 0 8px;line-height:1.6">原価アプリで「人工×日当」を大工工事などの実績にします。<br>請求書で支払う外注さん（請求書を原価アプリに入れる人）は 0 にすると二重になりません。</div>
+    <label style="display:flex;align-items:center;gap:8px;color:#c8c8b0;font-size:12px;margin-bottom:10px"><input type="checkbox" id="wk-owner" ${w?.owner?'checked':''} style="width:18px;height:18px"> 本人（実質利益に足し戻す人）</label>
     <div class="btn-row">
       <button class="btn-cancel" onclick="closeModalForce()">キャンセル</button>
       <button class="btn-confirm green" onclick="saveWorker('${id||''}')">保存する</button>
@@ -1464,11 +1468,16 @@ function editWorker(id){ addWorkerModal(id); }
 function saveWorker(id){
   const name = document.getElementById('wk-name').value.trim();
   if(!name){ alert('名前を入力してください'); return; }
+  const wv = document.getElementById('wk-wage')?.value;
+  const wage = wv===''||wv==null ? undefined : (parseFloat(wv)||0);
+  const owner = !!document.getElementById('wk-owner')?.checked;
   if(id){
     const w = workers.find(x=>x.id===id);
-    if(w) w.name=name;
+    if(w){ w.name=name; if(wage!==undefined) w.wage=wage; else delete w.wage; w.owner=owner; w.updatedAt=new Date().toISOString(); }
   } else {
-    workers.push({id:uid('w'), name});
+    const nw = {id:uid('w'), name, owner};
+    if(wage!==undefined) nw.wage = wage;
+    workers.push(nw);
   }
   save(); closeModalForce(); render();
 }
@@ -1665,6 +1674,12 @@ function showJobDetail(jobId){
 }
 
 // ========== 工事台帳 追加・編集モーダル ==========
+// 工事コード：年-連番（2026-001）。新しい工事のときに次の番号を入れておく（2026/11/04）
+function nextJobCode(){
+  const y = new Date().getFullYear();
+  const nums = jobs.map(j=>String(j.code||'').match(new RegExp('^'+y+'-(\\d+)$'))).filter(Boolean).map(m=>parseInt(m[1],10));
+  return y+'-'+String((nums.length?Math.max(...nums):0)+1).padStart(3,'0');
+}
 function addJobModal(id){
   const j = id ? jobs.find(x=>x.id===id) : null;
 
@@ -1697,7 +1712,7 @@ function addJobModal(id){
 
     <div style="color:#c8962a;font-size:10px;font-weight:700;margin-bottom:6px">📋 基本情報</div>
     <label class="form-label">工事コード（例: 2025-001）</label>
-    <input class="form-input" type="text" id="jb-code" value="${esc(j?.code||'')}"/>
+    <input class="form-input" type="text" id="jb-code" value="${esc(j?j.code||'':nextJobCode())}"/>
     <label class="form-label">工事名 *</label>
     <input class="form-input" type="text" id="jb-name" value="${esc(j?.name||'')}"/>
     <label class="form-label">施主・発注者</label>
