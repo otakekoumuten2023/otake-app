@@ -369,40 +369,40 @@ input[readonly]{color:var(--profit);cursor:default}
 
 <div class="wrap">
 <aside>
-  <div class="nav on" data-p="import">
-    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>書類取込
-  </div>
-  <div class="nav" data-p="cases">
-    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>案件管理
-  </div>
-  <div class="nav" data-p="budget">
+  <div class="nav on" data-p="budget">
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></svg>予算・実績
   </div>
-  <div class="nav" data-p="profit">
-    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>粗利分析
+  <div class="nav" data-p="import" style="display:none">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>書類取込
   </div>
-  <div class="nav" data-p="vendors">
+  <div class="nav" data-p="cases" style="display:none">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>案件管理
+  </div>
+  <div class="nav" data-p="profit">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>工事一覧
+  </div>
+  <div class="nav" data-p="vendors" style="display:none">
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>業者分析
   </div>
-  <div class="nav" data-p="sync">
+  <div class="nav" data-p="sync" style="display:none">
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>アプリ連携
   </div>
+  <div class="nav" data-p="docs">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>書類一覧
+  </div>
   <div class="nav" data-p="analyze">
-    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>内訳分析
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>単価比較
   </div>
   <div class="nav" data-p="data">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
     データ管理
-  </div>
-  <div class="nav" data-p="docs">
-    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>書類一覧
   </div>
 </aside>
 
 <main>
 
 <!-- ① 書類取込 -->
-<div class="page on" id="p-import">
+<div class="page" id="p-import">
   <div><div class="ph">書類取込</div><div class="ps">見積書・請求書をアップロード → AIが自動で種別判定・データ抽出します</div></div>
 
   <div class="drop" id="drop" onclick="document.getElementById('fi').click()">
@@ -524,21 +524,21 @@ input[readonly]{color:var(--profit);cursor:default}
     <div><div class="ph">案件管理</div><div class="ps">案件ごとの売上・仕入・粗利</div></div>
     <button class="btn btn-q" onclick="openNewCaseModal()">＋ 案件を手動追加</button>
   </div>
+</div>
+
+<!-- ③ 粗利分析 -->
+<div class="page" id="p-profit">
+  <div><div class="ph">工事一覧</div><div class="ps">すべての工事の売上見込み・原価見込み・粗利見込み（工事を押すと予算・実績へ）。工事は日報アプリの工事台帳から自動で入ります</div></div>
   <div class="card" style="padding:0">
     <table class="tbl" id="case-tbl">
       <thead><tr>
-        <th>案件名</th><th>種別</th><th>売上</th><th>仕入</th>
-        <th>粗利</th><th>粗利率</th><th>書類数</th><th></th>
+        <th>工事</th><th>売上見込み</th><th>原価見込み</th><th>実績（いままで）</th>
+        <th>粗利見込み</th><th>粗利率</th><th>実質利益</th><th></th>
       </tr></thead>
       <tbody id="case-body"></tbody>
     </table>
     <div class="empty" id="case-empty"><span>📂</span>案件がありません</div>
   </div>
-</div>
-
-<!-- ③ 粗利分析 -->
-<div class="page" id="p-profit">
-  <div><div class="ph">粗利分析</div><div class="ps">案件別・工事種別の収益性</div></div>
   <div class="kpi-strip">
     <div class="kpi"><div class="kpi-l">総案件数</div><div class="kpi-v kv-s" id="k-cases">0</div></div>
     <div class="kpi"><div class="kpi-l">売上合計</div><div class="kpi-v kv-s" id="k-sell">¥0</div></div>
@@ -546,34 +546,15 @@ input[readonly]{color:var(--profit);cursor:default}
     <div class="kpi"><div class="kpi-l">粗利合計</div><div class="kpi-v kv-p" id="k-profit">¥0</div></div>
     <div class="kpi"><div class="kpi-l">平均粗利率</div><div class="kpi-v kv-p" id="k-prate">—</div></div>
   </div>
-  <div class="cgrid">
+  <div class="cgrid" style="display:none">
     <div class="cbox"><div class="cbox-t">工事種別 平均粗利率</div><div id="chart-prate" class="vbar-section"></div></div>
     <div class="cbox"><div class="cbox-t">工事種別 売上件数</div><div id="chart-cnt" class="vbar-section"></div></div>
   </div>
-  <div><div class="ps" style="margin-bottom:10px">案件別 収益カード</div>
+  <div style="display:none"><div class="ps" style="margin-bottom:10px">案件別 収益カード</div>
   <div class="case-cards" id="profit-cards"></div></div>
 </div>
 
-<!-- ④ 業者分析 -->
-<div class="page" id="p-vendors">
-  <div><div class="ph">業者分析</div><div class="ps">業者・メーカー別のコスト・単価傾向</div></div>
-  <div class="card" style="padding:0">
-    <table class="tbl" id="vend-tbl">
-      <thead><tr>
-        <th>業者・メーカー名</th><th>書類数</th><th>仕入合計</th><th>平均単価</th><th>最安</th><th>最高</th><th>主な工事種別</th>
-      </tr></thead>
-      <tbody id="vend-body"></tbody>
-    </table>
-    <div class="empty" id="vend-empty"><span>🏢</span>仕入データがありません</div>
-  </div>
-  <div class="cgrid">
-    <div class="cbox"><div class="cbox-t">業者別 仕入合計</div><div id="chart-vamt" class="vbar-section"></div></div>
-    <div class="cbox"><div class="cbox-t">業者別 取引件数</div><div id="chart-vcnt" class="vbar-section"></div></div>
-  </div>
-</div>
-
-
-
+<div class="page" id="p-vendors"></div>
 <!-- ⑥ アプリ連携 -->
 <div class="page" id="p-sync">
   <div><div class="ph">アプリ連携</div><div class="ps">日報・工事台帳と原価管理を工事コードで連動</div></div>
@@ -615,7 +596,7 @@ input[readonly]{color:var(--profit);cursor:default}
 
 <!-- ⑥ 内訳分析 -->
 <div class="page" id="p-analyze">
-  <div><div class="ph">内訳分析</div><div class="ps">全書類の材料明細を横断的に比較・分析</div></div>
+  <div><div class="ph">単価比較</div><div class="ps">請求書・レシートの明細から、品目ごと・業者ごとの単価を比べる</div></div>
 
   <!-- フィルター -->
   <div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
@@ -670,6 +651,21 @@ input[readonly]{color:var(--profit);cursor:default}
       <div class="empty"><span>📊</span>品名で絞り込むと業者間比較が表示されます</div>
     </div>
   </div>
+  <div class="ph" style="font-size:15px;margin-top:6px">業者ごと</div>
+  <div class="card" style="padding:0">
+    <table class="tbl" id="vend-tbl">
+      <thead><tr>
+        <th>業者・メーカー名</th><th>書類数</th><th>仕入合計</th><th>平均単価</th><th>最安</th><th>最高</th><th>主な工事種別</th>
+      </tr></thead>
+      <tbody id="vend-body"></tbody>
+    </table>
+    <div class="empty" id="vend-empty"><span>🏢</span>仕入データがありません</div>
+  </div>
+  <div class="cgrid">
+    <div class="cbox"><div class="cbox-t">業者別 仕入合計</div><div id="chart-vamt" class="vbar-section"></div></div>
+    <div class="cbox"><div class="cbox-t">業者別 取引件数</div><div id="chart-vcnt" class="vbar-section"></div></div>
+  </div>
+
 </div>
 
 <!-- ⑤ 書類一覧 -->
@@ -693,7 +689,7 @@ input[readonly]{color:var(--profit);cursor:default}
   </div>
 </div>
 <!-- 予算・実績（2026/11/04） -->
-<div class="page" id="p-budget">
+<div class="page on" id="p-budget">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
     <div><div class="ph">予算・実績</div><div class="ps">工種ごとの実行予算と、仕入・在庫・日報の人工による実績</div></div>
     <select id="bud-case" onchange="budChangeCase(this.value)" style="max-width:320px"></select>
@@ -1087,6 +1083,11 @@ function deleteDoc(id) {
   toast('削除しました','');
 }
 function deleteCase(id) {
+  const c = cases.find(x => x.id === id); if (!c) return;
+  const n = docs.filter(d => d.caseId === id).length;
+  const msg = `「${c.name}」と、その書類・予算・追加変更・請求（${n}件）を削除しますか？` +
+    (c.jobCode ? `\n\nこの工事は日報アプリの工事台帳にあるので、原価アプリを開き直すと空の工事として また表示されます。工事そのものをやめるときは、日報アプリの台帳で「完了」か削除にしてください。` : '');
+  if (!confirm(msg)) return;
   cases = cases.filter(c => c.id !== id);
   docs  = docs.filter(d => d.caseId !== id);
   persist();
@@ -1098,6 +1099,7 @@ function deleteCase(id) {
 function renderAll() {
   renderHeader();
   try { renderBudget(); } catch(e) { console.error(e); }
+  try { renderAnalyze(); } catch(e) { console.error(e); }
   renderCases();
   renderProfit();
   renderVendors();
@@ -1106,9 +1108,17 @@ function renderAll() {
 
 /* ─── HEADER ─── */
 function renderHeader() {
-  const sell   = costDocs().filter(d=>d.dtype==='sell').reduce((s,d)=>s+d.amount,0);
-  const buy    = costDocs().filter(d=>d.dtype==='buy').reduce((s,d)=>s+d.amount,0);
-  const profit = sell - buy;
+  let sell   = costDocs().filter(d=>d.dtype==='sell').reduce((s,d)=>s+d.amount,0);
+  let buy    = costDocs().filter(d=>d.dtype==='buy').reduce((s,d)=>s+d.amount,0);
+  let profit = sell - buy;
+  // 予算・実績と同じ見込みの数字にそろえる（日報の人工・予算も入る）（2026/11/04）
+  if (typeof budSummary === 'function') {
+    sell = 0; buy = 0;
+    cases.forEach(c => { const S = budSummary(c); sell += S.income; buy += S.forecast; });
+    profit = sell - buy;
+    const lb = document.querySelectorAll('.hdr-pills .pill');
+    if (lb.length === 3) { lb[0].firstChild.textContent = '売上見込み '; lb[1].firstChild.textContent = '原価見込み '; lb[2].firstChild.textContent = '粗利見込み '; }
+  }
   document.getElementById('h-sell').textContent   = fmtS(sell);
   document.getElementById('h-buy').textContent    = fmtS(buy);
   document.getElementById('h-profit').textContent = fmtS(profit);
@@ -1158,25 +1168,26 @@ function costDocs() { return realDocs().concat(inventoryCostDocs()); }
 function renderCases() {
   const body = document.getElementById('case-body');
   document.getElementById('case-empty').style.display = cases.length ? 'none' : 'block';
-  body.innerHTML = cases.map(c => {
-    const cdocs = costDocs().filter(d => d.caseId === c.id);
-    const sell  = cdocs.filter(d=>d.dtype==='sell').reduce((s,d)=>s+d.amount,0);
-    const buy   = cdocs.filter(d=>d.dtype==='buy').reduce((s,d)=>s+d.amount,0);
-    const pr    = sell - buy;
-    const rate  = sell > 0 ? Math.round(pr/sell*100) : null;
+  if (typeof budSummary !== 'function') return;   // 予算・実績の部品を読み込む前（読み込み後にもう一度描く）
+  // 予算・実績と同じ計算（仕入・在庫・日報の人工×日当、予算があれば予算との大きい方）で出す（2026/11/04）
+  const rows = cases.map(c => ({c, S: budSummary(c)})).sort((a,b) => (b.S.income||0) - (a.S.income||0));
+  body.innerHTML = rows.map(({c, S}) => {
+    const rate  = S.income > 0 ? Math.round(S.profit/S.income*100) : null;
     const rateColor = rate === null ? '' : rate >= 30 ? 'color:var(--sell)' : rate >= 15 ? 'color:var(--profit)' : 'color:var(--danger)';
-    return `<tr>
-      <td><b>${c.name}</b></td>
-      <td><span class="tag tag-e">${c.wtype||'—'}</span></td>
-      <td class="num" style="color:var(--sell)">${sell?fmtS(sell):'—'}</td>
-      <td class="num" style="color:var(--buy)">${buy?fmtS(buy):'—'}</td>
-      <td class="num" style="${pr>=0?'color:var(--profit)':'color:var(--danger)'}">${sell||buy?fmtS(pr):'—'}</td>
+    const hasBud = docs.some(d=>d.dtype==='budget'&&d.caseId===c.id);
+    return `<tr style="cursor:pointer" onclick="budOpenCase('${c.id}')">
+      <td><b>${bEsc(c.name)}</b>${c.nippoCode?`<div class="ps" style="margin:0">${bEsc(c.nippoCode)}</div>`:''}${hasBud?' <span class="tag tag-b">予算あり</span>':''}</td>
+      <td class="num" style="color:var(--sell)">${S.income?fmtS(S.income):'—'}</td>
+      <td class="num" style="color:var(--buy)">${S.forecast?fmtS(S.forecast):'—'}</td>
+      <td class="num">${S.actual?fmtS(S.actual):'—'}</td>
+      <td class="num" style="${S.profit>=0?'color:var(--profit)':'color:var(--danger)'}">${S.income||S.forecast?fmtS(S.profit):'—'}</td>
       <td class="num" style="${rateColor}">${rate!==null?rate+'%':'—'}</td>
-      <td>${cdocs.length}件</td>
-      <td><button class="del" onclick="deleteCase('${c.id}')">削除</button></td>
+      <td class="num">${S.income?fmtS(S.real):'—'}</td>
+      <td><button class="del" onclick="event.stopPropagation();deleteCase('${c.id}')">削除</button></td>
     </tr>`;
   }).join('');
 }
+function budOpenCase(id){ budSel = id; budOpen = {}; document.querySelector('.nav[data-p="budget"]').click(); }
 
 /* ─── PROFIT PAGE ─── */
 function renderProfit() {
@@ -2123,6 +2134,21 @@ function budApplyImport(j){
   }
   return {error:'"budget" か "vendorQuote" が見つかりません'};
 }
+// 日報アプリの工事台帳にある工事は、原価アプリの案件として自動で作る（工事の一覧を1つにする 2026/11/04）
+function budAutoCases(){
+  let js = []; try{ js = JSON.parse(localStorage.getItem('nip_jobs')||'[]'); }catch(e){}
+  let n = 0; const now = new Date().toISOString();
+  js.forEach(j=>{
+    if(!j || !j.id || !j.name) return;
+    let c = cases.find(x=>x.jobCode===j.id) || budFindCase({name:j.name});
+    if(c){ if(!c.jobCode){ c.jobCode=j.id; c.nippoCode=j.code||''; c.updatedAt=now; n++; } else if(c.jobCode===j.id && (j.code||'')!==(c.nippoCode||'')){ c.nippoCode=j.code||''; c.updatedAt=now; n++; } return; }
+    cases.push({id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:j.name, wtype:j.wtype||'', jobCode:j.id, nippoCode:j.code||'', client:j.client||'', memo:j.client?'施主：'+j.client:'', createdAt:now, updatedAt:now});
+    n++;
+  });
+  return n;
+}
+try{ renderAll(); }catch(e){ console.error(e); }
+(window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(()=>{ try{ if(budAutoCases()){ persist(); renderAll(); } }catch(e){ console.error(e); } });
 function budLinkJob(c){
   if(c.jobCode) return;
   try{

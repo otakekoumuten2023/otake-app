@@ -520,7 +520,7 @@ function renderHome(){
         <button class="quick-btn q-out" onclick="openOut()"><span class="q-icon">📤</span><span class="q-label">出庫</span><span class="q-desc">現場への搬出</span></button>
         <button class="quick-btn q-use" onclick="openUse()"><span class="q-icon">🪚</span><span class="q-label">使用記録</span><span class="q-desc">作業での消費</span></button>
         <button class="quick-btn q-ret" onclick="openRet()"><span class="q-icon">↩️</span><span class="q-label">返却</span><span class="q-desc">現場→倉庫へ戻す</span></button>
-        <button class="quick-btn" style="grid-column:1/-1;background:#1a2e2c;color:#70d0c8;flex-direction:row;justify-content:center;gap:8px" onclick="openChatOpsPaste()"><span class="q-icon">📋</span><span style="text-align:left"><span class="q-label" style="display:block">チャットの在庫操作を貼り付け</span><span class="q-desc">入庫・持出・使用・返却をまとめて</span></span></button>
+        <button class="btn-sm" style="grid-column:1/-1;background:none;color:#70d0c8;border:1px dashed #2a4a48;padding:8px" onclick="openChatOpsPaste()">📋 チャットの在庫操作を貼り付け（ふだんはランチャーの貼り付けでOK）</button>
       </div>
     </div>
     <div class="section-label">在庫不足アラート</div>${lowHtml}
@@ -705,8 +705,8 @@ function renderData(){
   const yearOpts=[yr-1,yr,yr+1].map(y=>`<option value="${y}"${y===yr?' selected':''}>${y}年</option>`).join('');
   return `<div class="data-section">
 
-    <!-- AI買い出しリスト取込み -->
-    <div class="data-card" style="border:1px solid #3a3218">
+    <!-- AI買い出しリスト取込み（有料AIは使わないので隠す 2026/11/04。レシートはチャット→ランチャーの貼り付けへ） -->
+    <div class="data-card" style="border:1px solid #3a3218;display:none">
       <div class="data-card-title">🛒 買い出しリスト取込み（AI読み取り）</div>
       <div style="color:#888;font-size:10px;margin-bottom:10px;line-height:1.6">
         JPEG・PNG・PDFの買い出しメモや納品書をアップロード→AIが品目を自動抽出→未設定リストで確認・場所を一括設定して入庫します
