@@ -1316,7 +1316,10 @@ function saveNippo(existingId, matListId){
     setTimeout(openNextDraft, 80);
   } else if(wasDraft){
     window._pasteQueue = [];
-    showToast('✅ 日報を保存しました');
+    if(window._inboxActive && window._inboxMarkSaved){
+      window._inboxMarkSaved(); window._inboxActive = false;
+      showToast('✅ 日報を保存しました（左下「↩ 貼り付けの一覧へ」で戻れます）');
+    } else showToast('✅ 日報を保存しました');
   }
 }
 
@@ -2433,20 +2436,40 @@ function saveWithOverwrite(){
     if(document.getElementById('_inbox_back')) return;
     var b = document.createElement('a'); b.id = '_inbox_back'; b.href = 'index.html?inbox=open';
     b.textContent = '↩ 貼り付けの一覧へ';
-    b.style.cssText = 'position:fixed;left:10px;bottom:84px;z-index:2147483000;background:#c8962a;color:#1a1a16;font-weight:700;font-size:12px;padding:9px 13px;border-radius:20px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.5);font-family:sans-serif';
+    b.style.cssText = 'position:fixed;left:10px;bottom:84px;z-index:90;background:#c8962a;color:#1a1a16;font-weight:700;font-size:12px;padding:9px 13px;border-radius:20px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.5);font-family:sans-serif';
     document.body.appendChild(b);
   }
+  // 2026/11/10 待っている間も「読み込み中」を出し、取り込み画面（貼った内容入り）→ 読み取る → 確認画面 の順に進める
+  var wait = document.createElement('div'); wait.id = '_inbox_wait';
+  wait.textContent = '📥 貼り付けた日報を読み込んでいます…';
+  wait.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);z-index:2147483000;background:#1e1e1a;border:1px solid #c8962a;color:#e8d5a3;font-weight:700;font-size:13px;padding:14px 20px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.6);font-family:sans-serif;white-space:nowrap';
+  document.body.appendChild(wait);
+  function inboxMark(field){
+    var l = []; try{ l = JSON.parse(localStorage.getItem('otake_inbox')||'[]'); }catch(e){}
+    var t = l.find(function(x){ return x.id===id; }); if(!t) return;
+    t[field] = new Date().toISOString();
+    try{ localStorage.setItem('otake_inbox', JSON.stringify(l)); }catch(e){}
+  }
+  window._inboxMarkSaved = function(){ inboxMark('saved'); };
   (window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(function(){ setTimeout(function(){
+    wait.remove();
     var list = []; try{ list = JSON.parse(localStorage.getItem('otake_inbox')||'[]'); }catch(e){}
     var it = list.find(function(x){ return x.id===id; });
     try{ history.replaceState(null,'',location.pathname); }catch(e){}
     backBtn();
-    if(!it) return;
-    try{ (function(text){ openPasteImport(); document.getElementById('paste-text').value = text; runPasteImport(); })(it.text); }
-    catch(e){ alert('貼り付けた内容を開けませんでした：'+e.message); return; }
-    it.opened = new Date().toISOString();
-    try{ localStorage.setItem('otake_inbox', JSON.stringify(list)); }catch(e){}
-  }, 400); });
+    if(!it){ alert('貼り付けた内容が見つかりませんでした。ランチャーでもう一度貼り付けてください。'); return; }
+    try{
+      openPasteImport();
+      var ta = document.getElementById('paste-text');
+      ta.value = it.text;
+      var note = document.createElement('div');
+      note.style.cssText = 'background:#1a2e2c;border:1px solid #2a4a48;color:#70d0c8;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;margin-bottom:8px;line-height:1.5';
+      note.textContent = '✅ ランチャーで貼った内容を入れました。中身を見て「読み取る」を押すと確認画面に進みます。';
+      ta.parentNode.insertBefore(note, ta);
+      window._inboxActive = true;
+    }catch(e){ alert('貼り付けた内容を開けませんでした：'+e.message); return; }
+    inboxMark('opened');
+  }, 150); });
 })();
 </script>
 </body>

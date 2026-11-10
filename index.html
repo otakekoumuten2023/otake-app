@@ -540,7 +540,7 @@ function openInbox(){
   const html = `<div id="inbox-modal" style="position:fixed;inset:0;background:#000b;z-index:9999;display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)this.remove()">
     <div style="background:#1e1e1a;border:1px solid #333;border-radius:16px 16px 0 0;padding:16px;max-width:520px;width:100%;max-height:92vh;overflow-y:auto;color:#e8d5a3" onclick="event.stopPropagation()">
       <div style="font-size:15px;font-weight:700;margin-bottom:4px">📋 チャットの内容を貼り付け</div>
-      <div style="color:#888;font-size:11px;line-height:1.6;margin-bottom:10px">日報・在庫の操作・レシートや請求書（原価）・単価・実行予算のどれでも、チャットから返ってきた内容をそのまま貼ってください。どのアプリ向けかを見分けて、そのアプリの確認画面を開きます。いくつか混ざっていても大丈夫です。</div>
+      <div style="color:#888;font-size:11px;line-height:1.6;margin-bottom:10px">日報・在庫の操作・レシートや請求書（原価）・単価・実行予算のどれでも、チャットから返ってきた内容をそのまま貼ってください。どのアプリ向けかを見分けて下に一覧で出します。中身を見てから「○○アプリで取り込む →」を押してください。いくつか混ざっていても大丈夫です。</div>
       <button onclick="inboxClip()" style="width:100%;padding:11px;border-radius:9px;border:1px solid #2a4a48;background:#1a2e2c;color:#70d0c8;font-weight:700;font-size:13px;margin-bottom:8px;font-family:inherit">📋 コピーした内容を貼り付け</button>
       <textarea id="inbox-text" style="width:100%;min-height:150px;background:#141412;border:1px solid #333;border-radius:9px;color:#e8d5a3;padding:10px;font-size:12px;line-height:1.6;font-family:inherit" placeholder="【11/4（水）】雨漏り修繕工事&#10;・下地補修 8:00〜12:00（4h）&#10;【材料】杉KD 39×75×4010 2本"></textarea>
       <button onclick="inboxRead()" style="width:100%;padding:12px;border-radius:9px;border:none;background:#c8962a;color:#1a1a16;font-weight:700;font-size:14px;margin-top:8px;font-family:inherit">読み取る</button>
@@ -549,9 +549,17 @@ function openInbox(){
   document.body.insertAdjacentHTML('beforeend', html);
   inboxRenderList();
 }
+// 2026/11/10 貼り付けたら、まず欄に表示 → 読み取った結果を一覧に出す（すぐ別のアプリへ飛ばない）
 async function inboxClip(){
-  try{ const t = await navigator.clipboard.readText(); document.getElementById('inbox-text').value = t; inboxRead(); }
-  catch(e){ alert('自動で貼り付けできませんでした。下の欄を長押しして「ペースト」してください。'); }
+  let t = '';
+  try{ t = await navigator.clipboard.readText(); }
+  catch(e){ alert('自動で貼り付けできませんでした。下の欄を長押しして「ペースト」してください。'); document.getElementById('inbox-text')?.focus(); return; }
+  if(!t || !t.trim()){ alert('コピーした内容が空でした。チャットでもう一度コピーしてください。'); return; }
+  const ta = document.getElementById('inbox-text');
+  ta.value = t;
+  ta.style.borderColor = '#70d0c8';
+  ta.scrollIntoView({behavior:'smooth', block:'center'});
+  setTimeout(()=>{ ta.style.borderColor = '#333'; inboxRead(); }, 500);
 }
 function inboxRead(){
   const raw = document.getElementById('inbox-text').value;
@@ -563,9 +571,10 @@ function inboxRead(){
   segs.forEach((s,k)=>list.push({id:'ib-'+Date.now().toString(36)+'-'+k, app:s.app, title:s.title, text:s.text, createdAt:now}));
   inboxSave(list);
   document.getElementById('inbox-text').value = '';
+  window._inboxNew = now;   // いま貼ったものを目立たせる
   inboxRenderList();
-  // 1つだけなら、そのままアプリを開く
-  if(segs.length===1 && segs[0].app){ inboxGo(list[list.length-1].id); }
+  // 2026/11/10 自動でアプリへ移動するのをやめた。一覧の「○○アプリで取り込む →」を押して進む
+  setTimeout(()=>document.getElementById('inbox-list')?.scrollIntoView({behavior:'smooth', block:'start'}), 50);
   return segs;
 }
 function inboxRenderList(){
@@ -576,13 +585,18 @@ function inboxRenderList(){
   const view = list.map((x,k)=>({x,k})).sort((a,b)=> a.x.createdAt===b.x.createdAt ? a.k-b.k : String(b.x.createdAt).localeCompare(String(a.x.createdAt))).map(v=>v.x);
   box.innerHTML = `<div style="color:#888;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:6px">読み取った内容（上から順に取り込んでください）</div>` + view.map(x=>{
     const a = INBOX_APPS[x.app];
-    const st = x.opened ? '<span style="color:#70c870">✓ 開きました</span>' : '<span style="color:#e8b050">まだ</span>';
-    return `<div style="background:#161614;border:1px solid #2e2e28;border-left:3px solid ${a?a.color:'#e87050'};border-radius:10px;padding:10px;margin-bottom:7px">
+    const st = x.saved ? '<span style="color:#70c870">✓ 保存しました</span>' : x.opened ? '<span style="color:#70a8e8">開きました（保存はまだ）</span>' : '<span style="color:#e8b050">まだ</span>';
+    const isNew = window._inboxNew && x.createdAt===window._inboxNew;
+    const lines = String(x.text||'').split('\n');
+    const preview = lines.slice(0,6).join('\n') + (lines.length>6 ? '\n…（ほか'+(lines.length-6)+'行）' : '');
+    return `<div style="background:#161614;border:1px solid ${isNew?(a?a.color:'#e87050'):'#2e2e28'};border-left:3px solid ${a?a.color:'#e87050'};border-radius:10px;padding:10px;margin-bottom:7px">
+      ${isNew?`<div style="color:${a?a.color:'#e87050'};font-size:10px;font-weight:700;margin-bottom:4px">▼ いま貼った内容</div>`:''}
       <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px"><b style="color:${a?a.color:'#e87050'}">${a?a.icon+' '+a.label:'⚠️ 不明'}</b><span style="font-size:10px">${st}</span></div>
       <div style="font-size:12px;margin:3px 0 6px;color:#e8d5a3">${inboxEsc(x.title)}</div>
+      ${(isNew || !x.opened) ? `<pre style="white-space:pre-wrap;word-break:break-all;background:#0f0f0d;border-radius:6px;padding:7px 9px;margin:0 0 7px;color:#bcae88;font-size:11px;line-height:1.55;font-family:inherit;max-height:160px;overflow:auto">${inboxEsc(preview)}</pre>` : ''}
       ${a?`<div style="color:#666;font-size:10px;margin-bottom:6px">${inboxEsc(a.how)}</div>`:'<div style="color:#e87050;font-size:10px;margin-bottom:6px">どのアプリ向けか分かりませんでした</div>'}
       <div style="display:flex;gap:6px">
-        ${a?`<button onclick="inboxGo('${x.id}')" style="flex:1;padding:9px;border-radius:8px;border:none;background:${x.opened?'#2e2e28':a.color};color:${x.opened?'#c8c8b0':'#1a1a16'};font-weight:700;font-size:12px;font-family:inherit">${x.opened?'もう一度開く':a.label+'アプリで取り込む →'}</button>`:''}
+        ${a?`<button onclick="inboxGo('${x.id}')" style="flex:1;padding:9px;border-radius:8px;border:none;background:${(x.opened||x.saved)?'#2e2e28':a.color};color:${(x.opened||x.saved)?'#c8c8b0':'#1a1a16'};font-weight:700;font-size:12px;font-family:inherit">${(x.opened||x.saved)?'もう一度開く':a.label+'アプリで取り込む →'}</button>`:''}
         <button onclick="inboxClear('${x.id}')" style="padding:9px 12px;border-radius:8px;border:1px solid #333;background:none;color:#888;font-size:11px;font-family:inherit">消す</button>
       </div></div>`;
   }).join('') + `<button onclick="inboxClear('*')" style="width:100%;padding:8px;border-radius:8px;border:1px solid #333;background:none;color:#666;font-size:11px;margin-top:4px;font-family:inherit">一覧をすべて消す</button>`;
@@ -600,7 +614,7 @@ function inboxClear(id){
 // まだ開いていないものがあれば、ランチャーのボタンに件数を出す
 function inboxBadge(){
   const b = document.getElementById('inbox-badge'); if(!b) return;
-  const n = inboxLoad().filter(x=>!x.opened && !x.cleared).length;
+  const n = inboxLoad().filter(x=>!x.saved && !x.opened && !x.cleared).length;
   b.textContent = n ? n+'件 まだ' : ''; b.style.display = n ? 'inline-block' : 'none';
 }
 document.addEventListener('DOMContentLoaded', ()=>{ inboxBadge(); if(/[?&]inbox=open/.test(location.search)){ history.replaceState(null,'',location.pathname); openInbox(); } });
