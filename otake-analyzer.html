@@ -1491,42 +1491,86 @@ function openDetail(id) {
   }
   // 仕入の明細を単価DBへ送る（2026/11/04）。業者見積は「見積」の単価として送る
   if ((d.dtype === 'buy' || d.dtype === 'quote') && (d.materials||[]).some(m => (+m.unitPrice||0) > 0)) {
-    html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px"><button class="btn btn-q btn-sm" onclick="sendDocToTanka('${d.id}')">📚 この明細の単価を単価DBへ送る</button><span class="ps" style="margin:0">次の見積で「確定」の単価として使えます</span></div>`;
+    html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px"><button class="btn btn-q btn-sm" onclick="sendDocToTanka('${d.id}')">📚 この明細の単価を単価DBへ送る</button><span class="ps" style="margin:0">同じ品がすでにあれば、上書きするか選べます</span></div>`;
   }
   document.getElementById('dm-body').innerHTML = html;
   document.getElementById('detailModal').classList.add('show');
 }
 const TANKA_CAT_RULES = [['屋根工事',/屋根|瓦|ルーフィング/],['板金・樋工事',/板金|樋|唐草|雨押/],['外壁工事',/外壁|サイディング|杉板|透湿/],['断熱・気密工事',/断熱|気密|スタイロ|グラスウール|イゾベール/],['木工事（構造）',/構造|合板|梁|柱|土台|垂木|根太|大引|KD|杉|桧|松/],['内装工事',/内装|クロス|フローリング|ボード|石膏/],['住宅設備機器',/キッチン|ユニットバス|洗面|トイレ|便器|給湯|エコキュート/],['電気工事',/電気|照明|配線/],['給排水工事',/給水|排水|配管/],['塗装工事',/塗装|塗料/],['仮設工事',/足場|養生|仮設/]];
+// 2026/11/11 同じ業者・同じ品名がすでにあるときは、勝手に上書きせず「上書き／追加／スキップ」を1品ずつ選ぶ
 function sendDocToTanka(id) {
   const d = docs.find(x => x.id === id); if (!d) return;
   const mats = (d.materials||[]).filter(m => m.name && (+m.unitPrice||0) > 0);
   if (!mats.length) return;
-  if (!confirm(`${d.party||'業者名なし'}（${d.date||'日付なし'}）の ${mats.length}品の単価を単価DBへ送ります。\n同じ業者・同じ品名がすでにあれば、この単価で上書きします。よろしいですか？`)) return;
+  let items = []; try { items = JSON.parse(localStorage.getItem('otake_tanka_v1') || '[]'); } catch(e) {}
+  const vendor = d.party || '不明';
+  const dups = mats.map((m, i) => ({ m, i, ex: items.filter(x => x.name === m.name && x.vendor === vendor) })).filter(x => x.ex.length);
+  if (!dups.length) {
+    if (!confirm(`${vendor}（${d.date||'日付なし'}）の ${mats.length}品の単価を単価DBへ送ります。\n単価DBに同じ業者・同じ品名はないので、すべて新しく追加します。よろしいですか？`)) return;
+    applyTankaSend(d, mats, {});
+    return;
+  }
+  // 同じものがある品だけ選んでもらう（はじめは「スキップ」＝今の単価を残す）
+  document.getElementById('tankaChoiceModal')?.remove();
+  const yen = v => '¥' + (+v||0).toLocaleString();
+  const rows = dups.map(x => {
+    const cur = x.ex.map(e => `${yen(e.price)}／${bEsc(e.unit||'')}（${bEsc(String(e.priceDate||e.updatedAt||'日付なし').slice(0,10))}${e.status?'・'+bEsc(e.status):''}）`).join('<br>');
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${bEsc(x.m.name)}</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6">いまの単価：${cur}<br>この見積：<b style="color:var(--text)">${yen(x.m.unitPrice)}／${bEsc(x.m.unit||'')}</b></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        ${[['skip','スキップ'],['add','追加'],['over','上書き']].map(([v,l]) => `<label style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:8px 2px;border:1px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap"><input type="radio" name="tkc-${x.i}" value="${v}" ${v==='skip'?'checked':''} style="width:auto;margin:0;flex:none">${l}</label>`).join('')}
+      </div></div>`;
+  }).join('');
+  const n = mats.length - dups.length;
+  const html = `<div class="modal-bg show" id="tankaChoiceModal"><div class="modal" style="max-width:520px">
+    <button class="modal-close" onclick="document.getElementById('tankaChoiceModal').remove()">✕</button>
+    <h3>📚 単価DBへ送る</h3>
+    <p style="font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:10px">${bEsc(vendor)}（${bEsc(d.date||'日付なし')}）の ${mats.length}品のうち、<b>${dups.length}品</b>は同じ業者・同じ品名の単価がすでにあります。1品ずつ選んでください。${n?`<br>残りの ${n}品は新しく追加します。`:''}<br><span style="font-size:11px">スキップ＝いまの単価を残す／追加＝いまの単価も残して、この単価を別の行で足す／上書き＝この単価に置きかえる</span></p>
+    <div style="display:flex;gap:6px;margin-bottom:10px;font-size:11px"><span style="align-self:center;color:var(--text2)">全部を：</span>
+      ${[['skip','スキップ'],['add','追加'],['over','上書き']].map(([v,l]) => `<button class="btn btn-q btn-sm" onclick="document.querySelectorAll('#tankaChoiceModal input[value=${v}]').forEach(r=>r.checked=true)">${l}</button>`).join('')}
+    </div>
+    ${rows}
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-g" id="tkc-ok">送る</button>
+      <button class="btn btn-q" onclick="document.getElementById('tankaChoiceModal').remove()">やめる</button>
+    </div></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('tkc-ok').onclick = () => {
+    const choice = {};
+    dups.forEach(x => { const r = document.querySelector(`#tankaChoiceModal input[name="tkc-${x.i}"]:checked`); choice[x.i] = r ? r.value : 'skip'; });
+    document.getElementById('tankaChoiceModal').remove();
+    applyTankaSend(d, mats, choice);
+  };
+}
+function applyTankaSend(d, mats, choice) {
   let items = []; try { items = JSON.parse(localStorage.getItem('otake_tanka_v1') || '[]'); } catch(e) {}
   const date = d.date || new Date().toISOString().slice(0,10), ym = date.slice(0,7).replace('-','/');
   const vendor = d.party || '不明';
   const st = d.dtype === 'quote' ? '見積' : '確定';
-  let add = 0, upd = 0, old = 0;
+  let add = 0, upd = 0, skip = 0;
   mats.forEach((m, i) => {
     const txt = m.name + ' ' + (d.kouji||'') + ' ' + (d.wtype||'');
     const cat = (TANKA_CAT_RULES.find(([,re]) => re.test(txt)) || ['その他'])[0];
     const memo = `【${st}】${date} ${d.doctype||(st==='見積'?'業者見積':'仕入')} 税抜（原価アプリから）`;
-    const ex = items.find(x => x.name === m.name && x.vendor === vendor);
-    if (ex) {
-      if ((ex.updatedAt||'') > date) { old++; return; }   // もっと新しい単価が入っていれば残す
-      if (st === '見積' && ex.status === '確定') { old++; return; }   // 請求書の「確定」単価は、見積の単価で上書きしない
+    const exs = items.filter(x => x.name === m.name && x.vendor === vendor);
+    const c = exs.length ? (choice[i] || 'skip') : 'add';
+    if (c === 'skip') { skip++; return; }
+    if (c === 'over') {
+      // いちばん新しい行を置きかえる
+      const ex = exs.slice().sort((a,b) => String(b.priceDate||b.updatedAt||'').localeCompare(String(a.priceDate||a.updatedAt||'')))[0];
       Object.assign(ex, { price: +m.unitPrice, unit: m.unit || ex.unit, updatedAt: date, priceDate: date, status: st, source: '原価アプリ '+(d.doctype||''), memo, collectedFrom: d.id });
       ex.spec = String(ex.spec||'').replace(/^【[^】]*】\S*\s*/, '');
       ex.spec = `【${st}】${ym}` + (ex.spec ? ' ' + ex.spec : '');
       upd++;
-    } else {
-      items.push({ id: 'tk-gk-'+Date.now()+'-'+i, cat, name: m.name, vendor, price: +m.unitPrice, spec: `【${st}】${ym}`, code: '', unit: m.unit || '式', memo,
-        listPrice: null, discountRate: null, updatedAt: date, priceDate: date, status: st, source: '原価アプリ '+(d.doctype||''), collectedFrom: d.id });
-      add++;
+      return;
     }
+    items.push({ id: 'tk-gk-'+Date.now()+'-'+i, cat, name: m.name, vendor, price: +m.unitPrice, spec: `【${st}】${ym}`, code: '', unit: m.unit || '式', memo,
+      listPrice: null, discountRate: null, updatedAt: date, priceDate: date, status: st, source: '原価アプリ '+(d.doctype||''), collectedFrom: d.id });
+    add++;
   });
   localStorage.setItem('otake_tanka_v1', JSON.stringify(items));
-  toast(`✅ 単価DBへ（${st}）：${add}品を追加、${upd}品を更新${old?`（${old}品は新しい単価か確定の単価があるので残しました）`:''}`, 'ok');
+  toast(`✅ 単価DBへ（${st}）：${add}品を追加、${upd}品を上書き${skip?`、${skip}品はスキップ（いまの単価を残しました）`:''}`, 'ok');
 }
 function closeDetailModal() { document.getElementById('detailModal').classList.remove('show'); }
 
