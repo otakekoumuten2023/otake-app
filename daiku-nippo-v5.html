@@ -1396,6 +1396,18 @@ function deleteNippo(nid){
 }
 
 // ========== 日報詳細 ==========
+// 日報の詳細から、作業の区分をその場で変える（2026/11/11）
+function setNippoTaskCat(nid, i, cat){
+  const n = nippos.find(x=>x.id===nid); if(!n) return;
+  const {tasks, rest} = getNippoTasks(n);
+  const ts = tasks.map(t=>({...t}));
+  if(!ts[i]) return;
+  if(cat) ts[i].cat = cat; else delete ts[i].cat;
+  n.tasks = ts;
+  n.memo = [buildWorkBlock(ts), rest].filter(Boolean).join('\n\n');
+  n.updatedAt = new Date().toISOString();
+  save(); render(); showNippoDetail(nid);
+}
 function showNippoDetail(nid){
   const n = nippos.find(x=>x.id===nid);
   if(!n) return;
@@ -1422,12 +1434,12 @@ function showNippoDetail(nid){
 
   const {tasks: dTasks, rest: memoRest} = getNippoTasks(n);
   const taskHours = tasksTotalHours(dTasks);
-  const taskRows = dTasks.map(t=>{
+  const taskRows = dTasks.map((t,i)=>{
     const span = t.start&&t.end ? `${t.start}〜${t.end}` : (t.when||'');
     return `<div class="info-row">
       <span class="info-label">🔨 ${esc(t.name)}</span>
       <span class="info-val" style="color:#70d0c8">${esc(span)}${t.hours>0?` ${fmtHours(t.hours)}h`:''}</span>
-    </div>`;
+    </div>${isOff(n)?'':`<div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:-2px 0 4px;font-size:10px;color:#666">区分 ${taskCatSelect(t, `onchange="setNippoTaskCat('${n.id}',${i},this.value)"`)}</div>`}`;
   }).join('');
 
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
@@ -1982,6 +1994,32 @@ function doReset(){
   nippos=[];jobs=[];save();closeModalForce();render();
 }
 
+// ========== 作業の区分（原価アプリの予算・実績で、どの工種の実績に入れるか）2026/11/11 ==========
+// 原価アプリ（otake-analyzer）の BUD_LABOR_CATS / BUD_LABOR_RULES と同じ。変えるときは両方を直す
+const LABOR_CATS = ['解体工事','軸組・補強','床工事','天井・壁下地','造作・建具','断熱・気密','外壁・軒天','雑工事','見積・打合せ'];
+const LABOR_RULES = [
+  ['見積・打合せ', /見積|打合|打ち合|現地調査|現調|事前調査|採寸|実測|事務|書類|申請|図面|プラン|説明|契約|挨拶|近隣/],
+  ['外壁・軒天', /外壁|杉板|軒天|目板|どぶ付け|破風|鼻隠/],
+  ['解体工事',   /解体|撤去|はつり|斫り|壊し/],
+  ['断熱・気密', /断熱|気密|スタイロ|グラスウール|イゾベール|防湿|透湿|ヴァリオ/],
+  ['軸組・補強', /補強|梁|柱|土台|筋違|筋交|金物|ジャッキ|軸組|構造|耐震|添え/],
+  ['床工事',     /床|根太|大引|束|フローリング|捨て張|捨張/],
+  ['天井・壁下地',/下地|天井|壁|ボード|胴縁|野縁|石膏|間仕切/],
+  ['造作・建具', /造作|建具|枠|額縁|カウンター|棚|階段|ドア|窓|サッシ|玄関|框|巾木|廻り縁/],
+];
+function laborCatAuto(name){ const t=String(name||''); for(const [c,re] of LABOR_RULES){ if(re.test(t)) return c; } return '雑工事'; }
+function taskCat(t){ return (t && t.cat && LABOR_CATS.includes(t.cat)) ? t.cat : laborCatAuto(t&&t.name); }
+function taskCatSelect(t, extra){
+  const auto = laborCatAuto(t&&t.name), cur = (t&&t.cat&&LABOR_CATS.includes(t.cat)) ? t.cat : '';
+  return `<select class="task-cat" ${extra||''} style="background:#1a1a18;border:1px solid #2e2e28;border-radius:6px;color:${cur?'#e8c070':'#888'};font-size:11px;padding:3px 4px;font-family:inherit;max-width:150px">
+    <option value=""${cur?'':' selected'}>自動：${esc(auto)}</option>${LABOR_CATS.map(k=>`<option value="${esc(k)}"${cur===k?' selected':''}>${esc(k)}</option>`).join('')}</select>`;
+}
+// 名前を打ち直したら「自動：…」の表示を変える
+function onTaskNameInput(el){
+  const sel = el.closest('.task-row')?.querySelector('.task-cat'); if(!sel) return;
+  sel.options[0].textContent = '自動：'+laborCatAuto(el.value);
+}
+
 // ========== 作業・時間（任意） ==========
 function fmtHours(h){ return String(Math.round((parseFloat(h)||0)*100)/100); }
 function tasksTotalHours(tasks){ return (tasks||[]).reduce((s,t)=>s+(parseFloat(t.hours)||0),0); }
@@ -1997,7 +2035,7 @@ function hoursBetween(start,end){
 function taskToLine(t){
   const span = t.start&&t.end ? ` ${t.start.replace(/^0/,'')}〜${t.end.replace(/^0/,'')}` : '';
   const hrs  = t.hours>0 ? `（${fmtHours(t.hours)}h）` : (t.when?`（${t.when}）`:'');
-  return `・${t.name}${span}${hrs}`;
+  return `・${t.name}${span}${hrs}${t.cat&&LABOR_CATS.includes(t.cat)?`【${t.cat}】`:''}`;
 }
 function buildWorkBlock(tasks){
   if(!tasks||tasks.length===0) return '';
@@ -2027,7 +2065,7 @@ function taskRowHtml(t){
   t = t || {};
   return `<div class="task-row">
     <div class="task-top">
-      <input class="task-name" type="text" placeholder="作業名（例: 床下地）" value="${esc(t.name||'')}"/>
+      <input class="task-name" type="text" placeholder="作業名（例: 床下地）" value="${esc(t.name||'')}" oninput="onTaskNameInput(this)"/>
       <button class="task-del" onclick="this.closest('.task-row').remove();updateTaskTotal()">✕</button>
     </div>
     <div class="task-bottom">
@@ -2038,6 +2076,7 @@ function taskRowHtml(t){
       <input class="task-hours" type="number" step="0.25" min="0" placeholder="—" value="${t.hours>0?t.hours:''}" oninput="updateTaskTotal()"/>
       <span class="task-sep">h</span>
     </div>
+    <div class="task-bottom"><span class="task-sep" style="font-size:10px">区分</span>${taskCatSelect(t, `onchange="this.style.color=this.value?'#e8c070':'#888'"`)}</div>
     <input type="hidden" class="task-when" value="${esc(t.when||'')}"/>
   </div>`;
 }
@@ -2070,7 +2109,8 @@ function collectTasksFromForm(){
     let hours   = parseFloat(row.querySelector('.task-hours')?.value)||0;
     if(!hours && start && end) hours = hoursBetween(start,end);
     const when  = row.querySelector('.task-when')?.value||'';
-    return {name, start, end, hours, when};
+    const cat   = row.querySelector('.task-cat')?.value||'';
+    return cat ? {name, start, end, hours, when, cat} : {name, start, end, hours, when};
   }).filter(t=>t.name);
 }
 
@@ -2097,7 +2137,10 @@ function parseJpDate(s){
 }
 
 function parseTaskLine(s){
-  let name = String(s||'').trim(), start='', end='', hours=0, when='';
+  let name = String(s||'').trim(), start='', end='', hours=0, when='', cat='';
+  // 区分：「・見積作成 2h【見積・打合せ】」のように【】で書いてあれば、その区分にする
+  const cm = name.match(/[【\[]\s*([^】\]]+?)\s*[】\]]/);
+  if(cm){ const k = cm[1].replace(/\s/g,''); const hit = LABOR_CATS.find(c=>c===k || c.replace('・','')===k.replace('・','') || (k.length>=2 && c.startsWith(k))); if(hit){ cat = hit; name = name.replace(cm[0],' '); } }
   // 時刻の範囲: 8:00〜12:00 / 8時〜12時半 / 8時から12時まで
   const T = '(\\d{1,2})(?:[:：](\\d{2})|時(?:(\\d{1,2})分|(半))?)';
   const rangeRe = new RegExp(T+'\\s*(?:[〜~～\\-－ー]|から)\\s*'+T+'(?:\\s*まで)?');
@@ -2116,7 +2159,7 @@ function parseTaskLine(s){
   if(w && (r||h||/[（(]/.test(w[0]))){ when = w[1]; name = name.replace(w[0],' '); }
   else if(w && !r && !h){ when = w[1]; name = name.replace(w[0],' '); }
   name = name.replace(/[（(]\s*[)）]/g,'').replace(/[\s　]+/g,' ').replace(/^[、,。\s]+|[、,。\s]+$/g,'').trim();
-  return {name, start, end, hours, when};
+  return cat ? {name, start, end, hours, when, cat} : {name, start, end, hours, when};
 }
 
 const KOUJI_KEYWORDS = [
