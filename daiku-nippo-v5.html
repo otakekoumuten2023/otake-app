@@ -977,7 +977,8 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
 
   // 工事選択
   const jobOpts = `<option value="">-- 選択してください --</option>` +
-    jobs.map(j=>`<option value="${j.id}"${n?.jobCode===j.id?' selected':''}>${esc(j.code?j.code+' ':'')}${esc(j.name)}</option>`).join('') +
+    // 完工の工事は下にまとめる（2026/11/11）
+    jobs.slice().sort((a,b)=>(a.status==='done')-(b.status==='done')).map(j=>`<option value="${j.id}"${n?.jobCode===j.id?' selected':''}>${esc(j.code?j.code+' ':'')}${esc(j.name)}${j.status==='done'?'（完工）':''}</option>`).join('') +
     `<option value="__custom__"${!n?.jobCode&&n?.jobName?' selected':''}>＋ 直接入力</option>`;
 
   // 材料リスト

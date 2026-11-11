@@ -769,6 +769,22 @@ input[readonly]{color:var(--profit);cursor:default}
 <script>
 // 案件・工事の名前（前の名前も含む。名前を変えても前の名前の書類・日報とつながるように 2026/11/11）
 function caseNames(c){ return c ? [c.name, ...(c.oldNames||[])].filter(Boolean) : []; }
+// 原価アプリで作った案件は、日報アプリの工事台帳にも工事として登録してつなぐ（どのアプリにも同じ現場が出るように 2026/11/11）
+function budEnsureJob(c){
+  if(!c || c.jobCode) return;
+  let js = []; try{ js = JSON.parse(localStorage.getItem('nip_jobs')||'[]')||[]; }catch(e){}
+  const norm = s => { let t=String(s||''); try{t=t.normalize('NFKC');}catch(e){} return t.replace(/[\s　]+/g,'').replace(/様邸|様宅|様|邸|宅/g,''); };
+  let j = js.find(x=>[x.name, ...(x.oldNames||[])].some(y=>norm(y)===norm(c.name)));
+  if(!j){
+    const y = new Date().getFullYear();
+    const nums = js.map(x=>{ const m = String(x.code||'').match(new RegExp('^'+y+'-(\\d+)$')); return m ? parseInt(m[1],10) : 0; });
+    const now = new Date().toISOString();
+    j = {id:'job-'+Date.now()+'-'+Math.floor(Math.random()*1000), code: y+'-'+String(Math.max(0,...nums)+1).padStart(3,'0'), name:c.name, client:'', address:'', status:'active', memo:'原価アプリの案件から登録', createdAt:now, updatedAt:now};
+    js.unshift(j); localStorage.setItem('nip_jobs', JSON.stringify(js));
+  }
+  c.jobCode = j.id; c.nippoCode = j.code||'';
+}
+function caseDone(c){ try{ const j = c && c.jobCode ? JSON.parse(localStorage.getItem('nip_jobs')||'[]').find(x=>x.id===c.jobCode) : null; return !!(j && j.status==='done'); }catch(e){ return false; } }
 const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
 const SK_DOCS  = 'otake_docs_v2';
 const SK_CASES = 'otake_cases_v2';
@@ -1069,7 +1085,8 @@ function closeCaseModal()   { document.getElementById('caseModal').classList.rem
 function saveCase() {
   const n = document.getElementById('mc-name').value.trim();
   if (!n) { toast('案件名を入力してください','err'); return; }
-  cases.push({ id:'c'+Date.now(), name:n, wtype:document.getElementById('mc-type').value, memo:document.getElementById('mc-memo').value, createdAt:new Date().toISOString() });
+  const nc = { id:'c'+Date.now(), name:n, wtype:document.getElementById('mc-type').value, memo:document.getElementById('mc-memo').value, createdAt:new Date().toISOString() };
+  budEnsureJob(nc); cases.push(nc);
   persist();
   closeCaseModal();
   refreshCaseSelect();
@@ -1202,7 +1219,7 @@ function renderCases() {
     const rateColor = rate === null ? '' : rate >= 30 ? 'color:var(--sell)' : rate >= 15 ? 'color:var(--profit)' : 'color:var(--danger)';
     const hasBud = docs.some(d=>d.dtype==='budget'&&d.caseId===c.id);
     return `<tr style="cursor:pointer" onclick="budOpenCase('${c.id}')">
-      <td><b>${bEsc(c.name)}</b>${c.nippoCode?`<div class="ps" style="margin:0">${bEsc(c.nippoCode)}</div>`:''}${hasBud?' <span class="tag tag-b">予算あり</span>':''}</td>
+      <td><b>${bEsc(c.name)}</b>${caseDone(c)?' <span class="tag tag-s">完工</span>':''}${c.nippoCode?`<div class="ps" style="margin:0">${bEsc(c.nippoCode)}</div>`:''}${hasBud?' <span class="tag tag-b">予算あり</span>':''}</td>
       <td class="num" style="color:var(--sell)">${S.income?fmtS(S.income):'—'}</td>
       <td class="num" style="color:var(--buy)">${S.forecast?fmtS(S.forecast):'—'}</td>
       <td class="num">${S.actual?fmtS(S.actual):'—'}</td>
@@ -1395,6 +1412,7 @@ function importJSON() {
           if (!existing.jobCode) { budLinkJob(existing); if (existing.jobCode) existing.updatedAt = new Date().toISOString(); }
         } else {
           const nc = { id:'c'+Date.now()+'-'+ei, name:d.case.name, wtype:d.case.wtype||'', jobCode:d.case.jobCode||'', memo:d.case.memo||'', createdAt:new Date().toISOString() };
+          budLinkJob(nc); budEnsureJob(nc);
           budLinkJob(nc);
           cases.push(nc);
           caseId = nc.id;
@@ -1970,7 +1988,7 @@ function renderBudget(){
     const withB = cases.find(c=>docs.some(d=>d.dtype==='budget'&&d.caseId===c.id));
     budSel = (withB||cases[cases.length-1]||{}).id || '';
   }
-  sel.innerHTML = cases.length ? cases.map(c=>`<option value="${c.id}"${c.id===budSel?' selected':''}>${bEsc(c.name)}${docs.some(d=>d.dtype==='budget'&&d.caseId===c.id)?'　📊':''}</option>`).join('') : '<option value="">案件がありません</option>';
+  sel.innerHTML = cases.length ? cases.slice().sort((a,b)=>caseDone(a)-caseDone(b)).map(c=>`<option value="${c.id}"${c.id===budSel?' selected':''}>${bEsc(c.name)}${caseDone(c)?'（完工）':''}${docs.some(d=>d.dtype==='budget'&&d.caseId===c.id)?'　📊':''}</option>`).join('') : '<option value="">案件がありません</option>';
   const box = document.getElementById('bud-body');
   const c = cases.find(x=>x.id===budSel);
   if(!c){ box.innerHTML = '<div class="empty"><span>📊</span>案件がありません</div>'; return; }
@@ -2355,6 +2373,7 @@ function budApplyImport(j){
     if(!c){
       if(!B.case||!B.case.name) return {error:'案件名がありません'};
       c = {id:'c'+Date.now()+'-b', name:B.case.name, wtype:B.case.wtype||'', jobCode:B.case.jobCode||'', memo:'', createdAt:now, updatedAt:now};
+      budLinkJob(c); budEnsureJob(c);
       budLinkJob(c); cases.push(c);
     }
     const old = budGroups(c.id);

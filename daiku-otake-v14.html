@@ -508,7 +508,7 @@ function renderHome(){
       <button class="btn-full" style="max-width:200px;margin:0 auto" onclick="switchTab('データ')">⚙️ データ管理へ</button>
     </div>`;
   const lowHtml=low.length===0?'<div class="empty-msg">✓ 全品目の在庫は充分です</div>':low.map(item=>`<div class="card warn"><div class="card-row"><span class="item-name">${esc(item.name)}</span><span class="badge red">残${totalStock(item)}</span></div><div class="price-row"><div><div style="color:#666;font-size:9px">在庫金額(税抜)</div><div class="price-val">${yen(stockValue(item))}</div></div><button class="btn-sm" onclick="openIn(&quot;${item.id}&quot;)">📥 入庫</button></div></div>`).join('');
-  return `
+  return `<div style="padding:0 12px">${typeof doneBannerHtml==='function'?doneBannerHtml():''}</div>
     <div class="money-banner">
       <div class="money-banner-title">📊 総在庫金額（税抜）</div>
       <div class="money-main">${yen(tv)}</div>
@@ -672,8 +672,8 @@ function locTypeBadge(loc){
 function renderLoc(){
   const mapPins=[{x:'20%',y:'35%'},{x:'35%',y:'55%'},{x:'55%',y:'28%'},{x:'68%',y:'50%'},{x:'80%',y:'35%'},{x:'25%',y:'70%'},{x:'45%',y:'72%'},{x:'60%',y:'68%'},{x:'75%',y:'72%'},{x:'50%',y:'48%'}];
   const pins=locations.map((loc,i)=>{const pos=mapPins[i%mapPins.length];const v=locStockValue(loc.id);return`<div class="map-pin" style="left:${pos.x};top:${pos.y}"><div style="font-size:16px">${loc.icon}</div><div class="pin-label">${esc(loc.name)}</div><div style="font-size:8px;text-align:center;font-weight:700;color:${loc.color}">${yen(v)}</div></div>`;}).join('');
-  const warehouses=locations.filter(l=>(l.locType||'warehouse')==='warehouse');
-  const sites=locations.filter(l=>l.locType==='site');
+  const warehouses=locations.filter(l=>(l.locType||'warehouse')==='warehouse'&&!l.archived);
+  const sites=locations.filter(l=>l.locType==='site'&&!l.archived);
   function locCard(loc){
     const li=items.filter(i=>(i.stocks[loc.id]||0)>0);
     const v=locStockValue(loc.id);
@@ -687,7 +687,7 @@ function renderLoc(){
       <div class="card-row" onclick="showLocDetail('${loc.id}')">
         <div style="display:flex;align-items:center;gap:9px">
           <span style="font-size:22px">${loc.icon}</span>
-          <div><div class="loc-name">${esc(loc.name)}</div><div class="loc-addr">${esc(loc.address)}</div><div style="margin-top:3px;display:flex;gap:4px;align-items:center">${locTypeBadge(loc)}${loc.prefix?`<span style="background:#3a3218;color:#c8962a;font-size:9px;border-radius:5px;padding:2px 7px;font-weight:700">${esc(loc.prefix)}-XXX</span>`:''}</div></div>
+          <div><div class="loc-name">${esc(loc.name)}${loc.jobDone?' <span style="color:#a8e8a8;font-size:10px">✅ 完工</span>':''}</div>${loc.jobId?`<div style="color:#666;font-size:9px">日報の台帳とつながっています${(()=>{const j=typeof locJob==='function'?locJob(loc):null;return j&&j.code?'（'+esc(j.code)+'）':'';})()}</div>`:''}<div class="loc-addr">${esc(loc.address)}</div><div style="margin-top:3px;display:flex;gap:4px;align-items:center">${locTypeBadge(loc)}${loc.prefix?`<span style="background:#3a3218;color:#c8962a;font-size:9px;border-radius:5px;padding:2px 7px;font-weight:700">${esc(loc.prefix)}-XXX</span>`:''}</div></div>
         </div>
         <div style="text-align:right"><div style="color:${loc.color};font-size:18px;font-weight:700">${locItemCount(loc.id)}</div><div style="color:#444;font-size:9px">品目</div></div>
       </div>
@@ -700,10 +700,10 @@ function renderLoc(){
   }
   const warehouseCards=warehouses.length?`<div class="section-label">🏠 倉庫・保管場所</div>${warehouses.map(locCard).join('')}`:'<div class="empty-msg2">倉庫がありません</div>';
   const siteCards=sites.length?`<div class="section-label">🏗️ 現場</div>${sites.map(locCard).join('')}`:'<div style="color:#444;font-size:11px;text-align:center;padding:8px">現場未登録 — ＋ボタンで追加</div>';
-  return `<div style="padding:10px 12px 0"><button class="btn-sm" style="width:100%;padding:10px;background:#3a3218;color:#e8c070;border:1px solid #5a4a28;font-size:12px;font-weight:700" onclick="openStocktake()">📝 棚卸し（置き場ごとに数える・チェック表）</button></div>
+  return `<div style="padding:0 12px">${typeof doneBannerHtml==='function'?doneBannerHtml():''}</div><div style="padding:10px 12px 0"><button class="btn-sm" style="width:100%;padding:10px;background:#3a3218;color:#e8c070;border:1px solid #5a4a28;font-size:12px;font-weight:700" onclick="openStocktake()">📝 棚卸し（置き場ごとに数える・チェック表）</button></div>
     <div class="section-label">場所マップ</div>
     <div class="map-area"><div class="map-bg"><div class="map-grid"></div>${pins}</div></div>
-    ${warehouseCards}${siteCards}`;
+    ${warehouseCards}${siteCards}${typeof archivedSitesHtml==='function'?archivedSitesHtml():''}`;
 }
 
 // ========== データ管理タブ ==========
@@ -1494,7 +1494,8 @@ function closeModal(e){if(!e||e.target.id==='modal-overlay')closeModalForce();}
 function closeModalForce(){document.getElementById('modal-container').innerHTML='';}
 function itemOpts(preId){return items.map(i=>`<option value="${i.id}"${String(preId)===String(i.id)?' selected':''}>${esc(i.stockId||'')} ${esc(i.name)}</option>`).join('');}
 function locOpts(preId,typeFilter){
-  const filtered=typeFilter?locations.filter(l=>(l.locType||'warehouse')===typeFilter):locations;
+  const live=locations.filter(l=>!l.archived||l.id===preId);
+  const filtered=typeFilter?live.filter(l=>(l.locType||'warehouse')===typeFilter):live;
   const warehouses=filtered.filter(l=>(l.locType||'warehouse')==='warehouse');
   const sites=filtered.filter(l=>l.locType==='site');
   let opts='<option value="">選択してください</option>';
@@ -1581,7 +1582,7 @@ function doIn(){
 
 // ========== 出庫 ==========
 function destOpts(selected,excludeLocId){
-  const locs=locations.filter(l=>l.id!==excludeLocId);
+  const locs=locations.filter(l=>l.id!==excludeLocId&&(!l.archived||selected===('loc:'+l.id)));
   const sites=locs.filter(l=>l.locType==='site');
   const warehouses=locs.filter(l=>(l.locType||'warehouse')==='warehouse');
   let opts='<option value="">-- 搬入先を選択 --</option>';
@@ -2093,8 +2094,10 @@ function doAddLoc(){
   const name=document.getElementById('al-name').value.trim();
   if(!name)return alert('場所名を入力してください');
   const nl={id:'loc'+Date.now(),name,icon:document.getElementById('al-icon').value,color:document.getElementById('al-color').value,address:document.getElementById('al-addr').value.trim(),locType:document.getElementById('al-type').value};
-  locations.push(nl);items.forEach(i=>{i.stocks[nl.id]=0;});
-  save();closeModalForce();render();
+  locations.push(nl);
+  // 倉庫は全品目の欄を作る（これまでどおり）。現場は空のまま（台帳に工事として登録される）
+  if((nl.locType||'warehouse')!=='site') items.forEach(i=>{i.stocks[nl.id]=0;});
+  save();try{siteSync();}catch(e){}closeModalForce();render();
 }
 function editLocModal(locId){
   const loc=locations.find(l=>l.id===locId);if(!loc)return;
@@ -2129,7 +2132,10 @@ function editLocModal(locId){
 }
 function doEditLoc(locId){
   const loc=locations.find(l=>l.id===locId);if(!loc)return;
+  const oldName=loc.name;
   loc.name=document.getElementById('el-name').value.trim()||loc.name;
+  // 名前を変えたら履歴の置き場名も合わせる。台帳とつながった現場なら台帳・日報の工事名も（2026/11/11）
+  if(oldName!==loc.name){ jsRenameLocHist(oldName, loc.name); if(loc.jobId) jsRenameJob(loc.jobId, loc.name); }
   loc.icon=document.getElementById('el-icon').value;
   loc.color=document.getElementById('el-color').value;
   loc.address=document.getElementById('el-addr').value.trim();
@@ -2138,6 +2144,13 @@ function doEditLoc(locId){
   save();closeModalForce();render();
 }
 function doDeleteLoc(locId){
+  const dl=locations.find(l=>l.id===locId);
+  if(dl&&dl.jobId&&jsJobs().some(j=>j.id===dl.jobId)){
+    // 台帳とつながった現場は消さずに「終わった現場」にしまう（消しても台帳から自動でまた作られるため）
+    if(locStock(locId)>0&&!confirm('この現場には材料が残っています。片付けずにしまいますか？'))return;
+    if(!confirm('「'+dl.name+'」を「終わった現場」にしまいますか？\n台帳の工事と履歴は残ります。'))return;
+    dl.archived=true;dl.userHidden=true;save();closeModalForce();render();return;
+  }
   if(!confirm('この場所を削除しますか？'))return;
   locations.splice(locations.findIndex(l=>l.id===locId),1);
   items.forEach(i=>{delete i.stocks[locId];});
@@ -2984,6 +2997,7 @@ function coLocSel(cls, selId, item, allowText, mode, textName){
   var st = (item&&item.stocks)||{};
   locations.forEach(function(l){
     var q = parseFloat(st[l.id])||0;
+    if(l.archived && q<=0 && 'loc:'+l.id!==selId) return;   // 終わった現場は出さない
     opts += '<option value="loc:'+esc(l.id)+'"'+('loc:'+l.id===selId?' selected':'')+'>'+esc((l.icon||'')+' '+l.name)+(item?'（在庫 '+q+(item.unit||'')+'）':'')+'</option>';
   });
   if(allowText) opts += '<option value="txt:"'+(String(selId).indexOf('txt:')===0?' selected':'')+'>✏️ '+esc(textName||'場所一覧にない現場')+'（場所一覧にない現場・在庫からは消える）</option>';
@@ -2991,7 +3005,7 @@ function coLocSel(cls, selId, item, allowText, mode, textName){
 }
 function coOpenConfirm(){
   var r = _coState, job = coFindJob(r.job);
-  var jobOpts = '<option value="">-- 現場（工事）を選ぶ --</option>' + coJobs().map(function(j){ return '<option value="'+esc(j.id)+'"'+(job&&job.id===j.id?' selected':'')+'>'+esc((j.code?j.code+' ':'')+j.name)+'</option>'; }).join('')
+  var jobOpts = '<option value="">-- 現場（工事）を選ぶ --</option>' + coJobs().slice().sort(function(a,b){ return (a.status==='done')-(b.status==='done'); }).map(function(j){ return '<option value="'+esc(j.id)+'"'+(job&&job.id===j.id?' selected':'')+'>'+esc((j.code?j.code+' ':'')+j.name)+'</option>'; }).join('')
     + '<option value="__none__"'+(!r.job?' selected':'')+'>現場なし（倉庫の整理など）</option>';
   var html = '<div class="sheet" onclick="event.stopPropagation()" style="max-height:90vh;overflow-y:auto">'
     + '<div class="sheet-title">📥 在庫操作の確認</div>'
@@ -3187,8 +3201,22 @@ function stDraft(locId, create){
 }
 function stPut(locId, d){ var s = stLoad(); s.drafts[locId] = d; stSave(s); }
 function stLocItems(locId){
-  var d = stDraft(locId);
-  return items.filter(function(i){ return (i.stocks && Object.prototype.hasOwnProperty.call(i.stocks, locId)) || (d && d.counts[String(i.id)]); });
+  // その置き場で数える品目：在庫がある・並びに入れた・下書きで数えた・この1年に出入りがあった品目
+  //（場所を作ると全品目に「0個」の欄ができるため、欄があるだけの品目は出さない 2026/11/11）
+  var d = stDraft(locId), l = locations.find(function(x){ return x.id===locId; }) || {}, keep = {};
+  (Array.isArray(l.shelf) ? l.shelf : []).forEach(function(e){ if(typeof e!=='object') keep[String(e)] = 1; });
+  if(d){ Object.keys(d.counts||{}).forEach(function(k){ keep[k] = 1; }); }
+  var from = (function(){ var t = new Date(); t.setFullYear(t.getFullYear()-1); return t.toISOString().slice(0,10); })();
+  var hk = history.length+'|'+(history[0]?history[0].id:'')+'|'+l.name;
+  if(!window._stHistCache || window._stHistCache.n!==hk){
+    var m = {}; history.forEach(function(h){ if(String(h.date||'')<from) return; [h.locName, h.destName].forEach(function(nm){ if(!nm) return; (m[nm] = m[nm] || {})[String(h.itemId!=null?h.itemId:'')] = 1; (m[nm]['n:'+h.itemName] = 1); }); });
+    window._stHistCache = {n: hk, m: m};
+  }
+  var hm = window._stHistCache.m[l.name] || {};
+  return items.filter(function(i){
+    var q = parseFloat((i.stocks||{})[locId])||0;
+    return q!==0 || keep[String(i.id)] || hm[String(i.id)] || hm['n:'+i.name];
+  });
 }
 function stBook(item, locId){ return parseFloat((item.stocks||{})[locId]) || 0; }
 function stNum(v){ return Math.round((+v||0)*1000)/1000; }
@@ -3221,7 +3249,7 @@ function stRenderTop(){
     + '<button class="btn-sm" style="flex:1;padding:9px;background:#1a3a38;color:#70d0c8" onclick="stOpenPaste()">📋 チャットの棚卸し結果を貼り付け</button>'
     + '<button class="btn-sm" style="flex:1;padding:9px" onclick="stPrintPick()">🖨️ チェック表を出す（PDF・印刷）</button>'
     + '<button class="btn-sm" style="flex-basis:100%;padding:9px;background:#1a2a3a;color:#70a8e8" onclick="stOpenTrend()">📈 在庫の動きを見る（置き場・品目の出入り、動いていない在庫）</button></div>';
-  var groups = [['🏠 倉庫・保管場所', locations.filter(function(l){ return (l.locType||'warehouse')==='warehouse'; })], ['🏗️ 現場', locations.filter(function(l){ return l.locType==='site'; })]];
+  var groups = [['🏠 倉庫・保管場所', locations.filter(function(l){ return (l.locType||'warehouse')==='warehouse' && !l.archived; })], ['🏗️ 現場', locations.filter(function(l){ return l.locType==='site' && !l.archived; })]];
   groups.forEach(function(g){
     if(!g[1].length) return;
     h += '<div class="section-label">'+g[0]+'</div>';
@@ -4019,6 +4047,161 @@ function stFlags(locId){
   var busy = {}; Object.keys(m).forEach(function(k){ if(m[k].moves>=3) busy[k] = 1; });
   return {busy: busy, prev: prev};
 }
+
+
+// ============================================================
+// 現場の連携（2026/11/11）
+//  ・現場の大もとは日報アプリの工事台帳（nip_jobs）
+//  ・台帳の「施工中・予定」の現場は、在庫アプリの置き場（🏗️ 現場）として自動で出る
+//  ・在庫アプリで作った現場の置き場は、台帳にも工事として登録する（次の工事コードつき）
+//  ・台帳で名前を変えたら置き場の名前も変える（履歴に書いた置き場名も合わせる）
+//  ・台帳で完工にした現場：材料が残っていれば片付けを促す。残っていなければ「終わった現場」にしまう（履歴は残る）
+// ============================================================
+function jsJobs(){ try{ return JSON.parse(localStorage.getItem('nip_jobs')||'[]') || []; }catch(e){ return []; } }
+function jsNorm(s){ return tmNorm(s).replace(/様邸|様宅|様|邸|宅|新築|リフォーム|改修|工事|現場/g,''); }
+function jsNextCode(js){
+  var y = new Date().getFullYear();
+  var nums = js.map(function(j){ var m = String(j.code||'').match(new RegExp('^'+y+'-(\\d+)$')); return m ? parseInt(m[1],10) : 0; });
+  var n = Math.max.apply(null, [0].concat(nums)) + 1;
+  return y+'-'+('00'+n).slice(-3);
+}
+function jsFindJob(js, name){
+  var k = tmNorm(name), nk = jsNorm(name); if(!k) return null;
+  var names = function(j){ return [j.name].concat(j.oldNames||[]); };
+  var ex = js.find(function(j){ return names(j).some(function(x){ return tmNorm(x)===k; }); }); if(ex) return ex;
+  if(!nk) return null;
+  var part = js.filter(function(j){ return names(j).some(function(x){ var n = jsNorm(x); return n && (n===nk || n.indexOf(nk)>=0 || nk.indexOf(n)>=0); }); });
+  return part.length===1 ? part[0] : null;
+}
+function locStock(lid){ return items.reduce(function(s,i){ return s + Math.max(0, parseFloat((i.stocks||{})[lid])||0); }, 0); }
+function locJob(l){ return l && l.jobId ? jsJobs().find(function(j){ return j.id===l.jobId; }) || null : null; }
+// 置き場の名前を変えたとき、履歴に書いた置き場名も合わせる（履歴は名前で置き場を探すため）
+function jsRenameLocHist(oldN, newN){
+  if(!oldN || oldN===newN) return;
+  history.forEach(function(h){ if(h.locName===oldN) h.locName = newN; if(h.destName===oldN) h.destName = newN; });
+}
+function siteSync(){
+  var js = jsJobs(), jobsChanged = false, changed = false, now = new Date().toISOString();
+  // ① 在庫アプリの現場 → 台帳
+  locations.filter(function(l){ return l.locType==='site'; }).forEach(function(l){
+    var j = l.jobId ? js.find(function(x){ return x.id===l.jobId; }) : null;
+    if(!j && !l.jobId){
+      j = jsFindJob(js, l.name);
+      if(!j){
+        j = {id:'job-'+Date.now()+'-'+Math.floor(Math.random()*1000), code: jsNextCode(js), name: l.name, client:'', address: l.address||'', status:'active',
+             memo:'在庫アプリの現場から登録', createdAt: now, updatedAt: now};
+        js.unshift(j); jobsChanged = true;
+      }
+      l.jobId = j.id; changed = true;
+    }
+    if(!j) return;   // 台帳から消された工事：置き場はそのまま残す
+    if(j.name && l.name!==j.name){ jsRenameLocHist(l.name, j.name); l.name = j.name; changed = true; }
+    var done = j.status==='done';
+    if(done && !l.jobDone){ l.jobDone = true; l.doneAt = String(j.kikanEnd||now).slice(0,10); changed = true; }
+    if(!done && (l.jobDone || (l.archived && !l.userHidden))){ l.jobDone = false; if(!l.userHidden) l.archived = false; delete l.keepAfterDone; changed = true; }
+    if(done && !l.archived && locStock(l.id)<=0){ l.archived = true; changed = true; }
+  });
+  // ② 台帳の「施工中・予定」の現場 → 在庫アプリの置き場
+  js.forEach(function(j){
+    if(!j || !j.id || !j.name || j.status==='done') return;
+    if(locations.some(function(l){ return l.jobId===j.id; })) return;
+    locations.push({id:'loc-'+j.id, name:j.name, icon:'🏗️', color:'#70c870', address:j.address||'', locType:'site', prefix:'', memo:'', jobId:j.id, fromJob:true});
+    changed = true;
+  });
+  if(jobsChanged) localStorage.setItem('nip_jobs', JSON.stringify(js));
+  if(changed) save();
+  return changed;
+}
+// 完工したのに材料が残っている現場
+function doneSitesWithStock(){ return locations.filter(function(l){ return l.locType==='site' && l.jobDone && !l.archived && !l.keepAfterDone && locStock(l.id)>0; }); }
+function doneBannerHtml(){
+  var ds = doneSitesWithStock(); if(!ds.length) return '';
+  return ds.map(function(l){
+    var its = items.filter(function(i){ return (parseFloat((i.stocks||{})[l.id])||0)>0; });
+    var v = its.reduce(function(s,i){ return s + (parseFloat(i.stocks[l.id])||0)*(i.basePrice||0); }, 0);
+    return '<div class="card" style="border-color:#5a8a3a;background:#1e2a18;margin-top:8px"><div style="color:#a8e8a8;font-size:13px;font-weight:700">✅ 完工：'+esc(l.name)+'</div>'
+      + '<div style="color:#c8c8b0;font-size:11px;margin:4px 0 8px">この現場に材料が '+its.length+'品目（'+yen(v)+'）残っています。倉庫へ戻すか、使い切ったかを入れてください。</div>'
+      + '<div style="display:flex;gap:6px"><button class="btn-sm" style="flex:1;padding:9px;background:#3a6a2a;color:#e8f8d8;font-weight:700" onclick="openSiteCleanup(\''+l.id+'\')">片付ける</button>'
+      + '<button class="btn-sm" style="padding:9px" onclick="keepDoneSite(\''+l.id+'\')">このまま置いておく</button></div></div>';
+  }).join('');
+}
+function keepDoneSite(lid){
+  var l = locations.find(function(x){ return x.id===lid; }); if(!l) return;
+  if(!confirm(l.name+' の材料を、現場に置いたままにしますか？（お知らせを出さなくなります。「場所」タブの現場から、あとで片付けられます）')) return;
+  l.keepAfterDone = true; save(); render();
+}
+function openSiteCleanup(lid){
+  var l = locations.find(function(x){ return x.id===lid; }); if(!l) return;
+  var its = items.filter(function(i){ return (parseFloat((i.stocks||{})[lid])||0)>0; });
+  var whs = locations.filter(function(x){ return (x.locType||'warehouse')==='warehouse' && !x.archived; });
+  var whOpts = whs.map(function(w){ return '<option value="'+w.id+'">'+esc(w.name)+'</option>'; }).join('');
+  var rows = its.map(function(i){
+    var q = stNum(parseFloat(i.stocks[lid])||0), id = esc(String(i.id));
+    return '<div class="card" style="margin:6px 0;padding:9px 10px"><div style="display:flex;justify-content:space-between;gap:8px"><b style="color:#e8d5a3;font-size:12px;word-break:break-all">'+esc(i.name)+'</b><span style="color:#c8c8b0;font-size:12px;white-space:nowrap">'+q+esc(i.unit||'')+'</span></div>'
+      + '<div style="display:flex;gap:5px;margin-top:6px;align-items:center"><select class="form-input sc-act" data-id="'+id+'" style="margin:0;flex:1;font-size:12px" onchange="this.parentNode.querySelector(\'.sc-wh\').style.display=this.value===\'ret\'?\'\':\'none\'">'
+      + '<option value="ret">倉庫へ戻す</option><option value="use">使い切った（現場の原価へ）</option><option value="keep">そのまま</option></select>'
+      + '<select class="form-input sc-wh" style="margin:0;flex:1;font-size:12px">'+whOpts+'</select>'
+      + '<input class="form-input sc-q" type="number" inputmode="decimal" step="any" value="'+q+'" style="margin:0;width:60px;font-size:12px;text-align:center"/></div></div>';
+  }).join('');
+  var job = locJob(l);
+  showModal('<div class="sheet" onclick="event.stopPropagation()"><div class="sheet-title">🧹 '+esc(l.name)+' の片付け</div>'
+    + '<div style="color:#888;font-size:11px;line-height:1.6;margin-bottom:8px">「倉庫へ戻す」は在庫に戻ります（返却）。「使い切った」は'+(job?'「'+esc(job.name)+'」の':'この現場の')+'原価として原価アプリの実績に入ります（使用）。数は一部だけでも入れられます。</div>'
+    + '<div style="display:flex;gap:6px;margin-bottom:6px"><button class="btn-sm" style="flex:1;padding:8px" onclick="document.querySelectorAll(\'.sc-act\').forEach(function(s){s.value=\'ret\';s.onchange();})">全部 倉庫へ</button><button class="btn-sm" style="flex:1;padding:8px" onclick="document.querySelectorAll(\'.sc-act\').forEach(function(s){s.value=\'use\';s.onchange();})">全部 使い切った</button></div>'
+    + (whs.length>1?'<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;font-size:11px;color:#888">戻す倉庫をまとめて：<select class="form-input" style="margin:0;flex:1;font-size:12px" onchange="var v=this.value;document.querySelectorAll(\'.sc-wh\').forEach(function(s){s.value=v;})">'+whOpts+'</select></div>':'')
+    + rows
+    + '<label class="form-label">日付</label><input class="form-input" type="date" id="sc-date" value="'+esc(today())+'"/>'
+    + '<div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">やめる</button><button class="btn-confirm green" onclick="doSiteCleanup(\''+lid+'\')">この内容で片付ける</button></div></div>');
+}
+function doSiteCleanup(lid){
+  var l = locations.find(function(x){ return x.id===lid; }); if(!l) return;
+  var job = locJob(l), date = (document.getElementById('sc-date')||{}).value || today(), nr = 0, nu = 0;
+  document.querySelectorAll('.sc-act').forEach(function(sel){
+    var box = sel.parentNode, act = sel.value, q = parseFloat(box.querySelector('.sc-q').value)||0;
+    var it = items.find(function(i){ return String(i.id)===sel.dataset.id; }); if(!it || act==='keep' || !(q>0)) return;
+    var cur = parseFloat(it.stocks[lid])||0; q = Math.min(q, cur);
+    var base = {id: String(Date.now())+String(Math.floor(Math.random()*1e6)), date: date, itemId: it.id, itemName: it.name, stockId: it.stockId||'', unit: it.unit||'', qty: q, unitPrice: it.basePrice||0, supplier:''};
+    if(act==='ret'){
+      var wid = box.querySelector('.sc-wh').value, w = locations.find(function(x){ return x.id===wid; }); if(!w) return;
+      it.stocks[lid] = stNum(cur - q); it.stocks[wid] = stNum((parseFloat(it.stocks[wid])||0) + q);
+      history.unshift(Object.assign(base, {type:'ret', locName: l.name, destName: w.name, destLocId: wid, jobName: job?job.name:l.name, jobCode: job?job.id:'', memo:'完工の片付け（倉庫へ戻す）'}));
+      nr++;
+    } else if(act==='use'){
+      it.stocks[lid] = stNum(cur - q);
+      history.unshift(Object.assign(base, {type:'use', locName: l.name, destName: job?job.name:l.name, jobName: job?job.name:l.name, jobCode: job?job.id:'', memo:'完工の片付け（使い切り）'}));
+      nu++;
+    }
+  });
+  if(locStock(lid)<=0 && l.jobDone) l.archived = true;
+  save(); closeModalForce(); render();
+  alert(l.name+' を片付けました。\n・倉庫へ戻した：'+nr+'品目\n・使い切った（原価へ）：'+nu+'品目'+(l.archived?'\n\n在庫がなくなったので「終わった現場」にしまいました。履歴は残っています。':''));
+}
+// 終わった現場（しまった置き場）
+function archivedSitesHtml(){
+  var ar = locations.filter(function(l){ return l.archived; }); if(!ar.length) return '';
+  var open = !!window._showArchived;
+  var h = '<div class="section-label" style="cursor:pointer" onclick="window._showArchived=!window._showArchived;render()">'+(open?'▾':'▸')+' 📦 終わった現場（'+ar.length+'）</div>';
+  if(open) h += ar.map(function(l){ return '<div class="card" style="padding:9px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;opacity:.8"><div onclick="showLocDetail(\''+l.id+'\')" style="cursor:pointer"><div style="color:#c8c8b0;font-size:13px">'+esc(l.icon||'')+' '+esc(l.name)+'</div><div style="color:#666;font-size:10px">完工 '+esc(l.doneAt||'')+'・履歴 '+history.filter(function(h){ return h.locName===l.name||h.destName===l.name; }).length+'件</div></div><button class="btn-sm" onclick="showLocDetail(\''+l.id+'\')">見る</button></div>'; }).join('');
+  return h;
+}
+
+// 置き場の名前を在庫アプリで変えたとき：台帳の工事名・日報の工事名も合わせる
+function jsRenameJob(jobId, newName){
+  var js = jsJobs(), j = js.find(function(x){ return x.id===jobId; }); if(!j || j.name===newName) return;
+  var now = new Date().toISOString();
+  j.oldNames = (j.oldNames||[]).concat([j.name]).filter(function(x, i, a){ return x && x!==newName && a.indexOf(x)===i; });
+  j.name = newName; j.updatedAt = now;
+  localStorage.setItem('nip_jobs', JSON.stringify(js));
+  try{
+    var ns = JSON.parse(localStorage.getItem('nip_nippos')||'[]'), ch = false;
+    ns.forEach(function(n){ if(n.jobCode===jobId && n.jobName!==newName){ n.jobName = newName; n.updatedAt = now; ch = true; } });
+    if(ch) localStorage.setItem('nip_nippos', JSON.stringify(ns));
+  }catch(e){}
+}
+function siteSyncRender(){ try{ if(siteSync()) render(); }catch(e){ console.error(e); } }
+(window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(function(){ siteSyncRender(); });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') siteSyncRender(); });
+window.addEventListener('storage', function(e){ if(e.key==='nip_jobs') siteSyncRender(); });
+try{ render(); }catch(e){}   // 先に描いた画面に、完工のお知らせ・終わった現場を出す
 
 </script>
 </body>
