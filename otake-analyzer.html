@@ -1861,6 +1861,10 @@ function bEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g
 const BUD_LABOR_CATS = ['解体工事','軸組・補強','床工事','天井・壁下地','造作・建具','断熱・気密','外壁・軒天','雑工事','見積・打合せ'];
 // 見積・打合せ・現地調査・事務は、工事の手間ではなく「諸経費」の工種で受ける（2026/11/11）
 const BUD_OFFICE_CAT = '見積・打合せ';
+// 区分には、大工の区分のほかに「見積の工種」をそのまま選べる（値は 'K:工種名'。日報アプリと同じ）2026/11/11
+function budIsK(k){ return typeof k==='string' && k.indexOf('K:')===0 && k.length>2; }
+function budCatOk(k){ return BUD_LABOR_CATS.includes(k) || budIsK(k); }
+function budCatLabel(k){ return budIsK(k) ? k.slice(2) : k; }
 const BUD_LABOR_RULES = [
   ['見積・打合せ', /見積|打合|打ち合|現地調査|現調|事前調査|採寸|実測|事務|書類|申請|図面|プラン|説明|契約|挨拶|近隣/],
   ['外壁・軒天', /外壁|杉板|軒天|目板|どぶ付け|破風|鼻隠/],
@@ -1890,13 +1894,18 @@ function budTouch(d){ d.updatedAt = new Date().toISOString(); }
 // （この日の前の版で原価アプリに保存した区分 c.labOv があれば、それを先に使う）
 function budTaskCat(c, nippoId, i, name, t){
   const ov = c && c.labOv && c.labOv[nippoId+'#'+i];
-  if(ov && BUD_LABOR_CATS.includes(ov)) return ov;
-  if(t && t.cat && BUD_LABOR_CATS.includes(t.cat)) return t.cat;
+  if(ov && budCatOk(ov)) return ov;
+  if(t && t.cat && budCatOk(t.cat)) return t.cat;
   return budClassify(name);
 }
 // 区分を変える：日報の作業行に書き込む（日報アプリでも同じ区分が出る）。作業行のない日報だけ案件側に覚える
 function budSetTaskCat(cid, nippoId, i, cat){
   const c = cases.find(x=>x.id===cid); if(!c) return;
+  if(cat==='__new__'){
+    const nm = (prompt('新しい工種の名前（例：屋根下地）','')||'').trim();
+    if(!nm){ budShowNippo(nippoId, budLedgerState && budLedgerState.cid===cid ? 1 : 0); return; }
+    cat = 'K:'+nm;
+  }
   let nips = []; try{ nips = JSON.parse(localStorage.getItem('nip_nippos')||'[]'); }catch(e){}
   const n = nips.find(x=>x.id===nippoId);
   let tasks = n && Array.isArray(n.tasks) ? n.tasks.filter(t=>t&&t.name) : [];
@@ -1911,7 +1920,7 @@ function budSetTaskCat(cid, nippoId, i, cat){
     // メモ先頭の【作業】の行にも区分を書いておく（日報アプリと同じ書き方）
     if(/^【作業】/.test(String(n.memo||''))){
       const parts = String(n.memo).split(/\n\s*\n/); parts.shift();
-      const line = t => `・${t.name}${t.start&&t.end?` ${String(t.start).replace(/^0/,'')}〜${String(t.end).replace(/^0/,'')}`:''}${t.hours>0?`（${Math.round(t.hours*100)/100}h）`:(t.when?`（${t.when}）`:'')}${t.cat?`【${t.cat}】`:''}`;
+      const line = t => `・${t.name}${t.start&&t.end?` ${String(t.start).replace(/^0/,'')}〜${String(t.end).replace(/^0/,'')}`:''}${t.hours>0?`（${Math.round(t.hours*100)/100}h）`:(t.when?`（${t.when}）`:'')}${t.cat?`【${budIsK(t.cat)?'工種:'+budCatLabel(t.cat):t.cat}】`:''}`;
       const tot = tasks.reduce((s,t)=>s+(+t.hours||0),0);
       const block = ['【作業】', ...tasks.map(line)].concat(tot>0 && tasks.filter(t=>t.hours>0).length>1 ? [`　計 ${Math.round(tot*100)/100}h`] : []).join('\n');
       n.memo = [block, parts.join('\n\n').trim()].filter(Boolean).join('\n\n');
@@ -1938,12 +1947,13 @@ function budLabor(c){
   const mine = nips.filter(n=>n.kind!=='off' && ((c.jobCode && n.jobCode===c.jobCode) || (n.jobName && caseNames(c).some(x=>budNorm(x)===budNorm(n.jobName)))));
   const byCat = {}, missing = {}; let total=0, owner=0, ninku=0;
   BUD_LABOR_CATS.forEach(k=>byCat[k]={ninku:0,amount:0,days:0,items:[],entries:[]});
+  const bc = k => byCat[k] || (byCat[k] = {ninku:0,amount:0,days:0,items:[],entries:[]});
   const list = [];   // 日報1件ずつ（何日に・何の作業を・誰が・何人工）2026/11/11
   mine.forEach(n=>{
     let tasks = Array.isArray(n.tasks) ? n.tasks.filter(t=>t&&t.name) : [];
     if(!tasks.length){
       const m = String(n.memo||'').match(/【作業】\n([\s\S]*?)(\n\n|$)/);
-      if(m) tasks = m[1].split('\n').map(x=>{ const cm = x.match(/【([^】]+)】/); return {name:x.replace(/^[・\-\s]+/,'').replace(/【[^】]+】/,''), hours:parseFloat((x.match(/(\d+(?:\.\d+)?)\s*h/)||[])[1])||0, cat: cm && BUD_LABOR_CATS.includes(cm[1]) ? cm[1] : ''}; }).filter(t=>t.name);
+      if(m) tasks = m[1].split('\n').map(x=>{ const cm = x.match(/【([^】]+)】/); return {name:x.replace(/^[・\-\s]+/,'').replace(/【[^】]+】/,''), hours:parseFloat((x.match(/(\d+(?:\.\d+)?)\s*h/)||[])[1])||0, cat: cm ? (BUD_LABOR_CATS.includes(cm[1]) ? cm[1] : /^工種[:：]/.test(cm[1]) ? 'K:'+cm[1].replace(/^工種[:：]\s*/,'') : '') : ''}; }).filter(t=>t.name);
     }
     if(!tasks.length) tasks = [{name: String(n.memo||'') + ' ' + (n.koujiTypes||[]).join(' '), hours:0}];
     const hsum = tasks.reduce((s,t)=>s+(+t.hours||0),0);
@@ -1958,20 +1968,19 @@ function budLabor(c){
       dN += nk; dA += amt; wl.push({name:w.name||wid, ninku:nk, wage:+w.wage||0, amount:amt, owner:!!w.owner});
       tasks.forEach((t,i)=>{
         const cat = budTaskCat(c, n.id, i, t.name, t);
-        byCat[cat].ninku += nk*shares[i]; byCat[cat].amount += amt*shares[i];
+        bc(cat).ninku += nk*shares[i]; bc(cat).amount += amt*shares[i];
         const r = rowCat[cat] = rowCat[cat] || {ninku:0, amount:0, tasks:[], workers:{}};
         r.ninku += nk*shares[i]; r.amount += amt*shares[i];
         r.workers[w.name||wid] = (r.workers[w.name||wid]||0) + nk*shares[i];
       });
     });
     tasks.forEach((t,i)=>{ const r = rowCat[budTaskCat(c, n.id, i, t.name, t)]; if(r) r.tasks.push(t); });
-    Object.keys(rowCat).forEach(cat=>byCat[cat].entries.push({date:String(n.date||'').slice(0,10), nippoId:n.id, cat, ...rowCat[cat]}));
+    Object.keys(rowCat).forEach(cat=>bc(cat).entries.push({date:String(n.date||'').slice(0,10), nippoId:n.id, cat, ...rowCat[cat]}));
     list.push({date:String(n.date||'').slice(0,10), nippoId:n.id, tasks, workers:wl, ninku:dN, amount:dA, cats:rowCat});
-    const cats = new Set(tasks.map(t=>budClassify(t.name)));
-    cats.forEach(k=>{ byCat[k].days += 1; byCat[k].items.push(n.date); });
+    Object.keys(rowCat).forEach(k=>{ bc(k).days += 1; bc(k).items.push(n.date); });
   });
   list.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-  BUD_LABOR_CATS.forEach(k=>byCat[k].entries.sort((a,b)=>String(a.date).localeCompare(String(b.date))));
+  Object.keys(byCat).forEach(k=>byCat[k].entries.sort((a,b)=>String(a.date).localeCompare(String(b.date))));
   return {total, owner, ninku, byCat, missing:Object.keys(missing), days:mine.length, list};
 }
 
@@ -2000,9 +2009,10 @@ function budActuals(c){
   const carp = groups.find(g=>/大工/.test(g.kouji));
   const office = groups.find(g=>/諸経費|経費|現場管理/.test(g.kouji));
   if(!catTo[BUD_OFFICE_CAT] && office) catTo[BUD_OFFICE_CAT] = office.kouji;
-  BUD_LABOR_CATS.forEach(cat=>{
+  Object.keys(lab.byCat).forEach(cat=>{
     const v = lab.byCat[cat]; if(!v.ninku) return;
-    const k = catTo[cat] || (carp&&carp.kouji) || '';
+    if(budIsK(cat)) catTo[cat] = per[budCatLabel(cat)] ? budCatLabel(cat) : '';
+    const k = budIsK(cat) ? catTo[cat] : (catTo[cat] || (carp&&carp.kouji) || '');
     const slot = k?per[k]:un; slot.labor.push({cat, ...v}); slot.total += v.amount;
   });
   return {groups, per, un, lab, catTo, carp: carp ? carp.kouji : ''};
@@ -2026,7 +2036,21 @@ function budSummary(c){
 }
 
 // ---- 画面 ----
+// 日報で「見積にない工種」（例：屋根下地）を選んだら、その工種を予算0で作る（実績を受ける行ができる）
+function budEnsureKGroups(c){
+  if(!c) return false;
+  const gs = budGroups(c.id), have = new Set(gs.map(g=>g.kouji)); let added = 0;
+  Object.keys(budLabor(c).byCat).forEach(k=>{
+    if(!budIsK(k)) return; const name = budCatLabel(k).trim(); if(!name || have.has(name)) return;
+    const order = (gs.length ? Math.max(...gs.map(g=>g.order||0)) : 0) + 1 + added;
+    docs.push({id:budId('bud'), dtype:'budget', caseId:c.id, kouji:name, order, lines:[], estTotal:0, note:'日報の区分から追加', createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()});
+    have.add(name); added++;
+  });
+  if(added) persist();
+  return added>0;
+}
 function renderBudget(){
+  try{ const cc0 = cases.find(x=>x.id===budSel); if(cc0) budEnsureKGroups(cc0); }catch(e){}
   const sel = document.getElementById('bud-case'); if(!sel) return;
   if(!budSel || !cases.find(c=>c.id===budSel)){
     const withB = cases.find(c=>docs.some(d=>d.dtype==='budget'&&d.caseId===c.id));
@@ -2075,7 +2099,7 @@ function renderBudget(){
     const kopts = sel0 => `<option value="">-- 工種を選ぶ --</option>`+A.groups.map(g=>`<option${g.kouji===sel0?' selected':''}>${bEsc(g.kouji)}</option>`).join('');
     U.buy.forEach(({doc:d})=>{ h += `<div class="bud-act"><div style="cursor:pointer" onclick="openDetail('${d.id}')"><b>${bEsc(d.date||'')}　${bEsc(d.party||'')}</b><div class="ps" style="margin:0">${bEsc(d.name||'')}${d.wtype?'・'+bEsc(d.wtype):''}</div></div><div class="num">${budYen(d.amount)}</div><select onchange="budSetKouji('${d.id}',this.value)">${kopts('')}</select></div>`; });
     if(U.inv) h += `<div class="bud-act"><div style="cursor:pointer" onclick="budShowLedger('${c.id}','inv','__none__')"><b>在庫から使った材料 ▸</b><div class="ps" style="margin:0">${U.inv.materials.length}品目・押すと日付ごと</div></div><div class="num">${budYen(U.inv.amount)}</div><select onchange="budSetInvKouji(this.value)">${kopts('')}</select></div>`;
-    U.labor.forEach(l=>{ h += `<div class="bud-act"><div style="cursor:pointer" onclick="budShowLedger('${c.id}','labor','__none__')"><b>日報の人工：${bEsc(l.cat)} ▸</b><div class="ps" style="margin:0">${l.ninku.toFixed(1)}人工・押すと日付ごと</div></div><div class="num">${budYen(l.amount)}</div><span class="ps" style="margin:0">「大工工事」の工種を作ると自動で入ります</span></div>`; });
+    U.labor.forEach(l=>{ h += `<div class="bud-act"><div style="cursor:pointer" onclick="budShowLedger('${c.id}','labor','__none__')"><b>日報の人工：${bEsc(budCatLabel(l.cat))} ▸</b><div class="ps" style="margin:0">${l.ninku.toFixed(1)}人工・押すと日付ごと</div></div><div class="num">${budYen(l.amount)}</div><span class="ps" style="margin:0">「大工工事」の工種を作ると自動で入ります</span></div>`; });
     h += `</div></div>`;
   }
   // 工種が決まっていない業者見積
@@ -2088,8 +2112,8 @@ function renderBudget(){
   // 日報の人工（大工の区分ごと）
   if(A.lab.ninku){
     h += `<div class="card"><div class="card-t">👷 日報の人工（大工の区分ごと・${A.lab.days}日分）</div><table class="tbl"><thead><tr><th>区分</th><th>人工</th><th>金額</th><th>日数</th></tr></thead><tbody>`;
-    BUD_LABOR_CATS.forEach(cat=>{ const v=A.lab.byCat[cat]; if(!v.ninku) return; const k='labc|'+cat, op=!!budOpen[k];
-      h += `<tr style="cursor:pointer" onclick="budToggleKey('${k}')"><td>${op?'▾':'▸'} ${bEsc(cat)}</td><td class="num">${v.ninku.toFixed(2)}</td><td class="num">${budYen(v.amount)}</td><td>${v.days}日</td></tr>`;
+    Object.keys(A.lab.byCat).forEach(cat=>{ const v=A.lab.byCat[cat]; if(!v.ninku) return; const k='labc|'+cat, op=!!budOpen[k];
+      h += `<tr style="cursor:pointer" onclick="budToggleKey('${k}')"><td>${op?'▾':'▸'} ${bEsc(budCatLabel(cat))}${budIsK(cat)?' <span class="ps" style="display:inline;margin:0">（工種）</span>':''}</td><td class="num">${v.ninku.toFixed(2)}</td><td class="num">${budYen(v.amount)}</td><td>${v.days}日</td></tr>`;
       if(op) h += `<tr class="bud-detail"><td colspan="4"><div class="bud-lines">${budLaborEntries(v.entries)}</div></td></tr>`; });
     h += `<tr><td><b>合計</b></td><td class="num"><b>${A.lab.ninku.toFixed(2)}</b></td><td class="num"><b>${budYen(A.lab.total)}</b></td><td>${A.lab.days}日</td></tr></tbody></table>
       <div class="ps" style="padding:8px 14px">日報の作業の行（例：「床下地 8:00〜12:00」）の言葉で区分を決め、その日の人工×日当を時間の割合で分けています。区分を押すと日付ごとの内訳、日付を押すとその日の日報が開きます。</div>
@@ -2149,7 +2173,7 @@ function budDetailHtml(c, g, act){
     h += `</div>`;
   }
   act.labor.forEach(l=>{ const lk='lab|'+g.id+'|'+l.cat, lop=!!budOpen[lk];
-    h += `<div class="bud-act2" onclick="event.stopPropagation()"><div class="bud-l2" style="cursor:pointer" onclick="budToggleKey('${lk}')"><span><b>${lop?'▾':'▸'} 日報の人工：${bEsc(l.cat)}</b>　${l.ninku.toFixed(2)}人工・${l.days}日</span><b>${budYen(l.amount)}</b></div>`;
+    h += `<div class="bud-act2" onclick="event.stopPropagation()"><div class="bud-l2" style="cursor:pointer" onclick="budToggleKey('${lk}')"><span><b>${lop?'▾':'▸'} 日報の人工：${bEsc(budCatLabel(l.cat))}</b>　${l.ninku.toFixed(2)}人工・${l.days}日</span><b>${budYen(l.amount)}</b></div>`;
     if(lop) h += `<div style="display:flex;flex-direction:column;gap:5px;margin-top:6px">${budLaborEntries(l.entries)}</div>`;
     h += `</div>`; });
   if(act.total) h += `<div style="margin-top:6px"><button class="btn btn-q btn-sm" onclick="event.stopPropagation();budShowLedger('${c.id}','all','${bEsc(g.kouji)}')">この工種の実績を日付順に見る</button></div>`;
@@ -2167,7 +2191,7 @@ function budInvType(e){ return e.type==='adj' ? '日報の修正で戻し' : e.t
 // 工種ごとに、実績を日付順の1行ずつにする
 function budEntries(c){
   const A = budActuals(c), out = [];
-  const kOf = cat => A.catTo[cat] || A.carp || '';
+  const kOf = cat => budIsK(cat) ? (A.catTo[cat]||'') : (A.catTo[cat] || A.carp || '');
   docs.filter(d=>d.dtype==='buy'&&d.caseId===c.id).forEach(d=>{
     out.push({src:'buy', date:String(d.date||'').slice(0,10), kouji:budAutoKouji(d, A.groups), title:`${d.party||''}　${d.doctype||''}`,
       sub:[d.name, (d.materials||[]).slice(0,3).map(m=>m.name).join('、')+((d.materials||[]).length>3?` ほか${d.materials.length-3}行`:'')].filter(Boolean).join('・'),
@@ -2181,7 +2205,7 @@ function budEntries(c){
   });
   A.lab.list.forEach(d=>{
     Object.entries(d.cats).forEach(([cat, r])=>{
-      out.push({src:'labor', date:d.date, kouji:kOf(cat), title:`${cat}　${budNk(r.ninku)}人工`,
+      out.push({src:'labor', date:d.date, kouji:kOf(cat), title:`${budCatLabel(cat)}　${budNk(r.ninku)}人工`,
         sub:`${budTaskText(r.tasks)}${Object.keys(r.workers).length?'・'+Object.entries(r.workers).map(([w,v])=>`${w} ${budNk(v)}`).join('、'):''}`,
         amount:r.amount, open:`budShowNippo('${d.nippoId}',1)`});
     });
@@ -2232,7 +2256,8 @@ function budShowNippo(id, back){
   const W = {}; wks.forEach(w=>W[w.id]=w);
   let tasks = Array.isArray(n.tasks) ? n.tasks.filter(t=>t&&t.name) : [];
   let memo = String(n.memo||'');
-  if(!tasks.length){ const m = memo.match(/【作業】\n([\s\S]*?)(\n\n|$)/); if(m){ tasks = m[1].split('\n').map(x=>{ const cm = x.match(/【([^】]+)】/); return {name:x.replace(/^[・\-\s]+/,'').replace(/【[^】]+】/,''), hours:parseFloat((x.match(/(\d+(?:\.\d+)?)\s*h/)||[])[1])||0, cat: cm && BUD_LABOR_CATS.includes(cm[1]) ? cm[1] : ''}; }).filter(t=>t.name); memo = memo.replace(m[0],'').trim(); } }
+  if(!tasks.length){ const m = memo.match(/【作業】\n([\s\S]*?)(\n\n|$)/); if(m){ tasks = m[1].split('\n').map(x=>{ const cm = x.match(/【([^】]+)】/); return {name:x.replace(/^[・\-\s]+/,'').replace(/【[^】]+】/,''), hours:parseFloat((x.match(/(\d+(?:\.\d+)?)\s*h/)||[])[1])||0, cat: cm ? (BUD_LABOR_CATS.includes(cm[1]) ? cm[1] : /^工種[:：]/.test(cm[1]) ? 'K:'+cm[1].replace(/^工種[:：]\s*/,'') : '') : ''}; }).filter(t=>t.name); memo = memo.replace(m[0],'').trim(); } }
+  memo = memo.replace(/^【作業】[\s\S]*?(\n\s*\n|$)/,'').trim();   // 作業の行は上に出すので、メモからは外す
   const hsum = tasks.reduce((s,t)=>s+(+t.hours||0),0);
   let h = `<h3>📋 日報　${bEsc(n.date||'')}</h3>
     <div class="ps" style="margin:0 0 10px">${bEsc(n.jobName||'工事名なし')}</div>
@@ -2244,7 +2269,8 @@ function budShowNippo(id, back){
   const catSel = (i, name, t) => {
     const cur = budTaskCat(cc, n.id, i, name, t), auto = budClassify(name), ov = (cc && cc.labOv && cc.labOv[n.id+'#'+i]) || (t && t.cat) || '';
     return cc ? `<select style="font-size:11px;padding:2px 4px;margin-left:4px" onchange="budSetTaskCat('${cc.id}','${n.id}',${i},this.value===''?'':this.value)">
-      <option value=""${!ov?' selected':''}>自動：${bEsc(auto)}</option>${BUD_LABOR_CATS.map(k=>`<option value="${bEsc(k)}"${ov===k?' selected':''}>${bEsc(k)}</option>`).join('')}</select>
+      <option value=""${!ov?' selected':''}>自動：${bEsc(auto)}</option><optgroup label="大工の区分">${BUD_LABOR_CATS.map(k=>`<option value="${bEsc(k)}"${ov===k?' selected':''}>${bEsc(k)}</option>`).join('')}</optgroup>
+      <optgroup label="この現場の見積の工種">${[...new Set(budGroups(cc.id).map(g=>g.kouji).concat(budIsK(ov)?[budCatLabel(ov)]:[]))].map(k=>`<option value="K:${bEsc(k)}"${ov==='K:'+k?' selected':''}>${bEsc(k)}</option>`).join('')}<option value="__new__">＋ 新しい工種を入れる…</option></optgroup></select>
       <span style="color:var(--text3)">→ ${bEsc(toK(cur))}</span>` : `→ ${bEsc(auto)}`;
   };
   h += tasks.length ? tasks.map((t,i)=>`<div class="bud-l2"><span>🔨 ${bEsc(t.name)}${t.start&&t.end?`　${bEsc(t.start)}〜${bEsc(t.end)}`:''}</span><span>${t.hours>0?budNk(t.hours)+'h':''}</span></div><div class="bud-l3" style="margin:0 0 4px 18px">区分 ${catSel(i, t.name, t)}${hsum>0&&t.hours>0?`（${Math.round(t.hours/hsum*100)}%）`:''}</div>`).join('')

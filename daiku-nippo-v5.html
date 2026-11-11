@@ -961,6 +961,7 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
   window._draftMode = !!draft;
   const date = n?.date || preDate || today();
   const {tasks: initTasks, rest: initMemo} = getNippoTasks(n||{});
+  _taskJob = {id: n?.jobCode||'', name: n?.jobName||''};
 
   // 作業者チェックボックス
   const workerInputs = workers.map(w=>{
@@ -1211,6 +1212,7 @@ function toggleKouji(el, kid){
 }
 
 function onJobSelChange(){
+  setTimeout(refreshTaskCatOptions, 0);
   const sel = document.getElementById('nip-job-sel');
   const nameInp = document.getElementById('nip-job-name');
   const codeInp = document.getElementById('nip-job-code');
@@ -1439,7 +1441,7 @@ function showNippoDetail(nid){
     return `<div class="info-row">
       <span class="info-label">🔨 ${esc(t.name)}</span>
       <span class="info-val" style="color:#70d0c8">${esc(span)}${t.hours>0?` ${fmtHours(t.hours)}h`:''}</span>
-    </div>${isOff(n)?'':`<div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:-2px 0 4px;font-size:10px;color:#666">区分 ${taskCatSelect(t, `onchange="setNippoTaskCat('${n.id}',${i},this.value)"`)}</div>`}`;
+    </div>${isOff(n)?'':`<div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:-2px 0 4px;font-size:10px;color:#666">区分 ${taskCatSelect(t, `setNippoTaskCat('${n.id}',${i},this.value)`, n.jobCode||'', n.jobName||'')}</div>`}`;
   }).join('');
 
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
@@ -2008,11 +2010,49 @@ const LABOR_RULES = [
   ['造作・建具', /造作|建具|枠|額縁|カウンター|棚|階段|ドア|窓|サッシ|玄関|框|巾木|廻り縁/],
 ];
 function laborCatAuto(name){ const t=String(name||''); for(const [c,re] of LABOR_RULES){ if(re.test(t)) return c; } return '雑工事'; }
-function taskCat(t){ return (t && t.cat && LABOR_CATS.includes(t.cat)) ? t.cat : laborCatAuto(t&&t.name); }
-function taskCatSelect(t, extra){
-  const auto = laborCatAuto(t&&t.name), cur = (t&&t.cat&&LABOR_CATS.includes(t.cat)) ? t.cat : '';
-  return `<select class="task-cat" ${extra||''} style="background:#1a1a18;border:1px solid #2e2e28;border-radius:6px;color:${cur?'#e8c070':'#888'};font-size:11px;padding:3px 4px;font-family:inherit;max-width:150px">
-    <option value=""${cur?'':' selected'}>自動：${esc(auto)}</option>${LABOR_CATS.map(k=>`<option value="${esc(k)}"${cur===k?' selected':''}>${esc(k)}</option>`).join('')}</select>`;
+// 区分の値：大工の区分 か 'K:工種名'（原価アプリの見積の工種をそのまま選ぶ）
+const isK = k => typeof k==='string' && k.indexOf('K:')===0 && k.length>2;
+const catOk = k => LABOR_CATS.includes(k) || isK(k);
+const catLabel = k => isK(k) ? k.slice(2) : k;
+function taskCat(t){ return (t && catOk(t.cat)) ? t.cat : laborCatAuto(t&&t.name); }
+// その工事の見積の工種（原価アプリの予算・実績の工種）
+function jobKoujiList(jobId, jobName){
+  try{
+    const cs = JSON.parse(localStorage.getItem('otake_cases_v2')||'[]'), ds = JSON.parse(localStorage.getItem('otake_docs_v2')||'[]');
+    const norm = v => String(v||'').normalize('NFKC').replace(/[\s　]+/g,'').replace(/様邸|様宅|様|邸|宅/g,'');
+    const c = cs.find(x=>jobId && x.jobCode===jobId) || cs.find(x=>jobName && [x.name, ...(x.oldNames||[])].some(y=>norm(y)===norm(jobName)));
+    if(!c) return [];
+    return ds.filter(d=>d.dtype==='budget' && d.caseId===c.id).sort((a,b)=>(a.order||0)-(b.order||0)).map(d=>d.kouji).filter(Boolean);
+  }catch(e){ return []; }
+}
+let _taskJob = {id:'', name:''};   // 区分の選択肢に出す工種の工事（日報の入力画面で選んでいる工事）
+function taskCatOptions(cur, kouji){
+  const ks = [...new Set(kouji.concat(isK(cur)?[catLabel(cur)]:[]))];
+  return `<optgroup label="大工の区分">${LABOR_CATS.map(k=>`<option value="${esc(k)}"${cur===k?' selected':''}>${esc(k)}</option>`).join('')}</optgroup>`
+    + `<optgroup label="この現場の見積の工種">${ks.map(k=>`<option value="K:${esc(k)}"${cur==='K:'+k?' selected':''}>${esc(k)}</option>`).join('')}<option value="__new__">＋ 新しい工種を入れる…</option></optgroup>`;
+}
+function taskCatSelect(t, onchange, jobId, jobName){
+  const auto = laborCatAuto(t&&t.name), cur = (t && catOk(t.cat)) ? t.cat : '';
+  const kouji = jobKoujiList(jobId!=null?jobId:_taskJob.id, jobName!=null?jobName:_taskJob.name);
+  return `<select class="task-cat" data-prev="${esc(cur)}" onchange="if(this.value==='__new__'&&!taskCatNew(this))return;this.dataset.prev=this.value;this.style.color=this.value?'#e8c070':'#888';${onchange||''}" style="background:#1a1a18;border:1px solid #2e2e28;border-radius:6px;color:${cur?'#e8c070':'#888'};font-size:11px;padding:3px 4px;font-family:inherit;max-width:170px">
+    <option value=""${cur?'':' selected'}>自動：${esc(auto)}</option>${taskCatOptions(cur, kouji)}</select>`;
+}
+// 「＋ 新しい工種を入れる…」：名前を聞いて、その工種を選ぶ
+function taskCatNew(sel){
+  const nm = (prompt('新しい工種の名前（例：屋根下地）','')||'').trim();
+  if(!nm){ sel.value = sel.dataset.prev||''; return false; }
+  const og = sel.querySelectorAll('optgroup')[1];
+  let op = [...sel.options].find(o=>o.value==='K:'+nm);
+  if(!op){ op = document.createElement('option'); op.value = 'K:'+nm; op.textContent = nm; og.insertBefore(op, og.lastElementChild); }
+  sel.value = 'K:'+nm; return true;
+}
+// 入力画面で工事を選び直したら、区分の「見積の工種」を入れ替える
+function refreshTaskCatOptions(){
+  const sel = document.getElementById('nip-job-sel'); if(!sel) return;
+  const j = jobs.find(x=>x.id===sel.value);
+  _taskJob = {id: j?j.id:'', name: j?j.name:(document.getElementById('nip-job-name')?.value||'')};
+  const kouji = jobKoujiList(_taskJob.id, _taskJob.name);
+  document.querySelectorAll('#task-list .task-cat').forEach(s=>{ const cur = s.value; const first = s.options[0].outerHTML; s.innerHTML = first + taskCatOptions(cur, kouji); s.value = cur; });
 }
 // 名前を打ち直したら「自動：…」の表示を変える
 function onTaskNameInput(el){
@@ -2035,7 +2075,7 @@ function hoursBetween(start,end){
 function taskToLine(t){
   const span = t.start&&t.end ? ` ${t.start.replace(/^0/,'')}〜${t.end.replace(/^0/,'')}` : '';
   const hrs  = t.hours>0 ? `（${fmtHours(t.hours)}h）` : (t.when?`（${t.when}）`:'');
-  return `・${t.name}${span}${hrs}${t.cat&&LABOR_CATS.includes(t.cat)?`【${t.cat}】`:''}`;
+  return `・${t.name}${span}${hrs}${t.cat&&catOk(t.cat)?`【${isK(t.cat)?'工種:'+catLabel(t.cat):t.cat}】`:''}`;
 }
 function buildWorkBlock(tasks){
   if(!tasks||tasks.length===0) return '';
@@ -2076,7 +2116,7 @@ function taskRowHtml(t){
       <input class="task-hours" type="number" step="0.25" min="0" placeholder="—" value="${t.hours>0?t.hours:''}" oninput="updateTaskTotal()"/>
       <span class="task-sep">h</span>
     </div>
-    <div class="task-bottom"><span class="task-sep" style="font-size:10px">区分</span>${taskCatSelect(t, `onchange="this.style.color=this.value?'#e8c070':'#888'"`)}</div>
+    <div class="task-bottom"><span class="task-sep" style="font-size:10px">区分</span>${taskCatSelect(t)}</div>
     <input type="hidden" class="task-when" value="${esc(t.when||'')}"/>
   </div>`;
 }
@@ -2109,7 +2149,7 @@ function collectTasksFromForm(){
     let hours   = parseFloat(row.querySelector('.task-hours')?.value)||0;
     if(!hours && start && end) hours = hoursBetween(start,end);
     const when  = row.querySelector('.task-when')?.value||'';
-    const cat   = row.querySelector('.task-cat')?.value||'';
+    let cat     = row.querySelector('.task-cat')?.value||''; if(cat==='__new__') cat = '';
     return cat ? {name, start, end, hours, when, cat} : {name, start, end, hours, when};
   }).filter(t=>t.name);
 }
@@ -2140,7 +2180,10 @@ function parseTaskLine(s){
   let name = String(s||'').trim(), start='', end='', hours=0, when='', cat='';
   // 区分：「・見積作成 2h【見積・打合せ】」のように【】で書いてあれば、その区分にする
   const cm = name.match(/[【\[]\s*([^】\]]+?)\s*[】\]]/);
-  if(cm){ const k = cm[1].replace(/\s/g,''); const hit = LABOR_CATS.find(c=>c===k || c.replace('・','')===k.replace('・','') || (k.length>=2 && c.startsWith(k))); if(hit){ cat = hit; name = name.replace(cm[0],' '); } }
+  if(cm){ const k = cm[1].replace(/\s/g,''); const hit = LABOR_CATS.find(c=>c===k || c.replace('・','')===k.replace('・','') || (k.length>=2 && c.startsWith(k)));
+    // 【工種:屋根下地】や、大工の区分にない名前（【屋根下地】）は、その名前の工種にする
+    if(hit) cat = hit; else if(k) cat = 'K:'+k.replace(/^工種[:：]/,'');
+    if(cat) name = name.replace(cm[0],' '); }
   // 時刻の範囲: 8:00〜12:00 / 8時〜12時半 / 8時から12時まで
   const T = '(\\d{1,2})(?:[:：](\\d{2})|時(?:(\\d{1,2})分|(半))?)';
   const rangeRe = new RegExp(T+'\\s*(?:[〜~～\\-－ー]|から)\\s*'+T+'(?:\\s*まで)?');
