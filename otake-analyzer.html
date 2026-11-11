@@ -767,6 +767,8 @@ input[readonly]{color:var(--profit);cursor:default}
 <div class="toast" id="toast"></div>
 
 <script>
+// 案件・工事の名前（前の名前も含む。名前を変えても前の名前の書類・日報とつながるように 2026/11/11）
+function caseNames(c){ return c ? [c.name, ...(c.oldNames||[])].filter(Boolean) : []; }
 const GAS_URL = 'https://script.google.com/macros/s/AKfycby-rf-GVCyiv-NyqC_iQ7MOAL9Z6tmW93G-KoZ8yB-rGUe3SnRZZXPoII-B0t_8HacR/exec';
 const SK_DOCS  = 'otake_docs_v2';
 const SK_CASES = 'otake_cases_v2';
@@ -1082,6 +1084,22 @@ function deleteDoc(id) {
   renderAll();
   toast('削除しました','');
 }
+// 案件名を変える（2026/11/11）。日報アプリの台帳とつながっている案件は、台帳の名前に合わせて自動で変わるので、台帳で変えてもらう
+function renameCase(id) {
+  const c = cases.find(x => x.id === id); if (!c) return;
+  let job = null; try { job = c.jobCode ? JSON.parse(localStorage.getItem('nip_jobs') || '[]').find(j => j.id === c.jobCode) : null; } catch (e) {}
+  if (job) {
+    alert(`「${c.name}」は日報アプリの工事台帳とつながっています。\n\n名前は日報アプリの「台帳」で工事を編集して変えてください。\n原価アプリを開き直すと、案件名も自動で同じ名前になります。`);
+    return;
+  }
+  const nn = (prompt('新しい案件名を入れてください', c.name) || '').trim();
+  if (!nn || nn === c.name) return;
+  if (cases.some(x => x.id !== id && x.name === nn)) { alert(`「${nn}」という案件がすでにあります。別の名前にしてください。`); return; }
+  c.oldNames = [...new Set([...(c.oldNames || []), c.name])].filter(x => x && x !== nn);
+  c.name = nn; c.updatedAt = new Date().toISOString();
+  persist(); refreshCaseSelect(); renderAll();
+  toast('案件名を変えました', 'ok');
+}
 function deleteCase(id) {
   const c = cases.find(x => x.id === id); if (!c) return;
   const n = docs.filter(d => d.caseId === id).length;
@@ -1133,7 +1151,7 @@ function inventoryCostDocs() {
   try { hist = JSON.parse(localStorage.getItem('dk_hist') || '[]'); } catch(e){}
   try { nips = JSON.parse(localStorage.getItem('nip_nippos') || '[]'); } catch(e){}
   const nipById = {}; nips.forEach(n => nipById[n.id] = n);
-  const caseFor = (jobCode, jobName) => cases.find(c => (jobCode && (c.jobCode === jobCode || c.nippoCode === jobCode)) || (jobName && c.name === jobName));
+  const caseFor = (jobCode, jobName) => cases.find(c => (jobCode && (c.jobCode === jobCode || c.nippoCode === jobCode))) || (jobName ? cases.find(c => caseNames(c).includes(jobName)) : null);
   const sums = {}, mats = {};
   hist.forEach(h => {
     const qty = parseFloat(h.qty) || 0, price = parseFloat(h.unitPrice) || 0;
@@ -1186,7 +1204,7 @@ function renderCases() {
       <td class="num" style="${S.profit>=0?'color:var(--profit)':'color:var(--danger)'}">${S.income||S.forecast?fmtS(S.profit):'—'}</td>
       <td class="num" style="${rateColor}">${rate!==null?rate+'%':'—'}</td>
       <td class="num">${S.income?fmtS(S.real):'—'}</td>
-      <td><button class="del" onclick="event.stopPropagation();deleteCase('${c.id}')">削除</button></td>
+      <td style="white-space:nowrap"><button class="del" style="color:var(--text2);border-color:var(--border)" onclick="event.stopPropagation();renameCase('${c.id}')">名前</button> <button class="del" onclick="event.stopPropagation();deleteCase('${c.id}')">削除</button></td>
     </tr>`;
   }).join('');
 }
@@ -1583,7 +1601,7 @@ function importJobsFromNippo() {
     let added = 0;
     nippoJobs.forEach(j => {
       // 工事コードまたは名前で重複チェック
-      const exists = cases.find(c => c.jobCode === j.id || c.name === j.name || budNorm(c.name) === budNorm(j.name));
+      const exists = cases.find(c => c.jobCode === j.id || c.name === j.name || caseNames(c).some(x => budNorm(x) === budNorm(j.name)));
       if (exists && !exists.jobCode) { exists.jobCode = j.id; exists.nippoCode = j.code || ''; exists.updatedAt = new Date().toISOString(); }
       if (!exists) {
         cases.push({
@@ -1664,7 +1682,7 @@ function renderSync() {
     // 日報から人工実績を取得（jobCode or 案件名で照合）
     const related = nippos.filter(n =>
       (c.jobCode && (n.jobCode === c.jobCode)) ||
-      n.jobName === c.name || n.jobCode === c.name
+      caseNames(c).includes(n.jobName) || n.jobCode === c.name
     );
     const totalNinku = related.reduce((s,n)=>
       s+Object.values(n.workers||{}).reduce((a,b)=>a+(parseFloat(b)||0),0), 0);
@@ -1852,7 +1870,7 @@ function budLabor(c){
   try{ nips = JSON.parse(localStorage.getItem('nip_nippos')||'[]'); }catch(e){}
   try{ wks  = JSON.parse(localStorage.getItem('nip_workers')||'[]'); }catch(e){}
   const W = {}; wks.forEach(w=>W[w.id]=w);
-  const mine = nips.filter(n=>n.kind!=='off' && ((c.jobCode && n.jobCode===c.jobCode) || (n.jobName && budNorm(n.jobName)===budNorm(c.name))));
+  const mine = nips.filter(n=>n.kind!=='off' && ((c.jobCode && n.jobCode===c.jobCode) || (n.jobName && caseNames(c).some(x=>budNorm(x)===budNorm(n.jobName)))));
   const byCat = {}, missing = {}; let total=0, owner=0, ninku=0;
   BUD_LABOR_CATS.forEach(k=>byCat[k]={ninku:0,amount:0,days:0,items:[]});
   mine.forEach(n=>{
@@ -2178,7 +2196,7 @@ function budFindCase(cs){
   if(!cs) return cases.find(c=>c.id===budSel) || null;
   if(cs.jobCode){ const c = cases.find(x=>x.jobCode===cs.jobCode); if(c) return c; }
   const k = budNorm(cs.name);
-  const hit = cases.find(x=>x.name===cs.name) || cases.find(x=>budNorm(x.name)===k);
+  const hit = cases.find(x=>x.name===cs.name) || cases.find(x=>caseNames(x).some(y=>budNorm(y)===k));
   if(hit || !k) return hit || null;
   // 「田中知行様邸」と「田中様邸」のように片方がもう片方を含むとき、1件だけなら同じ案件とみなす
   const part = cases.filter(x=>{ const n=budNorm(x.name); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); });
@@ -2243,7 +2261,12 @@ function budAutoCases(){
   js.forEach(j=>{
     if(!j || !j.id || !j.name) return;
     let c = cases.find(x=>x.jobCode===j.id) || budFindCase({name:j.name});
-    if(c){ if(!c.jobCode){ c.jobCode=j.id; c.nippoCode=j.code||''; c.updatedAt=now; n++; } else if(c.jobCode===j.id && (j.code||'')!==(c.nippoCode||'')){ c.nippoCode=j.code||''; c.updatedAt=now; n++; } return; }
+    if(c){
+      if(!c.jobCode){ c.jobCode=j.id; c.nippoCode=j.code||''; c.updatedAt=now; n++; } else if(c.jobCode===j.id && (j.code||'')!==(c.nippoCode||'')){ c.nippoCode=j.code||''; c.updatedAt=now; n++; }
+      // 日報アプリの台帳で工事名を変えたら、案件名も合わせる。前の名前は残す（2026/11/11）
+      if(c.jobCode===j.id && c.name!==j.name){ c.oldNames=[...new Set([...(c.oldNames||[]), c.name])].filter(x=>x && x!==j.name); c.name=j.name; c.updatedAt=now; n++; }
+      return;
+    }
     cases.push({id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:j.name, wtype:j.wtype||'', jobCode:j.id, nippoCode:j.code||'', client:j.client||'', memo:j.client?'施主：'+j.client:'', createdAt:now, updatedAt:now});
     n++;
   });
@@ -2299,7 +2322,7 @@ function budLinkJob(c){
   try{
     const js = JSON.parse(localStorage.getItem('nip_jobs')||'[]');
     const k = budNorm(c.name);
-    let j = js.find(x=>x.name===c.name) || js.find(x=>budNorm(x.name)===k);
+    let j = js.find(x=>x.name===c.name) || js.find(x=>[x.name, ...(x.oldNames||[])].some(y=>budNorm(y)===k));
     if(!j && k){ const part = js.filter(x=>{ const n=budNorm(x.name); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }); if(part.length===1) j = part[0]; }
     if(j){ c.jobCode = j.id; c.nippoCode = j.code||''; }
   }catch(e){}

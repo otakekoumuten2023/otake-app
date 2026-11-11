@@ -988,7 +988,7 @@ function sendToDaichou() {
 
     // 同じ工事コードがあれば上書き確認
     const sameCode = code ? existing.find(j=>j.code===code) : null;
-    const sameName = existing.find(j=>j.name===name);
+    const sameName = existing.find(j=>j.name===name) || existing.find(j=>(j.oldNames||[]).includes(name));   // 前の名前でも見つける（2026/11/11）
     if(sameCode || sameName) {
       const target = sameCode || sameName;
       if(!confirm(`「${target.name}」が既に台帳にあります。\n見積人工・金額を上書きしますか？`)) return;

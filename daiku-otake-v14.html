@@ -2885,7 +2885,9 @@ function coFindJob(name){
   var norm = function(s){ return tmNorm(s).replace(/様邸|様宅|様|邸|宅|新築|リフォーム|改修|工事|現場/g,''); };
   var k = norm(name); if(!k) return null;
   var js = coJobs();
-  return js.find(function(j){ return tmNorm(j.name)===tmNorm(name); }) || js.find(function(j){ var n=norm(j.name); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }) || null;
+  // 前の名前（台帳で工事名を変える前）でも見つける（2026/11/11）
+  var names = function(j){ return [j.name].concat(j.oldNames||[]); };
+  return js.find(function(j){ return names(j).some(function(x){ return tmNorm(x)===tmNorm(name); }); }) || js.find(function(j){ return names(j).some(function(x){ var n=norm(x); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }); }) || null;
 }
 function coParseLine(s){
   var n = s; try{ n = s.normalize('NFKC'); }catch(e){}

@@ -1798,14 +1798,31 @@ function saveJob(id){
   };
   if(!id) record.createdAt = new Date().toISOString();
 
+  let renamed = 0;
   if(id){
     const idx = jobs.findIndex(x=>x.id===id);
+    // 工事名を変えたとき：前の名前を残し（チャットや他のアプリが前の名前で探しても見つかるように）、この工事の日報の工事名も新しい名前にする（2026/11/11）
+    const prev = idx>=0 ? jobs[idx] : null;
+    if(prev && prev.name && prev.name!==name){
+      record.oldNames = [...new Set([...(prev.oldNames||[]), prev.name])].filter(x=>x && x!==name);
+      const t = new Date().toISOString();
+      nippos.forEach(n=>{
+        if(n.kind==='off') return;
+        const mine = n.jobCode===id || (!n.jobCode && n.jobName===prev.name);
+        if(!mine || n.jobName===name) return;
+        n.jobName = name;
+        if(!n.jobCode) n.jobCode = id;
+        n.updatedAt = t;
+        renamed++;
+      });
+    }
     // 画面にない項目（大工手間アプリからの見積大工手間・作成日など）を消さないよう、既存に上書きで重ねる
     if(idx>=0) jobs[idx]=Object.assign({}, jobs[idx], record); else jobs.push(record);
   } else {
     jobs.unshift(record);
   }
   save(); closeModalForce(); render();
+  if(renamed) alert(`工事名を「${name}」に変えました。\nこの工事の日報 ${renamed}件の工事名も新しい名前にしました。\n原価アプリの案件名は、原価アプリを開いたときに自動で変わります。`);
 }
 
 function deleteJob(id){
@@ -2127,12 +2144,14 @@ function guessKouji(texts){
 function matchJob(site){
   if(!site) return null;
   const norm = s=>String(s||'').replace(/[\s　]/g,'').replace(/様邸|様宅|様|邸|宅|新築|リフォーム|改修|工事|現場/g,'');
-  const exact = jobs.find(j=>j.name===site);
+  // 前の名前（工事名を変える前）でも見つかるようにする（2026/11/11）
+  const names = j=>[j.name, ...(j.oldNames||[])];
+  const exact = jobs.find(j=>j.name===site) || jobs.find(j=>(j.oldNames||[]).includes(site));
   if(exact) return exact;
   const ns = norm(site);
   if(!ns) return null;
   const order = {active:0, plan:1, done:2};
-  const hits = jobs.filter(j=>{ const nj=norm(j.name); return nj && (nj.includes(ns)||ns.includes(nj)); })
+  const hits = jobs.filter(j=>names(j).some(x=>{ const nj=norm(x); return nj && (nj.includes(ns)||ns.includes(nj)); }))
     .sort((a,b)=>(order[a.status||'active']||0)-(order[b.status||'active']||0));
   return hits[0]||null;
 }
