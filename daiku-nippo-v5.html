@@ -2490,6 +2490,20 @@ function saveWithOverwrite(){
     inboxMark('opened');
   }, 150); });
 })();
+
+// 原価アプリの「日報アプリで開く」から、その日報を開く（#nippo=日報のID）2026/11/11
+(function(){
+  function openFromHash(){
+    const m = String(location.hash||'').match(/^#nippo=(.+)$/);
+    if(!m) return;
+    const id = decodeURIComponent(m[1]);
+    if(nippos.some(n=>n.id===id)) showNippoDetail(id);
+    else alert('この日報はこの端末にありません。同期してから開き直してください。');
+    try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  }
+  window.addEventListener('hashchange', openFromHash);
+  if(document.readyState==='complete') setTimeout(openFromHash, 600); else window.addEventListener('load', ()=>setTimeout(openFromHash, 600));
+})();
 </script>
 </body>
 </html>
