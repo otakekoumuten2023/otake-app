@@ -446,6 +446,8 @@ const TYPE_META={
   use:{label:'使用',icon:'🪚',cls:'hist-use',qcls:'qty-use',tcls:'type-use',sign:'-'},
   ret:{label:'返却',icon:'↩️',cls:'hist-ret',qcls:'qty-ret',tcls:'type-ret',sign:'+'},
   adj:{label:'日報修正の戻し',icon:'🔁',cls:'hist-ret',qcls:'qty-ret',tcls:'type-ret',sign:'+'},
+  count:{label:'棚卸し調整',icon:'📝',cls:'hist-in',qcls:'qty-in',tcls:'type-in',sign:''},
+  move:{label:'移動',icon:'🔀',cls:'hist-out',qcls:'qty-out',tcls:'type-out',sign:''},
 };
 function periodFilter(h){
   const d=new Date(h.date),now=new Date();
@@ -472,7 +474,7 @@ function updateHeader(){
 function switchTab(tab){
   currentTab=tab;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('tab-'+tab).classList.add('active');
+  const tb=document.getElementById('tab-'+tab); if(tb) tb.classList.add('active');
   render();
 }
 
@@ -486,6 +488,9 @@ function render(){
   else if(currentTab==='履歴') c.innerHTML=renderHist();
   else if(currentTab==='データ'){ c.innerHTML=renderData(); renderPendingList(); }
   else if(currentTab==='連携'){ c.innerHTML=renderRenkeiTab(); }
+  else if(currentTab==='棚卸し'){ c.innerHTML=renderStocktake(); }
+  // 棚卸しの「すばやく入れる欄」を画面の上に止めておくため、この画面だけ中身の枠でスクロールさせない
+  c.style.overflowY = currentTab==='棚卸し' ? 'visible' : '';
 }
 
 // ========== ホーム ==========
@@ -520,6 +525,7 @@ function renderHome(){
         <button class="quick-btn q-out" onclick="openOut()"><span class="q-icon">📤</span><span class="q-label">出庫</span><span class="q-desc">現場への搬出</span></button>
         <button class="quick-btn q-use" onclick="openUse()"><span class="q-icon">🪚</span><span class="q-label">使用記録</span><span class="q-desc">作業での消費</span></button>
         <button class="quick-btn q-ret" onclick="openRet()"><span class="q-icon">↩️</span><span class="q-label">返却</span><span class="q-desc">現場→倉庫へ戻す</span></button>
+        <button class="btn-sm" style="grid-column:1/-1;background:#3a3218;color:#e8c070;border:1px solid #5a4a28;padding:10px;font-size:12px;font-weight:700" onclick="openStocktake()">📝 棚卸し（置き場ごとに数える・チェック表）</button>
         <button class="btn-sm" style="grid-column:1/-1;background:none;color:#70d0c8;border:1px dashed #2a4a48;padding:8px" onclick="openChatOpsPaste()">📋 チャットの在庫操作を貼り付け（ふだんはランチャーの貼り付けでOK）</button>
       </div>
     </div>
@@ -694,7 +700,8 @@ function renderLoc(){
   }
   const warehouseCards=warehouses.length?`<div class="section-label">🏠 倉庫・保管場所</div>${warehouses.map(locCard).join('')}`:'<div class="empty-msg2">倉庫がありません</div>';
   const siteCards=sites.length?`<div class="section-label">🏗️ 現場</div>${sites.map(locCard).join('')}`:'<div style="color:#444;font-size:11px;text-align:center;padding:8px">現場未登録 — ＋ボタンで追加</div>';
-  return `<div class="section-label">場所マップ</div>
+  return `<div style="padding:10px 12px 0"><button class="btn-sm" style="width:100%;padding:10px;background:#3a3218;color:#e8c070;border:1px solid #5a4a28;font-size:12px;font-weight:700" onclick="openStocktake()">📝 棚卸し（置き場ごとに数える・チェック表）</button></div>
+    <div class="section-label">場所マップ</div>
     <div class="map-area"><div class="map-bg"><div class="map-grid"></div>${pins}</div></div>
     ${warehouseCards}${siteCards}`;
 }
@@ -984,7 +991,7 @@ function histCardHtml(h,allowEdit=false){
       <div class="hist-meta">${metaParts.map(esc).join(' · ')}</div>
     </div>
     <div class="hist-right">
-      <div class="hist-qty-val ${m.qcls}">${m.sign}${h.qty}</div>
+      <div class="hist-qty-val ${m.qcls}">${h.type==='count'?((+h.countDiff||0)>0?'+':'-'):m.sign}${h.qty}</div>
       ${amt>0?`<div class="hist-money-val">${yen(amt)}</div>`:''}
       <div style="color:#444;font-size:9px;margin-top:2px">長押しで編集</div>
     </div>
@@ -1064,6 +1071,14 @@ function editHistModal(hid){
 }
 function doEditHist(hid){
   const h=history.find(x=>String(x.id)===String(hid));if(!h)return;
+  if(h.type==='count'||h.type==='move'){
+    // 棚卸しの記録は数量・場所を直すと在庫が合わなくなるので、日付とメモだけ直す（数を直すときは取り消してやり直す）
+    const nd=document.getElementById('eh-date')?.value||''; if(nd) h.date=nd.slice(0,10);
+    const mm=document.getElementById('eh-memo'); if(mm) h.memo=mm.value.trim();
+    save();closeModalForce();render();
+    alert('棚卸しの記録は、日付とメモだけ直しました。数を直すときは、この記録を取り消して棚卸しをやり直してください。');
+    return;
+  }
   const oldQty=h.qty;
   const newQty=parseFloat(document.getElementById('eh-qty').value)||0;
   const diff=newQty-oldQty;
@@ -1153,6 +1168,9 @@ function cancelHist(hid){
     if(h.type==='in'&&locId) item.stocks[locId]=Math.max(0,(item.stocks[locId]||0)-h.qty);
     else if((h.type==='out'||h.type==='use')&&locId) item.stocks[locId]=(item.stocks[locId]||0)+h.qty;
     else if(h.type==='ret'&&locId&&destId){item.stocks[locId]=(item.stocks[locId]||0)+h.qty;item.stocks[destId]=Math.max(0,(item.stocks[destId]||0)-h.qty);}
+    // 棚卸し（2026/11/11）：調整は差の分を戻す。移動は移動先から移動元へ戻す
+    else if(h.type==='count'&&locId) item.stocks[locId]=Math.max(0,(parseFloat(item.stocks[locId])||0)-(parseFloat(h.countDiff)||0));
+    else if(h.type==='move'&&locId){ const to=h.destLocId||destId; item.stocks[locId]=(parseFloat(item.stocks[locId])||0)+h.qty; if(to) item.stocks[to]=Math.max(0,(parseFloat(item.stocks[to])||0)-h.qty); }
   }
   history.splice(history.findIndex(x=>String(x.id)===String(hid)),1);
   save();render();
@@ -3149,6 +3167,859 @@ async function forceLoadFromSheet(){
     try{ localStorage.setItem('otake_inbox', JSON.stringify(list)); }catch(e){}
   }, 400); });
 })();
+
+// ============================================================
+// 棚卸し（2026/11/11）
+//  置き場ごとに「合っていれば✓、違えば実数」を入れ、違いだけを確認して確定する。
+//  ・下書きはこの端末に残る（途中でやめても続きから）
+//  ・同じ品目が「ある置き場で足りない／別の置き場で多い」ときは移動として記録できる
+//  ・確定すると、違った分を履歴に「棚卸し調整」として残す（原価の実績には入らない）
+//  ・紙・タブレット用のチェック表（A4）を出せる。手書きの結果はチャットで整えて貼り付けられる
+// ============================================================
+var ST_KEY = 'dk_stocktake';
+var stLoc = null, stView = 'count', stFilter = 'all', stSearch = '';
+function stLoad(){ try{ var s = JSON.parse(localStorage.getItem(ST_KEY)||'null'); return (s && s.drafts) ? s : {drafts:{}}; }catch(e){ return {drafts:{}}; } }
+function stSave(s){ try{ localStorage.setItem(ST_KEY, JSON.stringify(s)); }catch(e){} }
+function stDraft(locId, create){
+  var s = stLoad();
+  if(!s.drafts[locId] && create){ s.drafts[locId] = {date: today(), counts:{}, extras:[]}; stSave(s); }
+  return s.drafts[locId] || null;
+}
+function stPut(locId, d){ var s = stLoad(); s.drafts[locId] = d; stSave(s); }
+function stLocItems(locId){
+  var d = stDraft(locId);
+  return items.filter(function(i){ return (i.stocks && Object.prototype.hasOwnProperty.call(i.stocks, locId)) || (d && d.counts[String(i.id)]); });
+}
+function stBook(item, locId){ return parseFloat((item.stocks||{})[locId]) || 0; }
+function stNum(v){ return Math.round((+v||0)*1000)/1000; }
+function stActual(c, book){ if(!c) return null; if(c.qty!=null && c.qty!=='') return parseFloat(c.qty); if(c.ok) return book; return null; }
+function stStats(locId){
+  var d = stDraft(locId), list = stLocItems(locId), done = 0, diff = 0;
+  list.forEach(function(i){ var c = d && d.counts[String(i.id)]; var a = stActual(c, stBook(i, locId)); if(a!=null){ done++; if(Math.abs(a - stBook(i, locId))>1e-9) diff++; } });
+  return {total: list.length, done: done, diff: diff + ((d && d.extras.length) || 0), extras: (d && d.extras.length) || 0, has: !!d};
+}
+function stLocName(id){ var l = locations.find(function(x){ return x.id===id; }); return l ? l.name : ''; }
+
+function openStocktake(locId){
+  currentTab = '棚卸し'; stLoc = locId || null; stView = 'count'; stFilter = 'all'; stSearch = '';
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  render(); window.scrollTo(0,0);
+}
+
+// ---------- 画面 ----------
+function renderStocktake(){
+  if(stView==='trend') return stRenderTrend();
+  if(!stLoc) return stRenderTop();
+  if(stView==='order') return stRenderOrder();
+  if(stView==='review') return stRenderReview();
+  return stRenderCount();
+}
+function stRenderTop(){
+  var h = '<div style="padding:14px 16px 4px"><div style="color:#e8d5a3;font-size:16px;font-weight:700">📝 棚卸し</div>'
+    + '<div style="color:#888;font-size:11px;line-height:1.7;margin-top:4px">① 置き場を選ぶ　② 合っていれば ✓、違えば実際の数を入れる　③ 違いだけ確かめて確定<br>紙やタブレットで数えるときは「チェック表」を出し、書いた結果をチャットで整えて貼り付けます。</div></div>'
+    + '<div style="display:flex;gap:6px;padding:8px 12px;flex-wrap:wrap">'
+    + '<button class="btn-sm" style="flex:1;padding:9px;background:#1a3a38;color:#70d0c8" onclick="stOpenPaste()">📋 チャットの棚卸し結果を貼り付け</button>'
+    + '<button class="btn-sm" style="flex:1;padding:9px" onclick="stPrintPick()">🖨️ チェック表を出す（PDF・印刷）</button>'
+    + '<button class="btn-sm" style="flex-basis:100%;padding:9px;background:#1a2a3a;color:#70a8e8" onclick="stOpenTrend()">📈 在庫の動きを見る（置き場・品目の出入り、動いていない在庫）</button></div>';
+  var groups = [['🏠 倉庫・保管場所', locations.filter(function(l){ return (l.locType||'warehouse')==='warehouse'; })], ['🏗️ 現場', locations.filter(function(l){ return l.locType==='site'; })]];
+  groups.forEach(function(g){
+    if(!g[1].length) return;
+    h += '<div class="section-label">'+g[0]+'</div>';
+    g[1].forEach(function(l){
+      var st = stStats(l.id);
+      var prog = st.has ? '<span class="badge" style="background:#3a321822;color:#c8962a">数えた '+st.done+'/'+st.total+(st.diff?'・違い '+st.diff:'')+'</span>' : '';
+      h += '<div class="card"><div class="card-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        + '<div><div style="color:#e8d5a3;font-weight:700">'+esc(l.icon||'')+' '+esc(l.name)+'</div>'
+        + '<div style="color:#666;font-size:10px;margin-top:2px">'+st.total+'品目・前回の棚卸し '+(l.lastCount?esc(l.lastCount):'—')+'・並び：'+(stHasShelf(l.id)?(l.shelfManual?'手で設定':'数えた順'):'種類ごと')+'</div><div style="margin-top:3px">'+prog+'</div></div>'
+        + '<div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">'
+        + '<button class="btn-sm" style="background:#c8962a;color:#1a1a18;font-weight:700;padding:7px 12px" onclick="openStocktake(\''+l.id+'\')">'+(st.has?'続きを数える':'数える')+'</button>'
+        + '<button class="btn-sm" onclick="stPrint([\''+l.id+'\'])">🖨️ チェック表</button>'
+        + '<button class="btn-sm" onclick="stOpenOrder(\''+l.id+'\')">↕️ 並び・区切り</button>'
+        + (st.has?'<button class="btn-sm" style="color:#e87050" onclick="stDiscard(\''+l.id+'\')">下書きを消す</button>':'')
+        + '</div></div></div>';
+    });
+  });
+  if(!locations.length) h += '<div class="empty-msg2">置き場がありません</div>';
+  var recent = history.filter(function(x){ return x.type==='count' || (x.type==='move' && x.stocktake); }).slice(0,8);
+  if(recent.length) h += '<div class="section-label">最近の棚卸しの記録</div>' + recent.map(function(x){ return histCardHtml(x); }).join('');
+  return h;
+}
+function stDiscard(locId){
+  if(!confirm(stLocName(locId)+' の棚卸しの下書きを消しますか？（在庫数は変わりません）')) return;
+  var s = stLoad(); delete s.drafts[locId]; stSave(s); render();
+}
+function stRowState(item, c){
+  var book = stBook(item, stLoc), a = stActual(c, book);
+  if(a==null) return 'todo';
+  return Math.abs(a-book)>1e-9 ? 'diff' : 'ok';
+}
+function stRowHtml(item){
+  var d = stDraft(stLoc, true), id = String(item.id), c = d.counts[id] || {};
+  var book = stBook(item, stLoc), st = stRowState(item, c);
+  var bc = st==='ok' ? '#3a6a3a' : st==='diff' ? '#a8642a' : '#2e2e28';
+  var a = stActual(c, book), dv = a==null ? null : stNum(a - book);
+  return '<div class="card" id="st-r-'+esc(id)+'" style="border-color:'+bc+';padding:10px 12px">'
+    + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'
+    + '<div style="min-width:0" onclick="stItemTrend(\''+esc(id)+'\')"><div style="color:#e8d5a3;font-size:13px;font-weight:700;word-break:break-all">'+esc(item.name)+'</div>'
+    + (item.stockId?'<div style="color:#666;font-size:10px">'+esc(item.stockId)+'</div>':'')+'</div>'
+    + '<div style="text-align:right;flex-shrink:0"><div style="color:#666;font-size:9px">アプリの数</div><div style="color:#c8c8b0;font-size:15px;font-weight:700">'+stNum(book)+'<span style="font-size:10px;color:#888"> '+esc(item.unit||'')+'</span></div></div></div>'
+    + '<div style="display:flex;gap:6px;align-items:center;margin-top:7px">'
+    + '<button class="btn-sm" style="padding:9px 12px;font-size:13px;'+(c.ok&&(c.qty==null||c.qty==='')?'background:#2a5a2a;color:#a8e8a8':'')+'" onclick="stOk(\''+esc(id)+'\')">✓ 合ってる</button>'
+    + '<input class="form-input" type="number" inputmode="decimal" step="any" placeholder="実際の数" value="'+(c.qty!=null&&c.qty!==''?esc(c.qty):'')+'" style="margin:0;flex:1;font-size:15px;padding:8px" oninput="stSetQty(\''+esc(id)+'\',this.value)"/>'
+    + '<button class="btn-sm" style="padding:9px 10px" onclick="stMemo(\''+esc(id)+'\')">✏️</button></div>'
+    + '<div id="st-i-'+esc(id)+'" style="font-size:11px;margin-top:5px;color:'+(st==='diff'?'#e8a050':'#666')+'">'
+    + (st==='diff'?'違い '+(dv>0?'+':'')+dv+' '+esc(item.unit||'')+'（'+(dv>0?'+':'')+yen(dv*(item.basePrice||0))+'）':st==='ok'?'✓ 合っている':'')
+    + (c.memo?'　📝 '+esc(c.memo):'')+'</div></div>';
+}
+function stRenderCount(){
+  var l = locations.find(function(x){ return x.id===stLoc; }); if(!l){ stLoc = null; return stRenderTop(); }
+  var d = stDraft(stLoc, true), st = stStats(stLoc);
+  var fl = (stFilter==='busy' || stFilter==='prev') ? stFlags(stLoc) : null;
+  var keep = function(i){
+    var s = stRowState(i, d.counts[String(i.id)]);
+    if(!stockMatch(i, stSearch)) return false;
+    if(stFilter==='todo') return s==='todo';
+    if(stFilter==='diff') return s==='diff';
+    if(stFilter==='busy') return !!fl.busy[String(i.id)];
+    if(stFilter==='prev') return !!fl.prev[String(i.id)];
+    return true;
+  };
+  var ord = stOrdered(stLoc), body = '', pendingSec = null, shown = 0;
+  ord.forEach(function(e){
+    if(e.sec!=null){ pendingSec = e; return; }
+    if(!keep(e)) return;
+    if(pendingSec){ body += '<div style="margin:10px 12px 2px;padding:5px 10px;background:#3a3218;border-radius:7px;color:#e8c070;font-size:12px;font-weight:700">▍'+esc(pendingSec.sec)+'</div>'; pendingSec = null; }
+    body += stRowHtml(e); shown++;
+  });
+  var pct = st.total ? Math.round(st.done/st.total*100) : 0;
+  var chip = function(k, t){ return '<button class="btn-sm" style="padding:7px 10px;'+(stFilter===k?'background:#c8962a;color:#1a1a18;font-weight:700':'')+'" onclick="stFilter=\''+k+'\';render()">'+t+'</button>'; };
+  var h = stQuickHtml()
+    + '<div style="padding:10px 12px 0;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+    + '<button class="btn-sm" style="padding:7px 10px" onclick="stLoc=null;render()">← 置き場の一覧</button>'
+    + '<input class="form-input" type="date" value="'+esc(d.date)+'" style="margin:0;width:auto;padding:6px 8px" onchange="stSetDate(this.value)"/></div>'
+    + '<div style="padding:8px 16px 0"><div style="color:#e8d5a3;font-size:16px;font-weight:700">📝 '+esc(l.name)+' の棚卸し</div>'
+    + '<div id="st-prog" style="color:#888;font-size:11px;margin-top:3px">数えた '+st.done+' / '+st.total+' 品目（'+pct+'%）・違い '+st.diff+'件</div>'
+    + '<div style="height:5px;background:#2e2e28;border-radius:3px;margin-top:5px"><div id="st-bar" style="height:5px;width:'+pct+'%;background:#c8962a;border-radius:3px"></div></div></div>'
+    + '<div style="display:flex;gap:5px;padding:8px 12px 0;flex-wrap:wrap">'+chip('all','すべて')+chip('todo','まだ')+chip('diff','違う')+chip('busy','よく動く')+chip('prev','前に違った')+'</div>'
+    + '<input class="search-box" type="search" placeholder="🔍 一覧を絞り込む（品名・品番）" value="'+esc(stSearch)+'" oninput="stSearch=this.value;clearTimeout(window._stT);window._stT=setTimeout(render,250)"/>'
+    + '<div style="color:#666;font-size:10px;padding:2px 16px 4px">並び：'+(stHasShelf(stLoc)?(l.shelfManual?'手で設定した棚の順':'前回数えた順'):'種類ごと（寸法順）')+'　<a href="#" style="color:#c8962a" onclick="stOpenOrder(\''+l.id+'\');return false">↕️ 並び・区切りを直す</a>'
+    + (stFilter==='busy'?'<br>最近3か月で3回以上出入りした品目です。':stFilter==='prev'?'<br>前の棚卸しで数が違った品目です。':'')+'</div>';
+  h += shown ? body : '<div class="empty-msg2">'+(stFilter==='todo'?'まだの品目はありません':stFilter==='diff'?'違う品目はありません':'当てはまる品目はありません')+'</div>';
+  h += '<div class="section-label">リストにない物（この置き場で見つけた物）</div>';
+  h += d.extras.map(function(x, i){ return '<div class="card" style="padding:9px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center"><div><div style="color:#e8d5a3;font-size:12px;font-weight:700">'+esc(x.name)+'　'+stNum(x.qty)+esc(x.unit||'')+'</div><div style="color:#666;font-size:10px">'+(x.itemId?'登録済みの品目に入れる':'新しい品目として登録')+(x.memo?'・'+esc(x.memo):'')+'</div></div><button class="btn-sm" style="color:#e87050" onclick="stDelExtra('+i+')">削除</button></div>'; }).join('');
+  h += '<div style="padding:4px 12px"><button class="btn-sm" style="width:100%;padding:9px;background:none;border:1px dashed #4a4a38;color:#c8962a" onclick="stAddExtra()">＋ リストにない物を追加</button></div>';
+  h += '<div style="padding:10px 12px 4px;display:flex;flex-direction:column;gap:6px">'
+    + '<button class="btn-sm" style="padding:9px" onclick="stAllOk()">まだの品目を全部「✓ 合ってる」にする</button>'
+    + '<button class="btn-full" onclick="stView=\'review\';render();window.scrollTo(0,0)">違いを確認する →</button></div><div style="height:30px"></div>';
+  return h;
+}
+function stRefreshRow(id){
+  var item = items.find(function(i){ return String(i.id)===String(id); }); if(!item) return;
+  var el = document.getElementById('st-r-'+id);
+  if(el){
+    var d = stDraft(stLoc), c = d.counts[String(id)] || {}, book = stBook(item, stLoc), st = stRowState(item, c), a = stActual(c, book), dv = a==null?null:stNum(a-book);
+    el.style.borderColor = st==='ok' ? '#3a6a3a' : st==='diff' ? '#a8642a' : '#2e2e28';
+    var info = document.getElementById('st-i-'+id);
+    if(info){ info.style.color = st==='diff'?'#e8a050':'#666'; info.innerHTML = (st==='diff'?'違い '+(dv>0?'+':'')+dv+' '+esc(item.unit||'')+'（'+(dv>0?'+':'')+yen(dv*(item.basePrice||0))+'）':st==='ok'?'✓ 合っている':'')+(c.memo?'　📝 '+esc(c.memo):''); }
+    var okb = el.querySelector('button'); if(okb){ var on = c.ok && (c.qty==null||c.qty===''); okb.style.background = on?'#2a5a2a':''; okb.style.color = on?'#a8e8a8':''; }
+  }
+  var st2 = stStats(stLoc), pct = st2.total ? Math.round(st2.done/st2.total*100) : 0;
+  var p = document.getElementById('st-prog'); if(p) p.textContent = '数えた '+st2.done+' / '+st2.total+' 品目（'+pct+'%）・違い '+st2.diff+'件';
+  var b = document.getElementById('st-bar'); if(b) b.style.width = pct+'%';
+}
+function stOk(id){
+  var d = stDraft(stLoc, true), c = d.counts[id] = d.counts[id] || {};
+  var on = c.ok && (c.qty==null||c.qty==='');
+  if(on){ c.ok = false; } else { c.ok = true; c.qty = null; stTouch(id); }
+  if(!c.ok && (c.qty==null||c.qty==='') && !c.memo) delete d.counts[id];
+  stPut(stLoc, d);
+  var el = document.getElementById('st-r-'+id); if(el){ var inp = el.querySelector('input'); if(inp && !on) inp.value = ''; }
+  stRefreshRow(id);
+}
+function stSetQty(id, v){
+  var d = stDraft(stLoc, true), c = d.counts[id] = d.counts[id] || {};
+  if(v===''||v==null){ c.qty = null; } else { c.qty = parseFloat(v); c.ok = false; stTouch(id); }
+  if(!c.ok && (c.qty==null) && !c.memo) delete d.counts[id];
+  stPut(stLoc, d); stRefreshRow(id);
+}
+function stMemo(id){
+  var d = stDraft(stLoc, true), c = d.counts[id] = d.counts[id] || {};
+  var m = prompt('メモ（例：東-1へ移した、箱が濡れていた）', c.memo||''); if(m==null) return;
+  c.memo = m.trim(); if(!c.ok && c.qty==null && !c.memo) delete d.counts[id];
+  stPut(stLoc, d); stRefreshRow(id);
+}
+function stSetDate(v){ var d = stDraft(stLoc, true); d.date = v || today(); stPut(stLoc, d); }
+function stAllOk(){
+  var d = stDraft(stLoc, true), n = 0;
+  stLocItems(stLoc).forEach(function(i){ var id = String(i.id), c = d.counts[id]; if(stActual(c, stBook(i, stLoc))==null){ d.counts[id] = Object.assign(c||{}, {ok:true, qty:null}); n++; } });
+  if(!n){ alert('まだの品目はありません'); return; }
+  if(!confirm('まだの '+n+' 品目を、アプリの数のとおり「✓ 合ってる」にしますか？')) return;
+  stPut(stLoc, d); render();
+}
+function stAddExtra(pre){
+  pre = pre || {};
+  var cats = []; items.forEach(function(i){ var c = i.category||''; if(c && cats.indexOf(c)<0) cats.push(c); });
+  showModal('<div class="sheet" onclick="event.stopPropagation()"><div class="sheet-title">＋ リストにない物</div>'
+    + '<div style="color:#888;font-size:11px;margin-bottom:10px">この置き場の一覧にない物を見つけたとき。ほかの置き場から来た物なら、確認の画面で「移動」として記録できます。</div>'
+    + '<label class="form-label">品名</label><input class="form-input" id="st-x-name" value="'+esc(pre.name||'')+'" oninput="stExtraCand(this.value)" placeholder="例：構造用合板 12mm"/>'
+    + (pre.std?'<div style="color:#70d0c8;font-size:10px;margin:-6px 0 8px">今の品目の書き方にそろえました（入力：'+esc(pre.std)+'）</div>':'')
+    + '<div id="st-x-cand" style="margin:-4px 0 8px">'+(pre.itemId?'<div style="color:#70c870;font-size:11px">✓ 登録済みの「'+esc(pre.name)+'」に入れます</div>':'')+'</div><input type="hidden" id="st-x-item" value="'+esc(pre.itemId||'')+'"/>'
+    + '<div style="display:flex;gap:6px"><div style="flex:1"><label class="form-label">数量</label><input class="form-input" id="st-x-qty" type="number" inputmode="decimal" step="any" value="'+(pre.qty!=null?esc(pre.qty):'')+'"/></div><div style="flex:1"><label class="form-label">単位</label><input class="form-input" id="st-x-unit" value="'+esc(pre.unit||'')+'" placeholder="枚・本・箱"/></div></div>'
+    + '<label class="form-label">種類（新しい品目のとき）</label><input class="form-input" id="st-x-cat" list="st-x-cats" value="'+esc(pre.category||'')+'" placeholder="木材・合板・金物など"/><datalist id="st-x-cats">'+cats.map(function(c){ return '<option value="'+esc(c)+'">'; }).join('')+'</datalist>'
+    + '<label class="form-label">メモ</label><input class="form-input" id="st-x-memo" placeholder="例：東-1から来たかも"/>'
+    + '<div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">やめる</button><button class="btn-confirm green" onclick="stSaveExtra()">追加</button></div></div>');
+  if(!pre.itemId && pre.name) stExtraCand(pre.name, true);
+  setTimeout(function(){ var q = document.getElementById(pre.qty!=null?'st-x-unit':'st-x-qty'); if(q) q.focus(); }, 100);
+}
+function stExtraCand(v, keep){
+  var box = document.getElementById('st-x-cand'); if(!box) return;
+  if(!keep) document.getElementById('st-x-item').value = '';
+  var c = String(v||'').trim().length>=2 ? tmCandidates(v, 5) : [];
+  box.innerHTML = c.length ? '<div style="color:#666;font-size:10px;margin-bottom:3px">登録済みの品目なら選んでください（選ばなければ新しい品目になります）</div>' + c.map(function(it){ return '<button class="btn-sm" style="margin:0 4px 4px 0" onclick="stPickExtra(\''+esc(String(it.id))+'\')">'+esc(it.name)+'</button>'; }).join('') : '';
+}
+function stPickExtra(id){
+  var it = items.find(function(i){ return String(i.id)===id; }); if(!it) return;
+  document.getElementById('st-x-item').value = id; document.getElementById('st-x-name').value = it.name; document.getElementById('st-x-unit').value = it.unit||''; var ce = document.getElementById('st-x-cat'); if(ce) ce.value = it.category||'';
+  document.getElementById('st-x-cand').innerHTML = '<div style="color:#70c870;font-size:11px">✓ 登録済みの「'+esc(it.name)+'」に入れます</div>';
+}
+function stSaveExtra(){
+  var name = document.getElementById('st-x-name').value.trim(), qty = parseFloat(document.getElementById('st-x-qty').value);
+  if(!name || !(qty>=0)){ alert('品名と数量を入れてください'); return; }
+  var itemId = document.getElementById('st-x-item').value;
+  var d = stDraft(stLoc, true);
+  if(itemId && stLocItems(stLoc).some(function(i){ return String(i.id)===itemId; })){
+    d.counts[itemId] = Object.assign(d.counts[itemId]||{}, {qty: qty, ok:false, memo: document.getElementById('st-x-memo').value.trim()});
+  } else {
+    d.extras.push({name: name, qty: qty, unit: document.getElementById('st-x-unit').value.trim(), category: (document.getElementById('st-x-cat')||{value:''}).value.trim(), memo: document.getElementById('st-x-memo').value.trim(), itemId: itemId||''});
+  }
+  stPut(stLoc, d); closeModalForce(); render();
+  var m = document.getElementById('st-qmsg'); if(m){ m.textContent = '＋ '+name+' '+stNum(qty)+' を「リストにない物」に入れました'; setTimeout(function(){ m.textContent=''; }, 4000); }
+}
+function stDelExtra(i){ var d = stDraft(stLoc, true); d.extras.splice(i,1); stPut(stLoc, d); render(); }
+
+// ---------- 違いの確認 ----------
+// ほかの置き場の下書きで、同じ品目が反対向きにずれているもの（移動かもしれない）
+function stMoveHint(item, dv){
+  var s = stLoad(), out = [];
+  Object.keys(s.drafts).forEach(function(lid){
+    if(lid===stLoc) return;
+    var d = s.drafts[lid], c = d.counts[String(item.id)];
+    var a = stActual(c, stBook(item, lid)); if(a==null) return;
+    var odv = a - stBook(item, lid);
+    if(odv*dv < 0) out.push({locId: lid, dv: odv});
+  });
+  return out;
+}
+function stDiffs(){
+  var d = stDraft(stLoc, true), res = [];
+  stLocItems(stLoc).forEach(function(i){
+    var c = d.counts[String(i.id)], book = stBook(i, stLoc), a = stActual(c, book);
+    if(a==null || Math.abs(a-book)<1e-9) return;
+    res.push({item: i, book: book, actual: a, dv: stNum(a-book), memo: (c&&c.memo)||'', moves: stMoveHint(i, a-book)});
+  });
+  return res;
+}
+function stRenderReview(){
+  var l = locations.find(function(x){ return x.id===stLoc; }), d = stDraft(stLoc, true), st = stStats(stLoc);
+  var diffs = stDiffs(), plus = 0, minus = 0;
+  var h = '<div style="padding:10px 12px 0"><button class="btn-sm" style="padding:7px 10px" onclick="stView=\'count\';render()">← 数える画面に戻る</button></div>'
+    + '<div style="padding:8px 16px 4px"><div style="color:#e8d5a3;font-size:16px;font-weight:700">違いの確認：'+esc(l?l.name:'')+'</div>'
+    + '<div style="color:#888;font-size:11px;margin-top:3px">'+esc(d.date)+'・数えた '+st.done+'/'+st.total+' 品目。数えていない '+(st.total-st.done)+' 品目は、アプリの数のまま変えません。</div></div>';
+  if(!diffs.length && !d.extras.length) h += '<div class="card" style="color:#70c870;font-size:13px">✓ 数えた品目は全部合っていました</div>';
+  diffs.forEach(function(x, k){
+    var amt = x.dv*(x.item.basePrice||0); if(amt>0) plus += amt; else minus += amt;
+    h += '<div class="card" style="border-color:#a8642a;padding:10px 12px"><div style="display:flex;justify-content:space-between;gap:8px"><div style="color:#e8d5a3;font-size:13px;font-weight:700">'+esc(x.item.name)+'</div>'
+      + '<div style="color:'+(x.dv>0?'#70c870':'#e87050')+';font-weight:700;white-space:nowrap">'+(x.dv>0?'+':'')+x.dv+esc(x.item.unit||'')+'</div></div>'
+      + '<div style="color:#888;font-size:11px;margin-top:2px">アプリ '+stNum(x.book)+' → 実際 '+stNum(x.actual)+'　（'+(amt>0?'+':'')+yen(amt)+'）'+(x.memo?'　📝 '+esc(x.memo):'')+'</div>';
+    x.moves.forEach(function(m, j){
+      var q = Math.min(Math.abs(x.dv), Math.abs(m.dv));
+      var from = x.dv<0 ? (l?l.name:'') : stLocName(m.locId), to = x.dv<0 ? stLocName(m.locId) : (l?l.name:'');
+      h += '<label style="display:flex;gap:6px;align-items:center;margin-top:6px;color:#70d0c8;font-size:11px"><input type="checkbox" class="st-mv" data-k="'+k+'" data-j="'+j+'" checked/>'
+        + esc(stLocName(m.locId))+'では '+(m.dv>0?'+':'')+stNum(m.dv)+'。移動として記録する（'+esc(from)+' → '+esc(to)+' '+stNum(q)+esc(x.item.unit||'')+'）</label>';
+    });
+    h += '</div>';
+  });
+  if(d.extras.length){
+    h += '<div class="section-label">リストにない物</div>';
+    d.extras.forEach(function(x, i){
+      var cand = x.itemId ? [] : tmCandidates(x.name, 5);
+      h += '<div class="card" style="padding:10px 12px"><div style="color:#e8d5a3;font-size:13px;font-weight:700">'+esc(x.name)+'　+'+stNum(x.qty)+esc(x.unit||'')+'</div>'
+        + (x.memo?'<div style="color:#888;font-size:11px">📝 '+esc(x.memo)+'</div>':'')
+        + (x.itemId ? '<div style="color:#70c870;font-size:11px;margin-top:3px">登録済みの品目に入れます</div>' + stExtraMoveHtml(x, i)
+          : '<select class="form-input" style="margin:6px 0 0" onchange="stLinkExtra('+i+',this.value)"><option value="">新しい品目として登録する</option>'+cand.map(function(it){ return '<option value="'+esc(String(it.id))+'">登録済みの「'+esc(it.name)+'」に入れる</option>'; }).join('')+'</select>')
+        + '</div>';
+    });
+  }
+  h += '<div class="card" style="padding:10px 12px;font-size:12px"><div style="display:flex;justify-content:space-between"><span style="color:#888">増えた分</span><span style="color:#70c870">+'+yen(plus)+'</span></div>'
+    + '<div style="display:flex;justify-content:space-between"><span style="color:#888">減った分</span><span style="color:#e87050">'+yen(minus)+'</span></div>'
+    + '<div style="display:flex;justify-content:space-between;border-top:1px solid #2e2e28;margin-top:4px;padding-top:4px"><span>在庫金額の差（基準単価）</span><b>'+(plus+minus>0?'+':'')+yen(plus+minus)+'</b></div>'
+    + '<div style="color:#666;font-size:10px;margin-top:4px">新しい品目は単価0で登録します。あとで品目の編集で単価を入れてください。</div></div>';
+  h += '<div style="padding:8px 12px"><button class="btn-full" onclick="stConfirm()">この内容で確定する</button></div><div style="height:30px"></div>';
+  return h;
+}
+// リストにない物が、ほかの置き場の品目なら「移動」として記録できるようにする
+function stExtraMoveHtml(x, i){
+  var it = items.find(function(t){ return String(t.id)===String(x.itemId); }); if(!it) return '';
+  var s = stLoad();
+  return locations.filter(function(l){ return l.id!==stLoc && stBook(it, l.id)>0; }).map(function(l){
+    var od = s.drafts[l.id], oc = od && od.counts[String(it.id)], oa = stActual(oc, stBook(it, l.id));
+    var short = oa!=null && oa < stBook(it, l.id);
+    var q = Math.min(x.qty, short ? stBook(it, l.id)-oa : stBook(it, l.id));
+    return '<label style="display:flex;gap:6px;align-items:center;margin-top:6px;color:#70d0c8;font-size:11px"><input type="checkbox" class="st-xmv" data-i="'+i+'" data-loc="'+l.id+'" data-q="'+q+'" '+(short?'checked':'')+'/>'
+      + esc(l.name)+'に '+stNum(stBook(it, l.id))+esc(it.unit||'')+(short?'（数えたら '+stNum(oa)+'）':'')+'。移動として記録する（'+esc(l.name)+' → ここ '+stNum(q)+esc(it.unit||'')+'）</label>';
+  }).join('');
+}
+function stLinkExtra(i, v){ var d = stDraft(stLoc, true); if(d.extras[i]){ d.extras[i].linkTo = v||''; stPut(stLoc, d); } }
+function stHist(o){
+  history.unshift(Object.assign({id: String(Date.now())+String(Math.floor(Math.random()*1e6)), date: o.date, stockId: '', destName: '', jobName: '', supplier: '', stocktake: true}, o));
+}
+function stConfirm(){
+  var l = locations.find(function(x){ return x.id===stLoc; }); if(!l) return;
+  var d = stDraft(stLoc, true), date = d.date || today();
+  var diffs = stDiffs();
+  var checked = {}; document.querySelectorAll('.st-mv').forEach(function(cb){ if(cb.checked) checked[cb.dataset.k+'|'+cb.dataset.j] = 1; });
+  var nAdj = 0, nMove = 0, nNew = 0;
+  // ① 移動（足りない置き場 → 多い置き場）
+  diffs.forEach(function(x, k){
+    x.moves.forEach(function(m, j){
+      if(!checked[k+'|'+j]) return;
+      var it = x.item, q = Math.min(Math.abs(x.dv), Math.abs(m.dv)); if(!(q>0)) return;
+      var from = x.dv<0 ? stLoc : m.locId, to = x.dv<0 ? m.locId : stLoc;
+      it.stocks[from] = stNum(stBook(it, from) - q); it.stocks[to] = stNum(stBook(it, to) + q);
+      stHist({date: date, type: 'move', itemId: it.id, itemName: it.name, stockId: it.stockId||'', unit: it.unit||'', qty: q, locName: stLocName(from), destName: stLocName(to), destLocId: to, memo: '棚卸しで見つかった移動', unitPrice: it.basePrice||0});
+      nMove++;
+    });
+  });
+  // ② 残りの違いを実際の数に合わせる
+  diffs.forEach(function(x){
+    var it = x.item, book = stBook(it, stLoc), dv = stNum(x.actual - book);
+    if(Math.abs(dv)<1e-9) return;
+    it.stocks[stLoc] = stNum(x.actual);
+    stHist({date: date, type: 'count', itemId: it.id, itemName: it.name, stockId: it.stockId||'', unit: it.unit||'', qty: Math.abs(dv), countDiff: dv, locName: l.name, memo: '棚卸し'+(x.memo?'：'+x.memo:''), unitPrice: it.basePrice||0});
+    nAdj++;
+  });
+  // ③ リストにない物（ほかの置き場からの移動を先に記録）
+  document.querySelectorAll('.st-xmv').forEach(function(cb){
+    if(!cb.checked) return;
+    var x = d.extras[+cb.dataset.i], it = x && items.find(function(t){ return String(t.id)===String(x.itemId); }); if(!it) return;
+    var from = cb.dataset.loc, q = Math.min(parseFloat(cb.dataset.q)||0, stBook(it, from)); if(!(q>0)) return;
+    it.stocks[from] = stNum(stBook(it, from) - q); it.stocks[stLoc] = stNum(stBook(it, stLoc) + q);
+    stHist({date: date, type: 'move', itemId: it.id, itemName: it.name, stockId: it.stockId||'', unit: it.unit||'', qty: q, locName: stLocName(from), destName: l.name, destLocId: stLoc, memo: '棚卸しで見つかった移動', unitPrice: it.basePrice||0});
+    nMove++;
+  });
+  d.extras.forEach(function(x){
+    var it = items.find(function(i){ return String(i.id)===String(x.itemId || x.linkTo || ''); });
+    if(!it){
+      it = {id: 'itm-'+Date.now()+'-'+Math.floor(Math.random()*100000), name: x.name, unit: x.unit||'個', category: x.category||'その他', basePrice: 0, stocks: {}, minStock: 0, stockId: '', memo: '棚卸しで登録'};
+      items.push(it); nNew++;
+    }
+    if(!it.stocks) it.stocks = {};
+    var book = stBook(it, stLoc), dv = stNum(x.qty - book);
+    it.stocks[stLoc] = stNum(x.qty);
+    if(Math.abs(dv)>1e-9){ stHist({date: date, type: 'count', itemId: it.id, itemName: it.name, stockId: it.stockId||'', unit: it.unit||'', qty: Math.abs(dv), countDiff: dv, locName: l.name, memo: '棚卸しで見つけた'+(x.memo?'：'+x.memo:''), unitPrice: it.basePrice||0}); nAdj++; }
+  });
+  var st = stStats(stLoc);
+  l.lastCount = date; l.lastCountDone = st.done; l.lastCountTotal = st.total;
+  var learned = stLearnOrder(l, d);
+  var s = stLoad(); delete s.drafts[stLoc]; stSave(s);
+  save();
+  var name = l.name; stLoc = null; stView = 'count'; render();
+  alert(name+' の棚卸しを確定しました。\n・数を直した品目：'+nAdj+'件\n・移動として記録：'+nMove+'件'+(nNew?'\n・新しく登録した品目：'+nNew+'件（単価0）':'')+(learned?'\n・数えた順を、次回の並びとして覚えました':'')+'\n\n履歴に「棚卸し調整」として残っています。長押しで取り消せます。');
+}
+
+// ---------- チェック表（A4・印刷／PDF） ----------
+function stPrintPick(){
+  showModal('<div class="sheet" onclick="event.stopPropagation()"><div class="sheet-title">🖨️ チェック表を出す</div>'
+    + '<div style="color:#888;font-size:11px;margin-bottom:10px">置き場ごとにA4の表を作ります。印刷の画面で「PDFに保存」を選ぶと、タブレットで手書きできます。</div>'
+    + locations.map(function(l){ return '<label style="display:flex;gap:8px;align-items:center;padding:6px 0;color:#e8d5a3;font-size:13px"><input type="checkbox" class="st-pp" value="'+l.id+'" '+((l.locType||'warehouse')==='warehouse'?'checked':'')+'/>'+esc(l.name)+'<span style="color:#666;font-size:10px">（'+stLocItems(l.id).length+'品目）</span></label>'; }).join('')
+    + '<label class="form-label" style="margin-top:8px">並び</label><select class="form-input" id="st-pmode"><option value="">棚の順（並び・区切りがあればその順、なければ種類ごと）</option><option value="cat">種類ごと（寸法順）</option></select>'
+    + '<div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">やめる</button><button class="btn-confirm green" onclick="stPrint(Array.from(document.querySelectorAll(\'.st-pp:checked\')).map(function(x){return x.value;}),document.getElementById(\'st-pmode\').value)">表を出す</button></div></div>');
+}
+function stPrintHtml(locIds, mode){
+  var pages = locIds.map(function(lid){
+    var l = locations.find(function(x){ return x.id===lid; }); if(!l) return '';
+    var list = stLocItems(lid), no = 0;
+    var rows = stOrdered(lid, mode).map(function(i){ if(i.sec!=null) return '<tr class="sec"><td colspan="7">▍'+esc(i.sec)+'</td></tr>'; var k = no++; return '<tr><td class="n">'+(k+1)+'</td><td class="nm">'+esc(i.name)+(i.stockId?'<span class="sid">'+esc(i.stockId)+'</span>':'')+'</td><td class="u">'+esc(i.unit||'')+'</td><td class="b">'+stNum(stBook(i, lid))+'</td><td class="ck"></td><td class="q"></td><td class="m"></td></tr>'; }).join('');
+    var blank = ''; for(var b=0;b<8;b++) blank += '<tr><td class="n"></td><td class="nm"></td><td class="u"></td><td class="b"></td><td class="ck"></td><td class="q"></td><td class="m"></td></tr>';
+    return '<section><div class="hd"><div><div class="tt">棚卸しチェック表　'+esc(l.name)+'</div><div class="sub">大竹工務店・'+list.length+'品目・出力 '+today()+'</div></div>'
+      + '<div class="box">日付　　　年　　月　　日<br>担当</div></div>'
+      + '<div class="how">合っていれば「✓」に ✓。違えば「実数」に実際の数（無ければ 0）。ほかの置き場から来た・移した物はメモに置き場名を書く。</div>'
+      + '<table><thead><tr><th class="n">No</th><th class="nm">品名</th><th class="u">単位</th><th class="b">アプリ</th><th class="ck">✓</th><th class="q">実数</th><th class="m">メモ</th></tr></thead><tbody>'+rows
+      + '<tr class="sep"><td colspan="7">リストにない物（品名・数量・単位・メモ）</td></tr>'+blank+'</tbody></table></section>';
+  }).join('');
+  return '<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>棚卸しチェック表</title><style>'
+    + '@page{size:A4 portrait;margin:10mm 9mm}*{box-sizing:border-box}body{font-family:"Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif;color:#111;margin:0}'
+    + 'section{page-break-after:always}section:last-child{page-break-after:auto}'
+    + '.hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px}.tt{font-size:17pt;font-weight:700}.sub{font-size:8.5pt;color:#555}'
+    + '.box{border:1px solid #333;padding:4px 8px;font-size:9.5pt;line-height:1.9;min-width:62mm}.how{font-size:8.5pt;color:#333;margin:2px 0 5px}'
+    + 'table{width:100%;border-collapse:collapse;font-size:10pt}thead{display:table-header-group}tr{page-break-inside:avoid}'
+    + 'th,td{border:1px solid #444;padding:0 4px;height:8.2mm}th{background:#e9e9e9;font-size:8.5pt;height:6mm}'
+    + '.n{width:8mm;text-align:center;font-size:8pt;color:#555}.u{width:11mm;text-align:center}.b{width:14mm;text-align:right}.ck{width:9mm}.q{width:17mm}.m{width:40mm}'
+    + '.sec td{background:#d9d9d9;font-weight:700;font-size:9.5pt;height:6.5mm;page-break-after:avoid}.nm{word-break:break-all}.sid{font-size:7pt;color:#666;margin-left:4px}.sep td{background:#f3f3f3;font-size:8.5pt;height:6mm;font-weight:700}'
+    + '.bar{padding:10px;background:#fffbe6;border-bottom:1px solid #ddd;font-size:13px}@media print{.bar{display:none}}'
+    + '</style></head><body><div class="bar">印刷の画面が開かないときは、ブラウザのメニューから「印刷」→「PDFに保存」を選んでください。 <button onclick="window.print()">印刷・PDF</button></div>'+pages+'</body></html>';
+}
+function stPrint(locIds, mode){
+  locIds = (locIds||[]).filter(Boolean);
+  if(!locIds.length){ alert('置き場を選んでください'); return; }
+  closeModalForce();
+  var w = window.open('', '_blank');
+  if(!w){ alert('新しい画面を開けませんでした。ポップアップを許可してください。'); return; }
+  w.document.open(); w.document.write(stPrintHtml(locIds, mode)); w.document.close();
+  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} }, 600);
+}
+
+// ---------- チャットの棚卸し結果を貼り付け ----------
+//  【棚卸し】2026-11-15 北-1
+//  杉KD 105角 12本        … 実際の数
+//  ✓ 構造用合板 12mm      … 合っている
+//  ＋ 防水テープ 3巻 ※東-1から  … リストにない物（※の後はメモ）
+//  残りは全部✓            … まだの品目を全部合っているにする
+function stOpenPaste(){
+  showModal('<div class="sheet" onclick="event.stopPropagation()"><div class="sheet-title">📋 チャットの棚卸し結果を貼り付け</div>'
+    + '<div style="color:#888;font-size:11px;margin-bottom:8px;line-height:1.6">チェック表の写真をチャットに送ると、この形で返ってきます。貼り付けると数える画面に入るので、確かめてから確定してください。</div>'
+    + '<textarea class="form-input" id="st-paste" style="min-height:180px;font-size:12px" placeholder="【棚卸し】2026-11-15 北-1\n杉KD 105角 12本\n✓ 構造用合板 12mm\n＋ 防水テープ 3巻 ※東-1から\n残りは全部✓"></textarea>'
+    + '<div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">やめる</button><button class="btn-confirm green" onclick="stApplyPaste(document.getElementById(\'st-paste\').value)">読み込む</button></div></div>');
+}
+function stFindLoc(name){
+  var k = tmNorm(name); if(!k) return null;
+  return locations.find(function(l){ return tmNorm(l.name)===k; }) || locations.find(function(l){ var n = tmNorm(l.name); return n && (k.indexOf(n)>=0 || n.indexOf(k)>=0); }) || null;
+}
+function stFindItem(name, locId){
+  var ex = tmExact(name);
+  var inLoc = ex.filter(function(i){ return i.stocks && Object.prototype.hasOwnProperty.call(i.stocks, locId); });
+  return inLoc[0] || (ex.length===1 ? ex[0] : null);
+}
+function stParseDate(s){
+  var t = String(s||''); try{ t = t.normalize('NFKC'); }catch(e){}
+  var m = t.match(/(\d{4})[-\/年.](\d{1,2})[-\/月.](\d{1,2})/); if(m) return m[1]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[3]).slice(-2);
+  m = t.match(/(\d{1,2})[\/月](\d{1,2})/); if(m) return new Date().getFullYear()+'-'+('0'+m[1]).slice(-2)+'-'+('0'+m[2]).slice(-2);
+  return '';
+}
+function stApplyPaste(raw){
+  var text = String(raw||'').replace(/\r/g,'').replace(/```[a-z]*/g,'');
+  var s = stLoad(), cur = null, rep = {}, firstLoc = null, notes = [];
+  text.split('\n').forEach(function(line0){
+    var line = line0.trim(); if(!line) return;
+    var n = line; try{ n = line.normalize('NFKC'); }catch(e){}
+    var hm = n.match(/^【棚卸し?】\s*(.*)$/);
+    if(hm){
+      var rest = hm[1], date = stParseDate(rest);
+      var locTxt = rest.replace(/\d{4}[-\/年.]\d{1,2}[-\/月.]\d{1,2}日?/,'').replace(/\d{1,2}[\/月]\d{1,2}日?/,'').replace(/[（(][^)）]*[)）]/g,'').trim();
+      var l = stFindLoc(locTxt);
+      if(!l){ notes.push('置き場「'+locTxt+'」が見つかりません'); cur = null; return; }
+      if(!s.drafts[l.id]) s.drafts[l.id] = {date: today(), counts:{}, extras:[]};
+      cur = {loc: l, d: s.drafts[l.id]}; if(date) cur.d.date = date;
+      rep[l.id] = rep[l.id] || {name: l.name, qty:0, ok:0, extra:0, unknown:[], all:0};
+      if(!firstLoc) firstLoc = l.id;
+      return;
+    }
+    if(!cur){ return; }
+    var R = rep[cur.loc.id];
+    if(/^(残り|のこり|ほか|他).*(全部|すべて|全て).*(✓|✔|OK|ok|合)/.test(n)){
+      stLocItems(cur.loc.id).forEach(function(i){ var id = String(i.id), c = cur.d.counts[id]; if(stActual(c, stBook(i, cur.loc.id))==null){ cur.d.counts[id] = Object.assign(c||{}, {ok:true, qty:null}); R.all++; } });
+      return;
+    }
+    var memo = ''; var mi = n.search(/[※＊]/); if(mi>=0){ memo = n.slice(mi+1).trim(); n = n.slice(0, mi).trim(); }
+    var ok = /^[✓✔☑]|^(OK|ok)\s/.test(n); if(ok) n = n.replace(/^([✓✔☑]|OK|ok)\s*/,'').trim();
+    var extra = /^[＋+]/.test(n); if(extra) n = n.replace(/^[＋+]\s*/,'').trim();
+    n = n.replace(/^[・\-\*•●]\s*/,'').trim(); if(!n) return;
+    var p = tmParse(n)[0] || {name:n, qty:null, unit:''};
+    var it = stFindItem(ok ? n : p.name, cur.loc.id) || (ok ? null : stFindItem(n, cur.loc.id));
+    var inLoc = it && it.stocks && Object.prototype.hasOwnProperty.call(it.stocks, cur.loc.id);
+    var ordPush = function(x){ cur.d.order = cur.d.order || []; if(cur.d.order.indexOf(x)<0) cur.d.order.push(x); };
+    if(ok && it){ var id = String(it.id); cur.d.counts[id] = Object.assign(cur.d.counts[id]||{}, {ok:true, qty:null}); if(memo) cur.d.counts[id].memo = memo; ordPush(id); R.ok++; return; }
+    if(!extra && it && inLoc && p.qty!=null){ var id2 = String(it.id); cur.d.counts[id2] = Object.assign(cur.d.counts[id2]||{}, {ok:false, qty:p.qty}); if(memo) cur.d.counts[id2].memo = memo; ordPush(id2); R.qty++; return; }
+    if(p.qty!=null){ cur.d.extras.push({name: it ? it.name : p.name, qty: p.qty, unit: p.unit || (it&&it.unit) || '', memo: memo, itemId: it ? String(it.id) : ''}); R.extra++; if(!it) R.unknown.push(p.name); return; }
+    R.unknown.push(n);
+  });
+  if(!firstLoc){ alert('「【棚卸し】日付 置き場名」の行が見つかりませんでした。'+(notes.length?'\n'+notes.join('\n'):'')); return; }
+  stSave(s); closeModalForce();
+  var msg = Object.keys(rep).map(function(k){ var R = rep[k]; return '■ '+R.name+'：数 '+R.qty+'件・✓ '+R.ok+'件'+(R.all?'・残り全部✓ '+R.all+'件':'')+'・リストにない物 '+R.extra+'件'+(R.unknown.length?'\n　読めなかった・品目が見つからない：'+R.unknown.slice(0,8).join('、')+(R.unknown.length>8?' ほか':''):''); }).join('\n');
+  alert('棚卸しの下書きに入れました。\n'+msg+(notes.length?'\n'+notes.join('\n'):'')+'\n\n数える画面で確かめてから「違いを確認する」→「確定」してください。');
+  openStocktake(firstLoc);
+}
+
+
+// ============================================================
+// 棚卸し その2（2026/11/11）
+//  ・すばやく入れる欄：品名と数（音声入力でも）→ 置き場の中の候補 → 押すと数が入る／その行へ飛ぶ
+//  ・棚の並び：数えた順を覚えて次回その順に並べる。「A段」などの区切りを入れて並べ替えられる（置き場に保存・同期される）
+//  ・チェック表：棚の順（区切りの見出しつき）か、種類ごと＋寸法順
+//  ・動き：置き場・品目ごとの出入り、よく動く／動かない品目、棚卸しの差
+// ============================================================
+var stOrderSel = null, stTrendDays = 90, stTrendLoc = '', stQuickTimer = null;
+// 寸法の数字が並び順で効くように（105 と 45 なら 45 が先）
+function stSortKey(s){ return tmNorm(s).replace(/\d+(\.\d+)?/g, function(n){ return ('000000000'+n.split('.')[0]).slice(-9); }); }
+function stCatSort(list){
+  return list.slice().sort(function(a,b){
+    var ca = a.category||'その他', cb = b.category||'その他';
+    if(ca!==cb) return ca.localeCompare(cb, 'ja');
+    var ka = stSortKey(a.name), kb = stSortKey(b.name); return ka<kb?-1:ka>kb?1:0;
+  });
+}
+// 置き場の並び：[{sec:'A段'} か item] の配列。shelf がなければ種類ごとに見出しを付ける
+function stOrdered(locId, mode){
+  var l = locations.find(function(x){ return x.id===locId; }) || {};
+  var list = stLocItems(locId), byId = {}; list.forEach(function(i){ byId[String(i.id)] = i; });
+  var out = [], used = {};
+  if(mode!=='cat' && Array.isArray(l.shelf) && l.shelf.length){
+    l.shelf.forEach(function(e){
+      if(e && typeof e==='object' && e.sec!=null){ out.push({sec: e.sec}); return; }
+      var it = byId[String(e)]; if(it && !used[String(e)]){ out.push(it); used[String(e)] = 1; }
+    });
+    var rest = stCatSort(list.filter(function(i){ return !used[String(i.id)]; }));
+    if(rest.length){ out.push({sec:'並びが決まっていない品目', auto:true}); out = out.concat(rest); }
+  } else {
+    var cat = null;
+    stCatSort(list).forEach(function(i){ var c = i.category||'その他'; if(c!==cat){ cat = c; out.push({sec:c, auto:true}); } out.push(i); });
+  }
+  // 中身のない見出しは消す（並べ替えの画面では残す）
+  if(mode==='edit') return out;
+  return out.filter(function(e, k){ if(e.sec==null) return true; for(var j=k+1;j<out.length;j++){ if(out[j].sec!=null) return false; return true; } return false; });
+}
+function stHasShelf(locId){ var l = locations.find(function(x){ return x.id===locId; }); return !!(l && Array.isArray(l.shelf) && l.shelf.length); }
+// 数えた順を下書きに残す
+function stTouch(id){ var d = stDraft(stLoc, true); d.order = d.order || []; if(d.order.indexOf(String(id))<0){ d.order.push(String(id)); stPut(stLoc, d); } }
+// 確定のとき：並びを手で直していない置き場は、数えた順を次回の並びにする
+function stLearnOrder(l, d){
+  if(!d || !d.order || d.order.length<2 || l.shelfManual) return false;
+  var cur = stOrdered(l.id).filter(function(e){ return e.sec==null; }).map(function(i){ return String(i.id); });
+  var seen = {}, order = [];
+  d.order.forEach(function(id){ if(!seen[id] && cur.indexOf(id)>=0){ seen[id] = 1; order.push(id); } });
+  cur.forEach(function(id){ if(!seen[id]){ seen[id] = 1; order.push(id); } });
+  l.shelf = order; return true;
+}
+
+// ---------- すばやく入れる欄 ----------
+// ---------- すばやく入れる欄（2026/11/11 改良） ----------
+//  ・言葉を足すほど絞り込む（すべての言葉を含む品目だけ。数字と文字の境目でも分ける：「杉105」→「杉」「105」）
+//  ・この置き場で見つからなければ、ほかの置き場の同じ品目と近い品目を出す
+//  ・それでもなければ「新しく加える」。品名は今の品目の書き方にそろえる
+function stQuickHtml(){
+  return '<div id="st-quick" style="position:sticky;top:0;z-index:30;background:#1a1a18;padding:8px 12px 6px;border-bottom:1px solid #2e2e28">'
+    + '<div style="display:flex;gap:6px"><input class="form-input" id="st-q" type="search" enterkeyhint="done" autocomplete="off" placeholder="🎤 品名（言葉を足すと絞り込み）" style="margin:0;font-size:15px;padding:10px;flex:1" '
+    + 'oninput="clearTimeout(stQuickTimer);stQuickTimer=setTimeout(stQuickShow,150)" onkeydown="if(event.key===\'Enter\'&&!event.isComposing){event.preventDefault();stQuickEnter();}"/>'
+    + '<input class="form-input" id="st-qn" type="number" inputmode="decimal" step="any" placeholder="数" style="margin:0;width:64px;font-size:15px;padding:10px 6px;text-align:center" oninput="clearTimeout(stQuickTimer);stQuickTimer=setTimeout(stQuickShow,150)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();stQuickEnter();}"/>'
+    + '<button class="btn-sm" style="padding:0 10px" onclick="stQuickClear(true)">✕</button></div>'
+    + '<div id="st-qc" style="max-height:52vh;overflow-y:auto"></div><div id="st-qmsg" style="color:#70c870;font-size:11px"></div></div>';
+}
+function stQuickClear(focus){
+  var q = document.getElementById('st-q'), n = document.getElementById('st-qn'), b = document.getElementById('st-qc');
+  if(q) q.value = ''; if(n) n.value = ''; if(b) b.innerHTML = ''; if(focus && q) q.focus();
+}
+// 話した言葉・打った言葉を、品名の書き方に寄せる（かける→×、ミリ→mm、全角→半角）
+function stVoiceNorm(t){
+  t = String(t||''); try{ t = t.normalize('NFKC'); }catch(e){}
+  return t.replace(/\s*(かける|掛ける|掛け|かけ)\s*/g,'×').replace(/(\d)\s*[xX*＊✕]\s*(?=\d)/g,'$1×').replace(/ミリ/g,'mm').replace(/センチ/g,'cm').replace(/[　]+/g,' ').trim();
+}
+function stWords(t){
+  var out = [];
+  stVoiceNorm(t).split(/\s+/).forEach(function(w){
+    var k = tmNorm(w); if(!k) return;
+    (k.match(/\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)+/g) || []).forEach(function(dm){ out.push(dm); });   // 寸法はつながりのまま（105x105）
+    (k.match(/[0-9.]+|[^0-9.x]+|x/g) || []).forEach(function(p){ if(p && p!=='x') out.push(p); });
+  });
+  return out.filter(function(w, i){ return out.indexOf(w)===i; });
+}
+function stHay(i){ return tmNorm(i.name + ' ' + (i.stockId||'') + ' ' + (i.category||'')); }
+// 文字は「含む」、数字は品名の数字と一致するときだけ（「3」で 3000 に当たらないように）
+function stMatchAll(i, words){
+  var h = stHay(i), nums = h.match(/\d+(?:\.\d+)?/g) || [];
+  return words.every(function(w){ return (/^\d/.test(w) && w.indexOf('x')<0) ? nums.indexOf(w)>=0 : h.indexOf(w)>=0; });
+}
+function stRank(list, words, raw){
+  var k = tmNorm(stVoiceNorm(raw));
+  return list.map(function(i){
+    var nums = tmNorm(i.name).match(/\d+(?:\.\d+)?/g) || [], sc = tmBigram(k, tmNorm(i.name));
+    words.forEach(function(t){ if(/^\d/.test(t)){ if(nums.indexOf(t)>=0) sc += 0.3; if(nums[0]===t) sc += 0.4; } });
+    if(tmNorm(i.name).indexOf(k)===0) sc += 0.5;
+    return {i:i, sc:sc};
+  }).sort(function(a,b){ return b.sc-a.sc; }).map(function(x){ return x.i; });
+}
+function stQuickFind(text){
+  var words = stWords(text); if(!words.length) return {words:words, here:[], other:[], near:[]};
+  var locIt = stLocItems(stLoc), ids = {}; locIt.forEach(function(i){ ids[String(i.id)] = 1; });
+  var here = stRank(locIt.filter(function(i){ return stMatchAll(i, words); }), words, text);
+  var other = here.length ? [] : stRank(items.filter(function(i){ return !ids[String(i.id)] && stMatchAll(i, words); }), words, text);
+  var near = (here.length || other.length) ? [] : tmCandidates(stVoiceNorm(text), 5);
+  return {words:words, here:here, other:other, near:near};
+}
+// 数の読み取り：別の欄に数があればそれ。なければ単位つきの数（12本）。単位なしの最後の数は、それを外すと見つかるときだけ数とみなす
+function stQuickParse(v){
+  var raw = stVoiceNorm(v), nEl = document.getElementById('st-qn'), nv = nEl && nEl.value!=='' ? parseFloat(nEl.value) : null;
+  if(!raw) return null;
+  if(nv!=null && !isNaN(nv)) return {name: raw, qty: nv, unit: ''};
+  var mu = raw.match(new RegExp('^(.*?\\S)\\s*(\\d+(?:\\.\\d+)?)\\s*('+TM_UNITS+')$'));
+  if(mu && !/[×x]$/.test(mu[1])) return {name: mu[1].trim(), qty: parseFloat(mu[2]), unit: mu[3]};
+  var mb = raw.match(/^(.*\S)\s+(\d+(?:\.\d+)?)$/);
+  if(mb && !stQuickFind(raw).here.length && stQuickFind(mb[1]).here.length) return {name: mb[1].trim(), qty: parseFloat(mb[2]), unit: ''};
+  return {name: raw, qty: null, unit: ''};
+}
+function stQuickCands(name){ return stQuickFind(name).here; }
+function stCandRow(i, p, k, kind){
+  var id = esc(String(i.id)), u = esc(i.unit||'');
+  if(kind==='here'){
+    var book = stNum(stBook(i, stLoc)), dd = stDraft(stLoc), cc = dd && dd.counts[String(i.id)], a = stActual(cc, stBook(i, stLoc));
+    return '<div style="display:flex;gap:5px;align-items:center;margin-top:5px">'
+      + '<button class="btn-sm" style="flex:1;text-align:left;padding:8px;'+(k===0?'border:1px solid #c8962a':'')+'" onclick="'+(p.qty!=null?'stQuickSet(\''+id+'\','+p.qty+')':'stJump(\''+id+'\')')+'">'
+      + '<b style="color:#e8d5a3">'+esc(i.name)+'</b><span style="color:#888"> アプリ '+book+u+(a!=null?'・入力済 '+stNum(a):'')+'</span>'
+      + (p.qty!=null?'<span style="color:#c8962a;font-weight:700"> → '+stNum(p.qty)+u+'にする</span>':'')+'</button>'
+      + (p.qty==null?'<button class="btn-sm" style="padding:8px 10px" onclick="stQuickOk(\''+id+'\')">✓</button><button class="btn-sm" style="padding:8px 10px" onclick="stJump(\''+id+'\')">行へ</button>':'')
+      + '</div>';
+  }
+  var where = locations.filter(function(l){ return stBook(i, l.id)>0; }).map(function(l){ return l.name+' '+stNum(stBook(i, l.id)); }).join('、');
+  return '<div style="display:flex;gap:5px;align-items:center;margin-top:5px"><button class="btn-sm" style="flex:1;text-align:left;padding:8px" onclick="stQuickAddExisting(\''+id+'\')">'
+    + '<b style="color:#c8c8b0">'+esc(i.name)+'</b><span style="color:#888"> '+(where?esc(where)+u:'在庫なし')+'</span><span style="color:#70d0c8"> ＋ ここで見つけた</span></button></div>';
+}
+function stQuickShow(){
+  var box = document.getElementById('st-qc'); if(!box) return;
+  var raw = document.getElementById('st-q').value;
+  var p = stQuickParse(raw);
+  if(!p){ box.innerHTML = ''; return; }
+  var f = stQuickFind(p.name), h = '';
+  var wl = f.words.length ? '<span style="color:#666;font-size:10px">「'+f.words.map(esc).join('」「')+'」を含む</span>' : '';
+  if(f.here.length){
+    h += '<div style="color:#888;font-size:10px;margin-top:5px">この置き場で '+f.here.length+'件 '+wl+(f.here.length>8?'・言葉を足すと絞れます':'')+'</div>';
+    h += f.here.slice(0,8).map(function(i,k){ return stCandRow(i, p, k, 'here'); }).join('');
+  } else if(f.other.length){
+    h += '<div style="color:#e8a050;font-size:11px;margin-top:5px">この置き場の一覧にはありません。ほかの置き場の品目に '+f.other.length+'件 '+wl+'</div>';
+    h += f.other.slice(0,6).map(function(i){ return stCandRow(i, p, 0, 'other'); }).join('');
+  } else {
+    h += '<div style="color:#e8a050;font-size:11px;margin-top:5px">どの置き場の品目にも見つかりません。</div>';
+    if(f.near.length) h += '<div style="color:#888;font-size:10px;margin-top:3px">近い品目</div>' + f.near.map(function(i){ return stLocItems(stLoc).indexOf(i)>=0 ? stCandRow(i, p, 1, 'here') : stCandRow(i, p, 0, 'other'); }).join('');
+  }
+  h += '<button class="btn-sm" style="width:100%;margin-top:6px;padding:8px;background:none;border:1px dashed #4a4a38;color:#c8962a" onclick="stQuickAddNew()">＋ 新しい品目として加える「'+esc(stStdName(p.name))+'」</button>';
+  if(f.here.length && p.qty!=null) h += '<div style="color:#666;font-size:10px;margin-top:3px">Enter で一番上の候補に入れます。</div>';
+  else if(f.here.length) h += '<div style="color:#666;font-size:10px;margin-top:3px">右の「数」に入れるか「杉105 12本」のように続けると、押すだけで数が入ります。</div>';
+  box.innerHTML = h;
+}
+function stQuickEnter(){
+  var p = stQuickParse(document.getElementById('st-q').value); if(!p) return;
+  var c = stQuickFind(p.name).here; if(!c.length) return;
+  if(p.qty!=null) stQuickSet(String(c[0].id), p.qty); else stJump(String(c[0].id));
+}
+// ほかの置き場の品目を、この置き場で見つけた物として加える
+function stQuickAddExisting(id){
+  var it = items.find(function(i){ return String(i.id)===String(id); }); if(!it) return;
+  var p = stQuickParse(document.getElementById('st-q').value) || {};
+  stAddExtra({name: it.name, unit: it.unit||'', qty: p.qty, itemId: String(it.id), category: it.category||''});
+}
+function stQuickAddNew(){
+  var p = stQuickParse(document.getElementById('st-q').value) || {name:''};
+  var name = stStdName(p.name), near = tmCandidates(name, 1)[0];
+  stAddExtra({name: name, qty: p.qty, unit: p.unit || (near&&near.unit) || '', category: (near&&near.category) || '', std: p.name!==name ? p.name : ''});
+}
+// 品名を、今の品目の書き方にそろえる
+//  ・全角→半角、寸法は × でつなぐ（105x105、105＊105、105かける105 → 105×105）、× のまわりの空白をとる
+//  ・品名と寸法のあいだは半角スペース1つ（杉KD105×105 → 杉KD 105×105）
+//  ・英字の略号は、今の品目に同じ略号があればその書き方（kd → KD）
+//  ・言葉が今の品目名の一部とほぼ同じなら、その書き方に合わせる（すぎ→杉 は今の品目に「すぎ」がなければしない）
+function stStdName(raw){
+  var t = stVoiceNorm(raw);
+  t = t.replace(/(\d)\s*×\s*(\d)/g,'$1×$2').replace(/\s+/g,' ').trim();
+  t = t.replace(/([^\s\d×.])(\d+(?:\.\d+)?(?:×\d+(?:\.\d+)?)+)/g, '$1 $2');
+  t = t.replace(/([^\s\d×.(（])(\d+(?:\.\d+)?)(mm|cm|m)\b/g, '$1 $2$3');
+  // 英字の略号：今の品目名に出てくる書き方へ
+  var abbr = {}; items.forEach(function(i){ (String(i.name).match(/[A-Za-z]{2,}/g)||[]).forEach(function(a){ var k = a.toLowerCase(); abbr[k] = abbr[k] || a; }); });
+  t = t.replace(/[A-Za-z]{2,}/g, function(a){ return abbr[a.toLowerCase()] || a; });
+  // 先頭の言葉（寸法の前）を、今の品目名の書き方に寄せる
+  var head = t.split(' ')[0];
+  if(head && !/^\d/.test(head)){
+    var hk = tmNorm(head), best = null;
+    items.forEach(function(i){ String(i.name).split(/\s+/).forEach(function(w){ if(!best && tmNorm(w)===hk && w!==head) best = w; }); });
+    if(best) t = best + t.slice(head.length);
+  }
+  return t;
+}
+function stQuickDone(item, txt){
+  var q = document.getElementById('st-q'); stQuickClear(false);
+  var m = document.getElementById('st-qmsg'); if(m){ m.textContent = '✓ '+item.name+' '+txt; clearTimeout(window._stQm); window._stQm = setTimeout(function(){ m.textContent = ''; }, 4000); }
+  var row = document.getElementById('st-r-'+item.id);
+  if(row){ var inp = row.querySelector('input'); if(inp){ var c = stDraft(stLoc).counts[String(item.id)]||{}; inp.value = (c.qty!=null&&c.qty!=='')?c.qty:''; } }
+  stRefreshRow(String(item.id));
+  if(q) q.focus();
+}
+function stQuickSet(id, qty){
+  var it = items.find(function(i){ return String(i.id)===String(id); }); if(!it) return;
+  var d = stDraft(stLoc, true), c = d.counts[String(id)] = d.counts[String(id)] || {};
+  c.qty = qty; c.ok = false; stPut(stLoc, d); stTouch(id);
+  stQuickDone(it, '→ '+stNum(qty)+(it.unit||''));
+}
+function stQuickOk(id){
+  var it = items.find(function(i){ return String(i.id)===String(id); }); if(!it) return;
+  var d = stDraft(stLoc, true), c = d.counts[String(id)] = d.counts[String(id)] || {};
+  c.ok = true; c.qty = null; stPut(stLoc, d); stTouch(id);
+  stQuickDone(it, '✓ 合ってる');
+}
+function stJump(id){
+  var row = document.getElementById('st-r-'+id);
+  if(!row){ stFilter = 'all'; stSearch = ''; render(); row = document.getElementById('st-r-'+id); }
+  if(!row) return;
+  var qh = (document.getElementById('st-quick')||{}).offsetHeight || 0;
+  window.scrollTo({top: row.getBoundingClientRect().top + window.scrollY - qh - 10, behavior: 'smooth'});
+  row.style.boxShadow = '0 0 0 2px #c8962a'; setTimeout(function(){ row.style.boxShadow = ''; }, 2500);
+  var inp = row.querySelector('input'); if(inp) setTimeout(function(){ inp.focus({preventScroll:true}); }, 350);
+  var q = document.getElementById('st-q'); if(q) q.value = ''; var box = document.getElementById('st-qc'); if(box) box.innerHTML = '';
+}
+
+// ---------- 並び・区切りの編集 ----------
+function stOpenOrder(locId){ stLoc = locId; stView = 'order'; stOrderSel = null; currentTab = '棚卸し'; render(); window.scrollTo(0,0); }
+function stEditList(){ return stOrdered(stLoc, 'edit').filter(function(e){ return !(e.sec!=null && e.auto); }); }
+function stSaveShelf(arr){
+  var l = locations.find(function(x){ return x.id===stLoc; }); if(!l) return;
+  l.shelf = arr.map(function(e){ return e.sec!=null ? {sec:e.sec} : String(e.id); });
+  l.shelfManual = true; save(); render();
+}
+function stRenderOrder(){
+  var l = locations.find(function(x){ return x.id===stLoc; }); if(!l){ stLoc = null; return stRenderTop(); }
+  var arr = stEditList();
+  var h = '<div style="padding:10px 12px 0"><button class="btn-sm" style="padding:7px 10px" onclick="stView=\'count\';stLoc=null;render()">← 置き場の一覧</button></div>'
+    + '<div style="padding:8px 16px 4px"><div style="color:#e8d5a3;font-size:16px;font-weight:700">↕️ '+esc(l.name)+' の並び・区切り</div>'
+    + '<div style="color:#888;font-size:11px;line-height:1.6;margin-top:3px">棚の端から順になるように並べると、数える画面とチェック表がこの順になります。「移動」を押してから、入れたい場所の「ここへ」を押します。'
+    + (l.shelfManual?'':'<br>まだ手で直していないので、棚卸しを確定するたびに「数えた順」で並び直します。ここで一度直すと、それ以降はこの並びのままです。')+'</div></div>'
+    + '<div style="display:flex;gap:6px;padding:6px 12px;flex-wrap:wrap">'
+    + '<button class="btn-sm" style="padding:8px 10px;background:#3a3218;color:#e8c070" onclick="stAddSec()">＋ 区切り（A段など）</button>'
+    + '<button class="btn-sm" style="padding:8px 10px" onclick="stResetShelf()">種類ごとに並べ直す</button>'
+    + (stOrderSel!=null?'<button class="btn-sm" style="padding:8px 10px;color:#e87050" onclick="stOrderSel=null;render()">移動をやめる</button>':'')+'</div>';
+  var place = function(k){ return stOrderSel!=null && stOrderSel!==k ? '<button class="btn-sm" style="width:100%;margin:2px 0;padding:6px;background:#1a3a38;color:#70d0c8;border:1px dashed #2a6a68" onclick="stPlace('+k+')">▼ ここへ入れる</button>' : ''; };
+  arr.forEach(function(e, k){
+    h += '<div style="padding:0 12px">'+place(k)+'</div>';
+    var sel = stOrderSel===k ? 'box-shadow:0 0 0 2px #c8962a;' : '';
+    var btns = '<button class="btn-sm" onclick="stNudge('+k+',-1)">▲</button><button class="btn-sm" onclick="stNudge('+k+',1)">▼</button><button class="btn-sm" style="'+(stOrderSel===k?'background:#c8962a;color:#1a1a18':'')+'" onclick="stOrderSel='+(stOrderSel===k?'null':k)+';render()">移動</button>';
+    if(e.sec!=null){
+      h += '<div style="margin:6px 12px 2px;padding:8px 10px;background:#3a3218;border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:6px;'+sel+'"><b style="color:#e8c070">▍'+esc(e.sec)+'</b><span style="display:flex;gap:4px">'+btns+'<button class="btn-sm" onclick="stRenSec('+k+')">✏️</button><button class="btn-sm" style="color:#e87050" onclick="stDelSec('+k+')">🗑</button></span></div>';
+    } else {
+      h += '<div class="card" style="padding:7px 10px;margin:3px 12px;display:flex;justify-content:space-between;align-items:center;gap:6px;'+sel+'"><div style="min-width:0;color:#e8d5a3;font-size:12px;word-break:break-all">'+esc(e.name)+'<span style="color:#666;font-size:10px"> '+esc(e.category||'')+'</span></div><span style="display:flex;gap:4px;flex-shrink:0">'+btns+'</span></div>';
+    }
+  });
+  h += '<div style="padding:0 12px">'+place(arr.length)+'</div><div style="height:40px"></div>';
+  return h;
+}
+function stNudge(k, dir){ var a = stEditList(), j = k+dir; if(j<0||j>=a.length) return; var t = a[k]; a[k] = a[j]; a[j] = t; stOrderSel = null; stSaveShelf(a); }
+function stPlace(k){ var a = stEditList(), from = stOrderSel; if(from==null) return; var e = a.splice(from,1)[0]; if(k>from) k--; a.splice(k,0,e); stOrderSel = null; stSaveShelf(a); }
+function stAddSec(){ var n = prompt('区切りの名前（例：A段、上の棚、奥）',''); if(!n||!n.trim()) return; var a = stEditList(); a.unshift({sec:n.trim()}); stOrderSel = 0; stSaveShelf(a); }
+function stRenSec(k){ var a = stEditList(); var n = prompt('区切りの名前', a[k].sec); if(!n||!n.trim()) return; a[k] = {sec:n.trim()}; stSaveShelf(a); }
+function stDelSec(k){ var a = stEditList(); a.splice(k,1); stSaveShelf(a); }
+function stResetShelf(){
+  if(!confirm('並びと区切りを消して、種類ごと（寸法順）に並べ直しますか？\nこのあと棚卸しを確定すると、また数えた順を覚えます。')) return;
+  var l = locations.find(function(x){ return x.id===stLoc; }); if(!l) return;
+  delete l.shelf; delete l.shelfManual; save(); render();
+}
+
+// ---------- 動き（置き場・品目の変動） ----------
+function stDaysAgo(n){ var d = new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
+function stItemOf(h){ return items.find(function(i){ return (h.itemId!=null && String(i.id)===String(h.itemId)) || i.name===h.itemName; }); }
+// 1件の記録が、その置き場に「入った」「出た」か
+function stFlow(h, locName){
+  var q = parseFloat(h.qty)||0, inn = 0, out = 0;
+  if(h.type==='in'){ if(!locName || h.locName===locName) inn = q; }
+  else if(h.type==='use'){ if(!locName || h.locName===locName) out = q; }
+  else if(h.type==='adj'){ if(!locName || h.locName===locName) inn = q; }
+  else if(h.type==='out' || h.type==='ret' || h.type==='move'){
+    if(!locName){ if(h.type==='out' && !h.destLocId) out = q; }
+    else { if(h.locName===locName) out = q; if(h.destName===locName) inn = q; }
+  }
+  return {inn: inn, out: out};
+}
+function stItemStats(days, locName){
+  var from = stDaysAgo(days), map = {};
+  history.forEach(function(h){
+    var d = String(h.date||'').slice(0,10); if(d<from) return;
+    if(locName && h.locName!==locName && h.destName!==locName) return;
+    var it = stItemOf(h); var key = it ? String(it.id) : 'n:'+h.itemName;
+    var m = map[key] = map[key] || {item: it, name: it?it.name:h.itemName, moves:0, inn:0, out:0, inAmt:0, outAmt:0, cnt:0, cntAmt:0, last:''};
+    var price = parseFloat(h.unitPrice) || (it&&it.basePrice) || 0;
+    if(h.type==='count'){ if(!locName || h.locName===locName){ m.cnt++; m.cntAmt += (parseFloat(h.countDiff)||0)*price; } return; }
+    var f = stFlow(h, locName); if(!f.inn && !f.out) return;
+    m.moves++; m.inn += f.inn; m.out += f.out; m.inAmt += f.inn*price; m.outAmt += f.out*price; if(d>m.last) m.last = d;
+  });
+  return map;
+}
+function stMoveClass(n){ return n>=3 ? {l:'よく動く', c:'#e8a050'} : n>=1 ? {l:'ときどき', c:'#70a8e8'} : {l:'動かない', c:'#666'}; }
+function stOpenTrend(){ stLoc = null; stView = 'trend'; currentTab = '棚卸し'; render(); window.scrollTo(0,0); }
+function stRenderTrend(){
+  var days = stTrendDays, from = stDaysAgo(days);
+  var per = function(n, t){ return '<option value="'+n+'"'+(days===n?' selected':'')+'>'+t+'</option>'; };
+  var h = '<div style="padding:10px 12px 0"><button class="btn-sm" style="padding:7px 10px" onclick="stView=\'count\';render()">← 棚卸しへ</button></div>'
+    + '<div style="padding:8px 16px 4px"><div style="color:#e8d5a3;font-size:16px;font-weight:700">📈 在庫の動き</div>'
+    + '<div style="color:#888;font-size:11px;margin-top:3px">入庫・持出・使用・返却・移動・棚卸しの記録から集計しています（'+esc(from)+' 〜 今日）。</div></div>'
+    + '<div style="display:flex;gap:6px;padding:6px 12px"><select class="form-input" style="margin:0" onchange="stTrendDays=+this.value;render()">'+per(30,'1か月')+per(90,'3か月')+per(180,'6か月')+per(365,'1年')+'</select>'
+    + '<select class="form-input" style="margin:0" onchange="stTrendLoc=this.value;render()"><option value="">すべての置き場</option>'+locations.map(function(l){ return '<option value="'+esc(l.name)+'"'+(stTrendLoc===l.name?' selected':'')+'>'+esc(l.name)+'</option>'; }).join('')+'</select></div>';
+  // 置き場ごと
+  if(!stTrendLoc){
+    h += '<div class="section-label">置き場ごと</div>';
+    locations.forEach(function(l){
+      var m = stItemStats(days, l.name), arr = Object.keys(m).map(function(k){ return m[k]; });
+      var inA = 0, outA = 0, mv = 0, nItems = 0, cA = 0, cN = 0;
+      arr.forEach(function(x){ inA += x.inAmt; outA += x.outAmt; mv += x.moves; if(x.moves) nItems++; cA += x.cntAmt; cN += x.cnt; });
+      var total = stLocItems(l.id).length;
+      h += '<div class="card" style="padding:10px 12px;cursor:pointer" onclick="stTrendLoc=\''+esc(l.name)+'\';render();window.scrollTo(0,0)"><div style="display:flex;justify-content:space-between"><b style="color:#e8d5a3">'+esc(l.name)+' ▸</b><span style="color:#888;font-size:11px">動いた品目 '+nItems+'/'+total+'</span></div>'
+        + '<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:4px"><span style="color:#70c870">入った '+yen(inA)+'</span><span style="color:#e8a050">出た '+yen(outA)+'</span><span style="color:#888">記録 '+mv+'件</span></div>'
+        + (cN?'<div style="font-size:11px;color:'+(cA<0?'#e87050':'#70c870')+';margin-top:2px">棚卸しの差 '+(cA>0?'+':'')+yen(cA)+'（'+cN+'件）</div>':'')
+        + '<div style="font-size:10px;color:#666;margin-top:2px">在庫金額 '+yen(locStockValue(l.id))+'・前回の棚卸し '+(l.lastCount?esc(l.lastCount):'—')+'</div></div>';
+    });
+  }
+  // 品目ごと
+  var m2 = stItemStats(days, stTrendLoc), loc = stTrendLoc ? locations.find(function(l){ return l.name===stTrendLoc; }) : null;
+  var pool = loc ? stLocItems(loc.id) : items;
+  var rows = pool.map(function(i){ return m2[String(i.id)] || {item:i, name:i.name, moves:0, inn:0, out:0, inAmt:0, outAmt:0, cnt:0, cntAmt:0, last:''}; });
+  var stockOf = function(i){ return loc ? stBook(i, loc.id) : totalStock(i); };
+  var active = rows.filter(function(r){ return r.moves>0; }).sort(function(a,b){ return b.moves-a.moves || b.outAmt-a.outAmt; });
+  var still = rows.filter(function(r){ return r.moves===0 && r.item && stockOf(r.item)>0; }).sort(function(a,b){ return stockOf(b.item)*(b.item.basePrice||0) - stockOf(a.item)*(a.item.basePrice||0); });
+  var diffs = rows.filter(function(r){ return r.cnt>0; }).sort(function(a,b){ return Math.abs(b.cntAmt)-Math.abs(a.cntAmt); });
+  var rowH = function(r){
+    var cl = stMoveClass(r.moves), i = r.item;
+    return '<div class="card" style="padding:8px 12px;cursor:pointer" onclick="stItemTrend(\''+esc(i?String(i.id):'')+'\')"><div style="display:flex;justify-content:space-between;gap:8px"><div style="color:#e8d5a3;font-size:12px;font-weight:700;min-width:0;word-break:break-all">'+esc(r.name)+'</div><span class="badge" style="background:'+cl.c+'22;color:'+cl.c+';white-space:nowrap">'+cl.l+' '+r.moves+'件</span></div>'
+      + '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-top:3px"><span>入 '+stNum(r.inn)+'・出 '+stNum(r.out)+(i?' '+esc(i.unit||''):'')+'</span><span>今 '+(i?stNum(stockOf(i)):'—')+(i?esc(i.unit||''):'')+'</span><span>最後 '+(r.last?esc(r.last.slice(5)):'—')+'</span></div>'
+      + (r.cnt?'<div style="font-size:10px;color:'+(r.cntAmt<0?'#e87050':'#70c870')+'">棚卸しの差 '+(r.cntAmt>0?'+':'')+yen(r.cntAmt)+'（'+r.cnt+'回）</div>':'')+'</div>';
+  };
+  h += '<div class="section-label">'+(loc?esc(loc.name)+'で':'')+'よく動いた品目（'+active.length+'）</div>' + (active.slice(0,30).map(rowH).join('') || '<div class="empty-msg2">この期間に動いた品目はありません</div>');
+  if(diffs.length) h += '<div class="section-label">棚卸しで数が違った品目（'+diffs.length+'）</div>' + diffs.slice(0,20).map(rowH).join('');
+  var stillAmt = still.reduce(function(s,r){ return s + stockOf(r.item)*(r.item.basePrice||0); }, 0);
+  h += '<div class="section-label">動いていない在庫（'+still.length+'品目・'+yen(stillAmt)+'）</div>'
+    + '<div style="color:#666;font-size:10px;padding:0 16px 4px">この期間に一度も出入りがなく、在庫がある品目です。金額の大きい順。棚卸しは年1回でよい候補です。</div>'
+    + (still.slice(0,30).map(function(r){ var i = r.item; return '<div class="card" style="padding:7px 12px;display:flex;justify-content:space-between;gap:8px;cursor:pointer" onclick="stItemTrend(\''+esc(String(i.id))+'\')"><span style="color:#c8c8b0;font-size:12px;min-width:0;word-break:break-all">'+esc(i.name)+'</span><span style="color:#888;font-size:11px;white-space:nowrap">'+stNum(stockOf(i))+esc(i.unit||'')+'・'+yen(stockOf(i)*(i.basePrice||0))+'</span></div>'; }).join('') || '<div class="empty-msg2">ありません</div>')
+    + (still.length>30?'<div style="color:#666;font-size:10px;padding:2px 16px">ほか '+(still.length-30)+' 品目</div>':'')+'<div style="height:30px"></div>';
+  return h;
+}
+// 品目1つの動き：月ごと（12か月）と置き場ごとの今の数、最近の記録
+function stItemTrend(id){
+  var it = items.find(function(i){ return String(i.id)===String(id); }); if(!it) return;
+  var hs = history.filter(function(h){ return (h.itemId!=null && String(h.itemId)===String(it.id)) || h.itemName===it.name; });
+  var months = []; var d0 = new Date(); d0.setDate(1);
+  for(var k=11;k>=0;k--){ var d = new Date(d0.getFullYear(), d0.getMonth()-k, 1); months.push(d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)); }
+  var mm = {}; months.forEach(function(m){ mm[m] = {inn:0, out:0, mv:0, cnt:0}; });
+  hs.forEach(function(h){
+    var m = String(h.date||'').slice(0,7); if(!mm[m]) return;
+    if(h.type==='count'){ mm[m].cnt += parseFloat(h.countDiff)||0; return; }
+    if(h.type==='move' || (h.type==='out' && h.destLocId) || h.type==='ret'){ mm[m].mv += parseFloat(h.qty)||0; return; }
+    var f = stFlow(h, ''); mm[m].inn += f.inn; mm[m].out += f.out;
+  });
+  var mx = 1; months.forEach(function(m){ mx = Math.max(mx, mm[m].inn, mm[m].out); });
+  var u = esc(it.unit||'');
+  var h = '<div class="sheet" onclick="event.stopPropagation()"><div class="sheet-title">📈 '+esc(it.name)+'</div>'
+    + '<div style="color:#888;font-size:11px;margin-bottom:8px">今 '+stNum(totalStock(it))+u+'・基準単価 '+yen(it.basePrice||0)+'</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">'+locations.filter(function(l){ return it.stocks && Object.prototype.hasOwnProperty.call(it.stocks, l.id); }).map(function(l){ return '<span class="badge" style="background:#2e2e28;color:#c8c8b0">'+esc(l.name)+' '+stNum(stBook(it, l.id))+u+'</span>'; }).join('')+'</div>'
+    + '<div style="color:#888;font-size:10px;margin-bottom:4px">月ごとの動き（緑＝入った、橙＝出た・使った）</div>';
+  months.forEach(function(m){
+    var v = mm[m];
+    h += '<div style="display:flex;align-items:center;gap:6px;font-size:10px;margin:2px 0"><span style="width:34px;color:#888">'+(+m.slice(5))+'月</span>'
+      + '<div style="flex:1;display:flex;flex-direction:column;gap:1px"><div style="height:5px;width:'+Math.round(v.inn/mx*100)+'%;background:#70c870;border-radius:2px"></div><div style="height:5px;width:'+Math.round(v.out/mx*100)+'%;background:#e8a050;border-radius:2px"></div></div>'
+      + '<span style="width:92px;text-align:right;color:#c8c8b0">'+(v.inn?'+'+stNum(v.inn):'')+(v.out?' -'+stNum(v.out):'')+(v.mv?' ↔'+stNum(v.mv):'')+(v.cnt?' 棚'+(v.cnt>0?'+':'')+stNum(v.cnt):'')+'</span></div>';
+  });
+  h += '<div style="color:#888;font-size:10px;margin:10px 0 4px">最近の記録</div>' + (hs.slice(0,10).map(function(x){ return histCardHtml(x); }).join('') || '<div class="empty-msg2">記録がありません</div>')
+    + '<div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">閉じる</button></div></div>';
+  showModal(h);
+}
+// 数える画面の絞り込み用：その置き場で「よく動く」品目、前に棚卸しで違った品目
+function stFlags(locId){
+  var l = locations.find(function(x){ return x.id===locId; }) || {}, m = stItemStats(90, l.name), prev = {};
+  history.forEach(function(h){ if(h.type==='count' && h.locName===l.name){ var it = stItemOf(h); if(it) prev[String(it.id)] = 1; } });
+  var busy = {}; Object.keys(m).forEach(function(k){ if(m[k].moves>=3) busy[k] = 1; });
+  return {busy: busy, prev: prev};
+}
+
 </script>
 </body>
 </html>
