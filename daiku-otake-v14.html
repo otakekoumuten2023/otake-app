@@ -991,7 +991,7 @@ function histCardHtml(h,allowEdit=false){
       <div class="hist-meta">${metaParts.map(esc).join(' · ')}</div>
     </div>
     <div class="hist-right">
-      <div class="hist-qty-val ${m.qcls}">${h.type==='count'?((+h.countDiff||0)>0?'+':'-'):m.sign}${h.qty}</div>
+      ${h.type==='in'&&h.fromJobName?`<div style="color:#c870e8;font-size:10px">↩ ${esc(h.fromJobName)}の余り</div>`:''}<div class="hist-qty-val ${m.qcls}">${h.type==='count'?((+h.countDiff||0)>0?'+':'-'):m.sign}${h.qty}</div>
       ${amt>0?`<div class="hist-money-val">${yen(amt)}</div>`:''}
       <div style="color:#444;font-size:9px;margin-top:2px">長押しで編集</div>
     </div>
@@ -1533,9 +1533,16 @@ function openIn(preItemId,preLocId){
       <div><label class="form-label">仕入れ単価（税抜）</label><input class="form-input" type="number" id="in-price" value="${item?item.basePrice||0:''}"/></div>
     </div>
     <label class="form-label">仕入れ先</label><input class="form-input" type="text" id="in-supplier" placeholder="例: 木材センター"/>
+    <label class="form-label">元の現場（現場の余りを回収したとき）</label>
+    <select class="form-select" id="in-fromjob">${fromJobOpts('')}</select>
+    <div style="color:#666;font-size:10px;margin:-4px 0 8px">選ぶと、その現場の原価から この数量×単価 を引きます（原価アプリ）。仕入れのときは「なし」のまま。</div>
     <label class="form-label">メモ</label><input class="form-input" type="text" id="in-memo" placeholder=""/>
     <div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">キャンセル</button><button class="btn-confirm green" onclick="doIn()">入庫する</button></div>
   </div>`);
+}
+// 元の現場（余りの回収）の選択肢：工事台帳の工事（完工は下）
+function fromJobOpts(sel){
+  return '<option value="">なし（仕入れ・購入）</option>'+coJobs().slice().sort((a,b)=>(a.status==='done')-(b.status==='done')).map(j=>`<option value="${esc(j.id)}"${j.id===sel?' selected':''}>${esc((j.code?j.code+' ':'')+j.name)}${j.status==='done'?'（完工）':''}</option>`).join('');
 }
 function handleInLocChange(val){
   const newDiv = document.getElementById('in-loc-new');
@@ -1576,7 +1583,9 @@ function doIn(){
   item.stocks[locId]=(item.stocks[locId]||0)+qty;
   if(unitPrice>0)item.basePrice=unitPrice;
   const loc=locations.find(l=>l.id===locId);
-  history.unshift({id:Date.now(),date:today(),type:'in',itemId,itemName:item.name,stockId:item.stockId||'',qty,locName:loc?.name||'',destName:'',jobName:'',supplier,memo,unitPrice});
+  const fj=coJobs().find(j=>j.id===(document.getElementById('in-fromjob')||{}).value);
+  history.unshift({id:Date.now(),date:today(),type:'in',itemId,itemName:item.name,stockId:item.stockId||'',qty,locName:loc?.name||'',destName:'',jobName:fj?fj.name:'',supplier,memo:memo||(fj?'余りの回収':''),unitPrice,
+    fromJobCode:fj?fj.id:'',fromJobName:fj?fj.name:''});
   save();closeModalForce();render();
 }
 
@@ -2597,7 +2606,14 @@ function syncFromNippo(silent){
           Object.keys(prev||{}).some(function(k){ var p=k.split('|'); if(p[0]==String(item.id) && p[2]===type){ locId=p[1]; return true; } return false; });
         }
         if(!locId){
-          locId = Object.keys(item.stocks||{}).find(function(l){ return (item.stocks[l]||0)>0; }) || Object.keys(item.stocks||{})[0] || '';
+          // その日報の現場の置き場に在庫があれば、そこから使う（持ち出した物を使った＝原価は持出のときに数えているので二重にならない）2026/11/16
+          var site = locations.find(function(l){ return l.locType==='site' && !l.archived && ((l.jobId && l.jobId===n.jobCode) || l.name===n.jobName); });
+          if(site && (parseFloat((item.stocks||{})[site.id])||0) > 0) locId = site.id;
+        }
+        if(!locId){
+          var st = item.stocks||{};
+          locId = Object.keys(st).find(function(l){ var L = locations.find(function(x){ return x.id===l; }); return (st[l]||0)>0 && !(L && L.locType==='site'); })
+            || Object.keys(st).find(function(l){ return (st[l]||0)>0; }) || Object.keys(st)[0] || '';
         }
         var k = item.id+'|'+locId+'|'+type;
         w[k] = (w[k]||0) + qty;
@@ -2943,12 +2959,15 @@ function parseZaikoText(raw){
         cur = null; return;
       }
       if(/現場|工事名/.test(label)){ res.job = rest; return; }
-      var type = /入庫|仕入|購入|入荷/.test(label) ? 'in' : /持出|持ち出|出庫|搬出|移動/.test(label) ? 'out' : /使用|使った|消費/.test(label) ? 'use' : /返却|戻し|返品|戻す/.test(label) ? 'ret' : null;
+      var back = /余り|回収|戻り/.test(label);
+      var type = (back || /入庫|仕入|購入|入荷/.test(label)) ? 'in' : /持出|持ち出|出庫|搬出|移動/.test(label) ? 'out' : /使用|使った|消費/.test(label) ? 'use' : /返却|戻し|返品|戻す/.test(label) ? 'ret' : null;
       if(!type){ cur = null; return; }
       var sup = ''; var sm = rest.match(/[（(]([^）)]*)[）)]\s*$/); if(sm){ sup = sm[1].trim(); rest = rest.replace(sm[0],'').trim(); }
       var parts = rest.split(/\s*(?:→|->|⇒|＞|>|から)\s*/);
-      cur = {type: type, from: '', to: '', supplier: sup};
-      if(type==='in') cur.to = parts[0]||'';
+      cur = {type: type, from: '', to: '', supplier: sup, back: back || /余り|回収/.test(sup)};
+      if(cur.back && /余り|回収/.test(sup)) cur.supplier = '';
+      // 入庫：「鈴木様邸 → 作業場」のように元を書いたら、元の現場（余りの回収）
+      if(type==='in'){ if(parts.length>=2){ cur.from = parts[0]||''; cur.to = parts[1]||''; } else cur.to = parts[0]||''; }
       else if(type==='use') cur.from = parts[0]||'';
       else { cur.from = parts[0]||''; cur.to = parts[1]||''; }
       return;
@@ -2957,7 +2976,7 @@ function parseZaikoText(raw){
     t.replace(/^[・\-\*•●◯○\s]+/,'').split(/[、，]/).forEach(function(piece, pi){
       var s = piece.trim(); if(!s) return;
       var L = coParseLine(s);
-      res.ops.push({type: cur.type, from: cur.from, to: cur.to, supplier: cur.supplier, raw: s, name: L.name, qty: L.qty, unit: L.unit, price: L.price, key: li+'-'+pi});
+      res.ops.push({type: cur.type, from: cur.from, to: cur.to, supplier: cur.supplier, back: !!cur.back, raw: s, name: L.name, qty: L.qty, unit: L.unit, price: L.price, key: li+'-'+pi});
     });
   });
   return res;
@@ -3001,6 +3020,10 @@ function coLocSel(cls, selId, item, allowText, mode, textName){
     opts += '<option value="loc:'+esc(l.id)+'"'+('loc:'+l.id===selId?' selected':'')+'>'+esc((l.icon||'')+' '+l.name)+(item?'（在庫 '+q+(item.unit||'')+'）':'')+'</option>';
   });
   if(allowText) opts += '<option value="txt:"'+(String(selId).indexOf('txt:')===0?' selected':'')+'>✏️ '+esc(textName||'場所一覧にない現場')+'（場所一覧にない現場・在庫からは消える）</option>';
+  // 新しい置き場（倉庫・作業場など）をここで作る（2026/11/16）
+  var nn = String(selId).indexOf('new:')===0 ? selId.slice(4) : '';
+  if(nn) opts += '<option value="new:'+esc(nn)+'" selected>＋「'+esc(nn)+'」を新しい置き場として作る</option>';
+  opts += '<option value="new:">＋ 新しい置き場を作る…</option>';
   return '<select class="form-select '+cls+'" style="margin:0;font-size:12px;flex:1" onchange="coOnLoc(this)">'+opts+'</select>';
 }
 function coOpenConfirm(){
@@ -3011,16 +3034,24 @@ function coOpenConfirm(){
     + '<div class="sheet-title">📥 在庫操作の確認</div>'
     + '<div class="sheet-desc">品目・数量・場所を確かめて「反映する」を押してください。'+(r.job&&!job?'<br><span style="color:#e8b050">「'+esc(r.job)+'」は工事台帳に見つかりませんでした。選んでください。</span>':'')+'</div>'
     + '<div style="display:flex;gap:6px"><input class="form-input" type="date" id="co-date" value="'+esc(r.date)+'" style="width:150px"/><select class="form-select" id="co-job" style="flex:1">'+jobOpts+'</select></div>';
+  var newIn = {};   // 同じ貼り付けの入庫で新しく作る品目（後ろの持出・使用で選べるように）
   r.ops.forEach(function(o, i){
     var ex = tmExact(o.name);
     var list = ex.length ? ex : tmCandidates(o.name, 8);
     var sel = ex.length===1 ? ex[0] : null;
+    var nk = tmNorm(o.name), ref = (!ex.length && o.type!=='in' && newIn[nk]!=null) ? newIn[nk] : null;
+    if(o.type==='in' && !ex.length && newIn[nk]==null) newIn[nk] = i;
     var reason = o.already ? '✅ この行は前に反映済みです（二重にしません）'
       : ex.length>1 ? '同じ名前の品目が'+ex.length+'つあります。単価で選んでください'
-      : ex.length===1 ? '' : (o.type==='in' ? '在庫品目にありません。近いものを選ぶか、新しい品目として登録します' : '同じ名前の品目がありません。近いものから選ぶか、品名で探してください');
+      : ex.length===1 ? '' : ref!=null ? '上の入庫で新しく登録する品目を使います'
+      : (o.type==='in' ? '在庫品目にありません。近いものを選ぶか、新しい品目として登録します' : '同じ名前の品目がありません。近いものから選ぶか、品名で探してください');
     var fromLoc = coFindLoc(o.from), toLoc = coFindLoc(o.to);
-    var fromSel = fromLoc ? 'loc:'+fromLoc.id : (sel && (o.type==='use'||o.type==='out') && tmAutoLoc(sel) ? 'loc:'+tmAutoLoc(sel) : '');
-    var toSel = toLoc ? 'loc:'+toLoc.id : (o.type==='out' && o.to ? 'txt:'+o.to : (o.type==='in' && locations.length===1 ? 'loc:'+locations[0].id : ''));
+    // 入庫で元に書いた名前が現場（工事）なら「元の現場（余りの回収）」にする
+    var fromJob = o.type==='in' ? (coFindJob(o.from) || (o.back ? job : null)) : null;
+    if(o.type==='in' && fromJob) fromLoc = null;
+    var noLoc = function(nm){ var k = tmNorm(nm); return k && !locations.some(function(l){ var n = tmNorm(l.name); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }); };
+    var fromSel = fromLoc ? 'loc:'+fromLoc.id : (o.from && o.type!=='in' && !coFindJob(o.from) && noLoc(o.from) ? 'new:'+o.from : (sel && (o.type==='use'||o.type==='out') && tmAutoLoc(sel) ? 'loc:'+tmAutoLoc(sel) : ''));
+    var toSel = toLoc ? 'loc:'+toLoc.id : (o.type==='out' && o.to ? (coFindJob(o.to) || !noLoc(o.to) ? (coFindJob(o.to) ? 'txt:'+o.to : '') : 'new:'+o.to) : (o.type==='in' && o.to && noLoc(o.to) ? 'new:'+o.to : (o.type==='in' && locations.length===1 ? 'loc:'+locations[0].id : '')));
     o._toText = (o.type==='out' && o.to && !toLoc) ? o.to : '';
     html += '<div class="co-row tm-row" data-i="'+i+'" style="background:#161614;border:1px solid #2e2e28;border-left:3px solid '+CO_COLOR[o.type]+';border-radius:10px;padding:10px;margin-bottom:8px;'+(o.already?'opacity:.55':'')+'">'
       + '<div style="display:flex;justify-content:space-between;gap:6px"><span style="color:'+CO_COLOR[o.type]+';font-size:11px;font-weight:700">'+CO_TYPES[o.type]+'</span>'
@@ -3030,6 +3061,7 @@ function coOpenConfirm(){
       + '<select class="form-select tm-item" onchange="tmOnItem('+i+');coOnItem('+i+')" style="font-size:12px;margin:5px 0">'
       +   '<option value="">-- 品目を選ぶ --</option>'+tmItemOptions(list, sel?sel.id:'')
       +   (o.type==='in'?'<option value="__new__"'+(!ex.length&&!list.length?' selected':'')+'>＋ 新しい品目として登録「'+esc(o.name)+'」</option>':'')
+      +   (ref!=null?'<option value="__ref__:'+ref+'" selected>← 上の入庫で登録する「'+esc(_coState.ops[ref].name)+'」</option>':'')
       +   '<option value="__skip__"'+(o.already?' selected':'')+'>反映しない</option></select>'
       + '<input class="form-input tm-search" placeholder="🔍 品名で探す" oninput="tmOnSearch('+i+')" style="font-size:12px;margin-bottom:5px"/>'
       + '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">'
@@ -3038,7 +3070,9 @@ function coOpenConfirm(){
       +   (o.type==='in' ? '<input class="form-input co-price" type="number" placeholder="単価（税抜）" value="'+(o.price!=null?o.price:(sel?sel.basePrice||'':''))+'" style="flex:1;margin:0;font-size:12px"/>' : '')
       + '</div>'
       + '<div style="display:flex;gap:6px;align-items:center">'
-      +   (o.type==='in' ? '<span style="color:#666;font-size:10px">入れる場所</span>'+coLocSel('co-to', toSel, sel, false, 'to')
+      +   (o.type==='in' ? '<div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="display:flex;gap:6px;align-items:center"><span style="color:#666;font-size:10px;white-space:nowrap">入れる場所</span>'+coLocSel('co-to', toSel, sel, false, 'to')+'</div>'
+        + '<div style="display:flex;gap:6px;align-items:center"><span style="color:#666;font-size:10px;white-space:nowrap">元の現場</span><select class="form-select co-fromjob" style="margin:0;font-size:12px;flex:1">'+fromJobOpts(fromJob?fromJob.id:'')+'</select></div>'
+        + (fromJob?'<div style="color:#c870e8;font-size:10px">↩ 「'+esc(fromJob.name)+'」の余りの回収として、原価から引きます</div>':'')+'</div>'
         : o.type==='use' ? '<span style="color:#666;font-size:10px">使った場所</span>'+coLocSel('co-from', fromSel, sel, false)
         : '<div style="flex:1;display:flex;flex-direction:column;gap:4px">'+coLocSel('co-from', fromSel, sel, false)+'<div style="color:#666;font-size:10px;text-align:center">↓</div>'+coLocSel('co-to', toSel, sel, o.type==='out', 'to', o._toText)+'</div>')
       + '</div>'
@@ -3072,6 +3106,14 @@ function coOnItem(i){
   row.querySelector('.tm-unit').textContent = (it&&it.unit) || o.unit || '';
 }
 function coOnLoc(sel){
+  if(sel.value==='new:'){
+    var nm = (prompt('新しい置き場の名前（例：作業場）','')||'').trim();
+    if(!nm){ sel.value=''; return; }
+    var ex = coFindLoc(nm);
+    if(ex){ sel.value = 'loc:'+ex.id; return; }
+    var op = document.createElement('option'); op.value = 'new:'+nm; op.textContent = '＋「'+nm+'」を新しい置き場として作る';
+    sel.insertBefore(op, sel.lastElementChild); sel.value = 'new:'+nm; return;
+  }
   if(sel.value==='txt:'){
     var i = +sel.closest('.co-row').dataset.i, o = _coState.ops[i];
     var name = prompt('行き先の現場名', o._toText || o.to || '');
@@ -3088,7 +3130,7 @@ function coApply(){
   var jobCode = job ? job.id : '';
   var plan = [], bad = 0;
   // 上の行から順に反映したときの在庫で足りるかを見る（持出してから使う、など）
-  var sim = {};
+  var sim = {}, pseudo = {};   // pseudo：この貼り付けで新しく作る品目（まだ在庫品目にない）
   var simGet = function(it, loc){ var k = it.id+'|'+loc; if(!(k in sim)) sim[k] = parseFloat((it.stocks||{})[loc])||0; return sim[k]; };
   var simAdd = function(it, loc, q){ simGet(it, loc); sim[it.id+'|'+loc] += q; };
   r.ops.forEach(function(o, i){
@@ -3097,32 +3139,50 @@ function coApply(){
     if(id==='__skip__') return;
     var qty = parseFloat(row.querySelector('.tm-qty').value);
     var f = (row.querySelector('.co-from')||{}).value||'', t = (row.querySelector('.co-to')||{}).value||'';
-    var fromId = f.indexOf('loc:')===0 ? f.slice(4) : '', toId = t.indexOf('loc:')===0 ? t.slice(4) : '';
+    var fromId = f.indexOf('loc:')===0 ? f.slice(4) : (f.indexOf('new:')===0 && f.length>4 ? f : ''), toId = t.indexOf('loc:')===0 ? t.slice(4) : (t.indexOf('new:')===0 && t.length>4 ? t : '');
     var toText = t==='txt:' ? (o._toText||'') : '';
     var it = coItemOf(i), price = parseFloat((row.querySelector('.co-price')||{}).value);
+    var ref = id.indexOf('__ref__:')===0 ? +id.slice(8) : null;
+    if(id==='__new__') it = pseudo[i] = {id:'new:'+i, stocks:{}, unit:o.unit||''};
+    if(ref!=null) it = pseudo[ref] || null;
+    var fjSel = (row.querySelector('.co-fromjob')||{}).value||'';
     var e = '';
-    if(!it && id!=='__new__') e = '品目を選んでください';
+    if(ref!=null && !pseudo[ref]) e = '上の入庫の行を「新しい品目として登録」にしてください';
+    else if(!it) e = '品目を選んでください';
     else if(!(qty>0)) e = '数量を入れてください';
     else if(o.type==='in' && !toId) e = '入れる場所を選んでください';
     else if(o.type!=='in' && !fromId) e = '場所を選んでください';
     else if((o.type==='out'||o.type==='ret') && !toId && !toText) e = '行き先を選んでください';
     else if(fromId && toId && fromId===toId) e = '元と行き先が同じです';
-    else if(it && fromId && simGet(it, fromId) < qty - 1e-9) e = '在庫が足りません（'+locations.find(function(l){return l.id===fromId;}).name+'に '+simGet(it, fromId)+(it.unit||'')+'）。数量か場所を直すか「反映しない」にしてください';
+    else if(it && fromId && simGet(it, fromId) < qty - 1e-9) e = '在庫が足りません（'+((locations.find(function(l){return l.id===fromId;})||{}).name||fromId.slice(4))+'に '+simGet(it, fromId)+(it.unit||'')+'）。数量か場所を直すか「反映しない」にしてください';
     if(e){ err.textContent = '⚠️ '+e; bad++; return; }
     if(it){ if(o.type==='in') simAdd(it, toId, qty); else { simAdd(it, fromId, -qty); if(toId) simAdd(it, toId, qty); } }
-    plan.push({o:o, it:it, isNew: id==='__new__', qty:qty, fromId:fromId, toId:toId, toText:toText, price: price});
+    plan.push({o:o, i:i, it:(id==='__new__'?null:(ref!=null?null:it)), isNew: id==='__new__', ref: ref, qty:qty, fromId:fromId, toId:toId, toText:toText, price: price, fromJobId: o.type==='in' ? fjSel : ''});
   });
   if(bad){ showSyncBadge('⚠️ 直すところが'+bad+'行あります', '#e87050'); return; }
   if(!plan.length){ closeModalForce(); return; }
+  // 新しい置き場を作る（同じ名前は1つだけ）
+  var newLoc = {};
+  plan.forEach(function(p){ ['fromId','toId'].forEach(function(k){
+    var v = p[k]; if(String(v).indexOf('new:')!==0) return; var nm = v.slice(4);
+    if(!newLoc[nm]){ var ex = coFindLoc(nm); if(ex && tmNorm(ex.name)===tmNorm(nm)) newLoc[nm] = ex.id; else {
+      var nl = {id:'loc'+Date.now()+Math.floor(Math.random()*1000), name:nm, icon:/作業場|工房/.test(nm)?'🔨':'🏠', color:'#c8962a', address:'', locType:'warehouse', prefix:'', memo:'チャットから登録'};
+      locations.push(nl); items.forEach(function(x){ if(!x.stocks) x.stocks = {}; if(!(nl.id in x.stocks)) x.stocks[nl.id] = 0; }); newLoc[nm] = nl.id; } }
+    p[k] = newLoc[nm];
+  }); });
   var lname = function(id){ var l = locations.find(function(x){ return x.id===id; }); return l ? l.name : ''; };
+  var created = {};
   plan.forEach(function(p){
     var it = p.it, o = p.o;
     if(p.isNew){
       it = {id:'itm-'+Date.now()+'-'+Math.floor(Math.random()*100000), name:o.name, unit:o.unit||'個', category:'その他', basePrice:p.price||0, stocks:{}, minStock:0, stockId:'', memo:'チャットから登録'};
-      items.push(it);
+      items.push(it); created[p.i] = it;
     }
+    if(p.ref!=null) it = created[p.ref];
+    if(!it) return;
     if(!it.stocks) it.stocks = {};
     var up = o.type==='in' ? (p.price>0 ? p.price : (it.basePrice||0)) : (it.basePrice||0);
+    var fj = p.fromJobId ? coJobs().find(function(j){ return j.id===p.fromJobId; }) : null;
     if(o.type==='in'){ it.stocks[p.toId] = (parseFloat(it.stocks[p.toId])||0) + p.qty; if(p.price>0) it.basePrice = p.price; }
     else {
       it.stocks[p.fromId] = (parseFloat(it.stocks[p.fromId])||0) - p.qty;
@@ -3134,7 +3194,8 @@ function coApply(){
       destName: o.type==='in' ? '' : (p.toId ? lname(p.toId) : (p.toText || (o.type==='use' ? jobName : ''))),
       destLocId: p.toId && o.type!=='in' ? p.toId : '',
       jobName: jobName, jobCode: jobCode, supplier: o.type==='in' ? (o.supplier||'') : '',
-      memo: 'チャットから', unitPrice: up, chatKey: o.chatKey});
+      memo: (o.type==='in' && fj) ? 'チャットから（余りの回収）' : 'チャットから', unitPrice: up, chatKey: o.chatKey,
+      fromJobCode: fj ? fj.id : '', fromJobName: fj ? fj.name : ''});
   });
   save(); closeModalForce(); render();
   showSyncBadge('✅ 在庫操作 '+plan.length+'件を反映しました', '#70c870');
@@ -4197,8 +4258,14 @@ function jsRenameJob(jobId, newName){
     if(ch) localStorage.setItem('nip_nippos', JSON.stringify(ns));
   }catch(e){}
 }
+// 「作業場」（工房）を最初から置き場に入れておく（2026/11/16）。名前に作業場・工房を含む置き場があれば作らない
+function ensureWorkshop(){
+  if(!locations.length || locations.some(function(l){ return /作業場|工房/.test(l.name); })) return false;   // まだ置き場がない端末（同期前）では作らない
+  locations.push({id:'loc-sagyoba', name:'作業場', icon:'🔨', color:'#c8962a', address:'', locType:'warehouse', prefix:'', memo:'工房'});
+  return true;
+}
 function siteSyncRender(){ try{ if(siteSync()) render(); }catch(e){ console.error(e); } }
-(window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(function(){ siteSyncRender(); });
+(window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(function(){ try{ if(ensureWorkshop()){ save(); render(); } }catch(e){} siteSyncRender(); });
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') siteSyncRender(); });
 window.addEventListener('storage', function(e){ if(e.key==='nip_jobs') siteSyncRender(); });
 try{ render(); }catch(e){}   // 先に描いた画面に、完工のお知らせ・終わった現場を出す
