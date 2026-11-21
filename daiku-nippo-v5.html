@@ -959,6 +959,7 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
   // draft: 貼り付け取り込みで作った下書き（未保存）。既存日報の編集とは別扱い
   const n = nippoId ? nippos.find(x=>x.id===nippoId) : (draft || null);
   window._draftMode = !!draft;
+  window._draftNeedJob = !!(draft && draft.needJob);
   const date = n?.date || preDate || today();
   const {tasks: initTasks, rest: initMemo} = getNippoTasks(n||{});
   _taskJob = {id: n?.jobCode||'', name: n?.jobName||''};
@@ -980,7 +981,7 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
   const jobOpts = `<option value="">-- 選択してください --</option>` +
     // 完工の工事は下にまとめる（2026/11/11）
     jobs.slice().sort((a,b)=>(a.status==='done')-(b.status==='done')).map(j=>`<option value="${j.id}"${n?.jobCode===j.id?' selected':''}>${esc(j.code?j.code+' ':'')}${esc(j.name)}${j.status==='done'?'（完工）':''}</option>`).join('') +
-    `<option value="__custom__"${!n?.jobCode&&n?.jobName?' selected':''}>＋ 直接入力</option>`;
+    `<option value="__custom__"${!n?.jobCode&&n?.jobName&&!n?.needJob?' selected':''}>＋ 台帳にない工事を入力（台帳に登録します）</option>`;
 
   // 材料リスト
   const mats = n?.materials || [];
@@ -1002,7 +1003,8 @@ function openNippoModal(nippoId, preDate, draft, draftNote){
 
     <label class="form-label work-only">工事名（マスタから選択 or 直接入力）</label>
     <select class="form-select" id="nip-job-sel" onchange="onJobSelChange()">${jobOpts}</select>
-    <input class="form-input" type="text" id="nip-job-name" placeholder="工事名を入力" value="${esc(n?.jobName||'')}" style="${!n?.jobCode&&n?.jobName?'':'display:none'}"/>
+    <input class="form-input" type="text" id="nip-job-name" placeholder="工事名を入力" value="${esc(n?.jobName||'')}" style="${!n?.jobCode&&n?.jobName&&!n?.needJob?'':'display:none'}"/>
+    ${n?.needJob ? jobPickHtml(n.site||n.jobName||'') : ''}
     <input class="form-input" type="text" id="nip-job-code" placeholder="工事コード（例: 2025-001）" value="${esc(n?.jobCode||'')}" style="display:none"/>
 
     <label class="form-label">作業内容・時間（時間は任意）<span class="off-only">　→ 休みの日は過ごし方を書く</span></label>
@@ -1237,9 +1239,29 @@ function saveNippo(existingId, matListId){
   // 工事
   const jobSel = document.getElementById('nip-job-sel').value;
   let jobCode='', jobName='';
-  if(jobSel==='__custom__'){
+  const isOffDay0 = !!document.getElementById('nip-off')?.checked;
+  if(jobSel==='__custom__' && !isOffDay0){
+    // 台帳にない名前はそのまま保存しない（2026/11/21）。同じ名前があればそれにつなぎ、なければ似た工事を見せてから台帳に登録する
+    const typed = document.getElementById('nip-job-name').value.trim();
+    if(!typed){ alert('工事名を入れるか、一覧から台帳の工事を選んでください'); return; }
+    let j = findJobExact(typed);
+    if(!j){
+      const sim = similarJobs(typed);
+      const msg = `「${typed}」は工事台帳にありません。` +
+        (sim.length ? `\n\n似た名前の工事が台帳にあります：\n${sim.slice(0,6).map(x=>'・'+jobLabel(x)).join('\n')}\n\n同じ現場なら「キャンセル」を押して、一覧からその工事を選んでください。` : '') +
+        `\n\n新しい工事として台帳に登録して保存しますか？`;
+      if(!confirm(msg)) return;
+      const now = new Date().toISOString();
+      j = {id: uid('job'), code: nextJobCode(), name: typed, client:'', address:'', status:'active', memo:'日報の入力から登録', createdAt: now, updatedAt: now};
+      jobs.unshift(j);
+    }
+    jobCode = j.id; jobName = j.name;
+  } else if(jobSel==='__custom__'){
     jobName = document.getElementById('nip-job-name').value.trim();
-    jobCode = document.getElementById('nip-job-code')?.value.trim() || '';
+  } else if(!jobSel && window._draftNeedJob && !isOffDay0){
+    alert('工事を選んでください。\n貼り付けた現場名が台帳の工事名と合わなかったので、候補か一覧から選び直してください。');
+    document.getElementById('nip-job-sel')?.focus();
+    return;
   } else if(jobSel){
     const j = jobs.find(x=>x.id===jobSel);
     jobCode = j?.id||jobSel;
@@ -1793,6 +1815,14 @@ function saveJob(id){
   const memo   = document.getElementById('jb-memo').value.trim();
 
   if(!name){ alert('工事名を入力してください'); return; }
+  // 似た名前の工事があれば知らせる（新しく作るとき・名前を変えるとき 2026/11/21）
+  const prevJob = id ? jobs.find(x=>x.id===id) : null;
+  if(!prevJob || prevJob.name!==name){
+    const same = jobs.find(x=>x.id!==id && (x.name===name || (x.oldNames||[]).includes(name)));
+    if(same){ alert(`「${name}」という工事がすでにあります（${jobLabel(same)}）。\n同じ現場なら、その工事を使ってください。`); return; }
+    const sim = similarJobs(name, id);
+    if(sim.length && !confirm(`似た名前の工事が台帳にあります：\n${sim.slice(0,6).map(x=>'・'+jobLabel(x)).join('\n')}\n\n同じ現場を別の名前で作ると、日報・在庫・原価が分かれてしまいます。\nそれでも「${name}」を${id?'この名前にしますか':'新しく作りますか'}？`)) return;
+  }
 
   // 工種別見積人工
   const estNinkuByKouji = {};
@@ -2228,6 +2258,44 @@ function guessKouji(texts){
   return KOUJI_KEYWORDS.filter(([,re])=>re.test(t)).map(([id])=>id).filter(id=>KOUJI_TYPES.some(k=>k.id===id));
 }
 
+// ===== 似た名前の判定（2026/11/21 川島様の現場が3つの名前に分かれた件） =====
+// 施主の名字の部分（「川島様☆雨漏り修繕工事」「川島様邸」→「川島」）
+function ownerKey(s){
+  let t = String(s||''); try{ t = t.normalize('NFKC'); }catch(e){}
+  t = t.replace(/[\s　]+/g,'').replace(/^\d{4}-\d+/,'');
+  const m = t.match(/^(.+?)(?:様|邸|宅|さん|☆|★|・|[(（]|\/)/);
+  return m ? m[1] : t.replace(/(新築|リフォーム|改修|修繕|雨漏り|屋根|外壁|工事|現場).*$/,'');
+}
+function jobNames(j){ return [j.name, ...(j.oldNames||[]), j.client||''].filter(Boolean); }
+// 名前が似ている工事（同じ名字・同じ施主・名前の一部が同じ）
+function similarJobs(name, exceptId){
+  const k = ownerKey(name);
+  const norm = s=>String(s||'').normalize('NFKC').replace(/[\s　]/g,'').replace(/様邸|様宅|様|邸|宅|新築|リフォーム|改修|工事|現場/g,'');
+  const ns = norm(name);
+  const order = {active:0, plan:1, done:2};
+  return jobs.filter(j=>j.id!==exceptId && jobNames(j).some(x=>{
+    const k2 = ownerKey(x), n2 = norm(x);
+    return (k && k2 && (k===k2 || (k.length>=2 && k2.length>=2 && (k.startsWith(k2)||k2.startsWith(k)))))
+        || (ns.length>=3 && n2.length>=3 && (n2.includes(ns)||ns.includes(n2)));
+  })).sort((a,b)=>(order[a.status||'active']||0)-(order[b.status||'active']||0));
+}
+function jobLabel(j){ return (j.code?j.code+' ':'')+j.name+(j.status==='done'?'（完工）':''); }
+// 確認画面：台帳にない現場名のとき、名字で絞った候補をボタンで出す
+function jobPickHtml(site){
+  const c = similarJobs(site).slice(0,6);
+  const btns = c.map(j=>`<button type="button" class="btn-sm job-pick" data-id="${esc(j.id)}" style="width:100%;text-align:left;padding:9px 10px;margin-top:5px" onclick="pickJob('${esc(j.id)}')">${esc(jobLabel(j))}</button>`).join('');
+  return `<div id="job-pick" style="background:#2a2418;border:1px solid #6a5020;border-radius:9px;padding:9px 10px;margin:-4px 0 10px">
+    <div style="color:#e8b050;font-size:11px;font-weight:700">「${esc(site)}」は台帳にありません。どの工事ですか？</div>
+    ${btns || '<div style="color:#888;font-size:11px;margin-top:4px">名前の似た工事は見つかりませんでした。上の一覧から選ぶか、新しい現場なら「＋ 台帳にない工事を入力」を選んでください。</div>'}
+  </div>`;
+}
+function pickJob(id){
+  const sel = document.getElementById('nip-job-sel'); if(!sel) return;
+  sel.value = id; onJobSelChange();
+  document.querySelectorAll('.job-pick').forEach(b=>{ const on = b.dataset.id===id; b.style.background = on?'#3a5a2a':''; b.style.color = on?'#e8f8d8':''; });
+}
+function findJobExact(name){ const t = String(name||'').trim(); return t ? (jobs.find(j=>j.name===t) || jobs.find(j=>(j.oldNames||[]).includes(t)) || null) : null; }
+
 function matchJob(site){
   if(!site) return null;
   const norm = s=>String(s||'').replace(/[\s　]/g,'').replace(/様邸|様宅|様|邸|宅|新築|リフォーム|改修|工事|現場/g,'');
@@ -2240,7 +2308,8 @@ function matchJob(site){
   const order = {active:0, plan:1, done:2};
   const hits = jobs.filter(j=>names(j).some(x=>{ const nj=norm(x); return nj && (nj.includes(ns)||ns.includes(nj)); }))
     .sort((a,b)=>(order[a.status||'active']||0)-(order[b.status||'active']||0));
-  return hits[0]||null;
+  // 候補が2つ以上あるときは決めない（確認画面で選び直してもらう 2026/11/21）
+  return hits.length===1 ? hits[0] : null;
 }
 
 function parseNippoText(raw){
@@ -2305,6 +2374,7 @@ function parseNippoText(raw){
       jobName: job ? job.name : b.site,
       site: b.site,
       jobMatched: !!job,
+      needJob: !job,
       koujiTypes: guessKouji([...b.tasks.map(t=>t.name), b.site]),
       workers: w0 ? {[w0.id]: ninku} : {},
       materials: [],
@@ -2354,7 +2424,7 @@ function openNextDraft(){
   const w0 = workers[0];
   if(d.kind==='off') notes.push('🌙 休みの記録として取り込みます。人工・集計には数えません。');
   else if(w0) notes.push(`人工は仮に「${esc(w0.name)} ${Object.values(d.workers)[0]}人工」を入れています。必要なら直してください。`);
-  if(d.site && !d.jobMatched) notes.push(`「${esc(d.site)}」は工事台帳に見つからなかったので、工事名を直接入力にしています。`);
+  if(d.site && !d.jobMatched) notes.push(`⚠️ 「${esc(d.site)}」は工事台帳の名前と合いません。下の候補か一覧から、台帳の工事を選んでください（選ばないと保存できません）。`);
   if(d.koujiTypes.length===0) notes.push('工種は自動で判定できませんでした。選んでください。');
   let html = `<div class="draft-banner">${notes.join('<br>')}</div>`;
   const dup = nippos.some(n=>String(n.date||'').slice(0,10)===d.date && (n.jobName||'')===(d.jobName||''));

@@ -1072,8 +1072,9 @@ function refreshCaseSelect() {
   const cur = sel.value;
   sel.innerHTML = '<option value="">── 新規案件として登録 ──</option>';
   cases.forEach(c => {
+    if (c.jobGone && c.id !== cur) return;   // 台帳から削除した工事は、新しい書類の案件には出さない（2026/11/21）
     const o = document.createElement('option');
-    o.value = c.id; o.textContent = c.name;
+    o.value = c.id; o.textContent = c.name + (c.jobGone ? '（台帳から削除）' : '');
     sel.appendChild(o);
   });
   if (cur) sel.value = cur;
@@ -1085,6 +1086,12 @@ function closeCaseModal()   { document.getElementById('caseModal').classList.rem
 function saveCase() {
   const n = document.getElementById('mc-name').value.trim();
   if (!n) { toast('案件名を入力してください','err'); return; }
+  // 似た名前の工事・案件があれば知らせる（同じ現場が別の名前に分かれないように 2026/11/21）
+  { const key = t => { let x = String(t||''); try{ x = x.normalize('NFKC'); }catch(e){} x = x.replace(/[\s　]+/g,'').replace(/^\d{4}-\d+/,''); const m = x.match(/^(.+?)(?:様|邸|宅|さん|☆|★|・|[(（]|\/)/); return m ? m[1] : x.replace(/(新築|リフォーム|改修|修繕|雨漏り|屋根|外壁|工事|現場).*$/,''); };
+    const k = key(n); let js = []; try{ js = JSON.parse(localStorage.getItem('nip_jobs')||'[]')||[]; }catch(e){}
+    const like = x => { const k2 = key(x); return k && k2 && (k===k2 || (k.length>=2 && k2.length>=2 && (k.startsWith(k2) || k2.startsWith(k)))); };
+    const sim = [...new Set(js.filter(j=>[j.name, j.client||'', ...(j.oldNames||[])].some(like)).map(j=>'・工事 '+j.name).concat(cases.filter(c=>caseNames(c).some(like)).map(c=>'・案件 '+c.name)))];
+    if (sim.length && !confirm(`似た名前がすでにあります：\n${sim.slice(0,8).join('\n')}\n\n同じ現場なら「キャンセル」して、その案件を使ってください。\nそれでも「${n}」を新しい案件（と工事台帳の工事）として作りますか？`)) return; }
   const nc = { id:'c'+Date.now(), name:n, wtype:document.getElementById('mc-type').value, memo:document.getElementById('mc-memo').value, createdAt:new Date().toISOString() };
   budEnsureJob(nc); cases.push(nc);
   persist();
@@ -1191,7 +1198,8 @@ function invEntries() {
     const from = locByName[h.locName] || null;
     const to = (h.destLocId && locById[h.destLocId]) || (h.destName && locByName[h.destName]) || null;
     const n = h.nippoId ? nipById[h.nippoId] : null;
-    const jobCase = () => caseFor(n ? n.jobCode : (h.jobCode || ''), n ? n.jobName : (h.jobName || h.destName || ''));
+    // 工事コード → 作業名 → 搬入先の名前 の順に案件を探す（作業名が台帳にない言葉でも、搬入先が現場名なら拾う 2026/11/21）
+    const jobCase = () => caseFor(n ? n.jobCode : (h.jobCode || ''), n ? n.jobName : (h.jobName || h.destName || '')) || (!n && h.jobName && h.destName ? caseFor('', h.destName) : null);
     const add = (c, sign, kind, place) => { if (c) out.push({ c, sign, kind, place, h, qty, price }); };
     const t = h.type;
     if (t === 'out' || t === 'ret' || t === 'move') {
@@ -2089,7 +2097,7 @@ function renderBudget(){
     const withB = cases.find(c=>docs.some(d=>d.dtype==='budget'&&d.caseId===c.id));
     budSel = (withB||cases[cases.length-1]||{}).id || '';
   }
-  sel.innerHTML = cases.length ? cases.slice().sort((a,b)=>caseDone(a)-caseDone(b)).map(c=>`<option value="${c.id}"${c.id===budSel?' selected':''}>${bEsc(c.name)}${caseDone(c)?'（完工）':''}${docs.some(d=>d.dtype==='budget'&&d.caseId===c.id)?'　📊':''}</option>`).join('') : '<option value="">案件がありません</option>';
+  sel.innerHTML = cases.length ? cases.slice().sort((a,b)=>(caseDone(a)+(a.jobGone?2:0))-(caseDone(b)+(b.jobGone?2:0))).map(c=>`<option value="${c.id}"${c.id===budSel?' selected':''}>${bEsc(c.name)}${c.jobGone?'（台帳から削除）':caseDone(c)?'（完工）':''}${docs.some(d=>d.dtype==='budget'&&d.caseId===c.id)?'　📊':''}</option>`).join('') : '<option value="">案件がありません</option>';
   const box = document.getElementById('bud-body');
   const c = cases.find(x=>x.id===budSel);
   if(!c){ box.innerHTML = '<div class="empty"><span>📊</span>案件がありません</div>'; return; }
@@ -2564,6 +2572,16 @@ function budAutoCases(){
     cases.push({id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:j.name, wtype:j.wtype||'', jobCode:j.id, nippoCode:j.code||'', client:j.client||'', memo:j.client?'施主：'+j.client:'', createdAt:now, updatedAt:now});
     n++;
   });
+  // 台帳で削除された工事（2026/11/21）：書類も予算もない案件は一覧から消す。書類がある案件は残して「台帳から削除」と出す
+  if(js.length){
+    const ids = new Set(js.map(j=>j.id));
+    const gone = cases.filter(c=>c.jobCode && !ids.has(c.jobCode));
+    gone.forEach(c=>{
+      if(!docs.some(d=>d.caseId===c.id)){ cases = cases.filter(x=>x.id!==c.id); n++; }
+      else if(!c.jobGone){ c.jobGone = true; c.updatedAt = now; n++; }
+    });
+    cases.forEach(c=>{ if(c.jobGone && c.jobCode && ids.has(c.jobCode)){ delete c.jobGone; c.updatedAt = now; n++; } });
+  }
   return n;
 }
 try{ renderAll(); }catch(e){ console.error(e); }

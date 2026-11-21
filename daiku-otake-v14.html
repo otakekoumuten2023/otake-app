@@ -687,7 +687,7 @@ function renderLoc(){
       <div class="card-row" onclick="showLocDetail('${loc.id}')">
         <div style="display:flex;align-items:center;gap:9px">
           <span style="font-size:22px">${loc.icon}</span>
-          <div><div class="loc-name">${esc(loc.name)}${loc.jobDone?' <span style="color:#a8e8a8;font-size:10px">✅ 完工</span>':''}</div>${loc.jobId?`<div style="color:#666;font-size:9px">日報の台帳とつながっています${(()=>{const j=typeof locJob==='function'?locJob(loc):null;return j&&j.code?'（'+esc(j.code)+'）':'';})()}</div>`:''}<div class="loc-addr">${esc(loc.address)}</div><div style="margin-top:3px;display:flex;gap:4px;align-items:center">${locTypeBadge(loc)}${loc.prefix?`<span style="background:#3a3218;color:#c8962a;font-size:9px;border-radius:5px;padding:2px 7px;font-weight:700">${esc(loc.prefix)}-XXX</span>`:''}</div></div>
+          <div><div class="loc-name">${esc(loc.name)}${loc.jobDone?' <span style="color:#a8e8a8;font-size:10px">✅ 完工</span>':''}</div>${loc.jobId?`<div style="color:#666;font-size:9px">日報の台帳とつながっています${(()=>{const j=typeof locJob==='function'?locJob(loc):null;return j&&j.code?'（'+esc(j.code)+'）':'';})()}</div>`:''}${loc.locType==='site'&&!(typeof locJob==='function'&&locJob(loc))?`<div style="color:#e8b050;font-size:10px;font-weight:700" onclick="event.stopPropagation();editLocModal('${loc.id}')">⚠️ 工事台帳とつながっていません（原価に入りません）→ 編集で工事を選ぶ</div>`:''}<div class="loc-addr">${esc(loc.address)}</div><div style="margin-top:3px;display:flex;gap:4px;align-items:center">${locTypeBadge(loc)}${loc.prefix?`<span style="background:#3a3218;color:#c8962a;font-size:9px;border-radius:5px;padding:2px 7px;font-weight:700">${esc(loc.prefix)}-XXX</span>`:''}</div></div>
         </div>
         <div style="text-align:right"><div style="color:${loc.color};font-size:18px;font-weight:700">${locItemCount(loc.id)}</div><div style="color:#444;font-size:9px">品目</div></div>
       </div>
@@ -699,7 +699,7 @@ function renderLoc(){
     </div>`;
   }
   const warehouseCards=warehouses.length?`<div class="section-label">🏠 倉庫・保管場所</div>${warehouses.map(locCard).join('')}`:'<div class="empty-msg2">倉庫がありません</div>';
-  const siteCards=sites.length?`<div class="section-label">🏗️ 現場</div>${sites.map(locCard).join('')}`:'<div style="color:#444;font-size:11px;text-align:center;padding:8px">現場未登録 — ＋ボタンで追加</div>';
+  const siteCards=sites.length?`<div class="section-label">🏗️ 現場</div>${sites.map(locCard).join('')}`:'<div style="color:#444;font-size:11px;text-align:center;padding:8px">現場の置き場はありません — 日報アプリの台帳に工事を登録すると自動で出ます</div>';
   return `<div style="padding:0 12px">${typeof doneBannerHtml==='function'?doneBannerHtml():''}</div><div style="padding:10px 12px 0"><button class="btn-sm" style="width:100%;padding:10px;background:#3a3218;color:#e8c070;border:1px solid #5a4a28;font-size:12px;font-weight:700" onclick="openStocktake()">📝 棚卸し（置き場ごとに数える・チェック表）</button></div>
     <div class="section-label">場所マップ</div>
     <div class="map-area"><div class="map-bg"><div class="map-grid"></div>${pins}</div></div>
@@ -1054,13 +1054,17 @@ function editHistModal(hid){
       var v=this.value;
       var inp=document.getElementById('eh-dest-inp');
       if(inp) inp.style.display=(v==='__new__')?'block':'none';
+      ehSyncJob();
     ">${destSelOpts}</select>
     <input class="form-input" type="text" id="eh-dest-inp" placeholder="搬入先を直接入力" value="${!destInList?esc(currentDest):''}" style="${destInputStyle}"/>
     `:''}
     <label class="form-label">日付</label><input class="form-input" type="date" id="eh-date" value="${dateVal}"/>
     <label class="form-label">数量</label><input class="form-input" type="number" id="eh-qty" value="${h.qty}" min="0.01" step="any"/>
     <label class="form-label">単価（税抜）</label><input class="form-input" type="number" id="eh-price" value="${h.unitPrice||0}" step="any"/>
-    <label class="form-label">作業名</label><input class="form-input" type="text" id="eh-job" value="${esc(h.jobName||'')}"/>
+    ${h.type==='in'?`<label class="form-label">作業名</label><input class="form-input" type="text" id="eh-job" value="${esc(h.jobName||'')}"/>`:`
+    <label class="form-label" style="color:#c8962a">🏗️ 工事（原価に入る現場）</label>
+    <select class="form-select" id="eh-jobsel" onchange="ehSyncJob(true)">${jobSelectOpts(ehJobOf(h), h.jobName||h.destName||'', 'なし（現場に関係ない）')}</select>
+    <div id="eh-job-note" style="color:#888;font-size:10px;line-height:1.6;margin:-4px 0 10px">${ehJobNote(h)}</div>`}
     <label class="form-label">仕入れ先</label><input class="form-input" type="text" id="eh-supplier" value="${esc(h.supplier||'')}"/>
     <label class="form-label">メモ</label><input class="form-input" type="text" id="eh-memo" value="${esc(h.memo||'')}"/>
     <div class="btn-row">
@@ -1068,6 +1072,28 @@ function editHistModal(hid){
       <button class="btn-confirm blue" onclick="doEditHist('${hid}')">保存する</button>
     </div>
   </div>`);
+}
+// 記録の工事（2026/11/21）：記録の工事コード → 搬入先・出庫元の現場の置き場 → 名前が台帳の1件とだけ合う工事
+function ehJobOf(h){
+  const js=jsJobs();
+  if(h.jobCode&&js.some(j=>j.id===h.jobCode)) return h.jobCode;
+  const site=[h.destLocId&&locations.find(l=>l.id===h.destLocId), locations.find(l=>l.name===h.destName), h.type!=='in'&&locations.find(l=>l.name===h.locName)].find(l=>l&&l.locType==='site'&&l.jobId);
+  if(site) return site.jobId;
+  const j=coFindJob(h.jobName||'')||coFindJob(h.destName||''); return j?j.id:'';
+}
+function ehJobNote(h){
+  const txt=h.jobName&&!jsJobs().some(j=>j.id===h.jobCode||j.name===h.jobName)?'<span style="color:#e8b050">前の作業名：「'+esc(h.jobName)+'」（台帳にない名前です）</span><br>':'';
+  return txt+'原価アプリは、搬入先（返却は出庫元）が現場の置き場ならその現場に、使用や置き場にない行き先はこの「工事」に数えます。現場の置き場を選ぶと、工事も同じ現場になります。';
+}
+// 搬入先・出庫元に現場の置き場を選んだら、工事を合わせる
+function ehSyncJob(fromJob){
+  const js=document.getElementById('eh-jobsel'); if(!js) return;
+  const dv=(document.getElementById('eh-dest-sel')||{}).value||'', lv=(document.getElementById('eh-loc-sel')||{}).value||'';
+  const site=[locations.find(l=>l.name===dv), locations.find(l=>l.name===lv)].find(l=>l&&l.locType==='site'&&l.jobId);
+  if(site && !fromJob){ js.value=site.jobId; }
+  else if(site && fromJob && js.value!==site.jobId){
+    const n=document.getElementById('eh-job-note'); if(n) n.innerHTML='<span style="color:#e8b050">⚠️ 現場の置き場「'+esc(site.name)+'」と違う工事です。保存すると、置き場の現場に合わせます。置き場ごと変えるときは搬入先を選び直してください。</span>';
+  }
 }
 function doEditHist(hid){
   const h=history.find(x=>String(x.id)===String(hid));if(!h)return;
@@ -1142,6 +1168,7 @@ function doEditHist(hid){
         item.stocks[oldDestId]=(item.stocks[oldDestId]||0)+diff;
       }
       h.destName=newDestName;
+      h.destLocId=newDestId||'';   // 原価アプリは搬入先をこのIDで見るので、名前と一緒に直す（2026/11/21）
     } else if(h.type==='ret'&&oldLocId&&destId&&diff!==0){
       item.stocks[oldLocId]=Math.max(0,(item.stocks[oldLocId]||0)-diff);
       item.stocks[destId]=(item.stocks[destId]||0)+diff;
@@ -1152,7 +1179,17 @@ function doEditHist(hid){
   const newDate=document.getElementById('eh-date').value||'';
   h.date=newDate?newDate.slice(0,10):h.date.slice(0,10);
   h.unitPrice=parseFloat(document.getElementById('eh-price').value)||0;
-  h.jobName=document.getElementById('eh-job').value.trim();
+  // 工事（2026/11/21）：現場の置き場を選んでいれば、その工事に合わせる
+  const jsEl=document.getElementById('eh-jobsel');
+  if(jsEl){
+    const site=[locations.find(l=>l.name===h.destName), h.type==='ret'||h.type==='use'?locations.find(l=>l.name===h.locName):null].find(l=>l&&l.locType==='site'&&l.jobId);
+    const jid=site?site.jobId:jsEl.value;
+    const j=jsJobs().find(x=>x.id===jid);
+    if(j){ h.jobCode=j.id; h.jobName=j.name; }
+    else if(jid==='__none__'){ h.jobCode=''; h.jobName=''; }
+  } else {
+    const je=document.getElementById('eh-job'); if(je) h.jobName=je.value.trim();
+  }
   h.supplier=document.getElementById('eh-supplier').value.trim();
   h.memo=document.getElementById('eh-memo').value.trim();
   save();closeModalForce();render();
@@ -1553,6 +1590,8 @@ function addLocFromIn(){
   const name = nameInput ? nameInput.value.trim() : '';
   if(!name){ alert('場所名を入力してください'); return; }
   if(locations.find(l=>l.name===name)){ alert('同じ名前の場所がすでにあります'); return; }
+  const simL=similarLocs(name), simJ=similarJobs(name);
+  if((simL.length||simJ.length) && !confirm('似た名前がすでにあります：\n'+simL.map(l=>'・置き場 '+l.name).concat(simJ.map(j=>'・工事 '+jobLabel(j))).slice(0,8).join('\n')+'\n\n同じ場所なら「キャンセル」して一覧から選んでください。それでも「'+name+'」を倉庫・保管場所として作りますか？')) return;
   const newLoc = {id:'loc-'+Date.now(),name:name,icon:'📦',locType:'warehouse',prefix:'',memo:''};
   locations.push(newLoc);
   save();
@@ -1658,6 +1697,22 @@ function refreshRetItems(){
   if(sel) sel.innerHTML=itemOptsForLoc(locId,null);
   showPriceHint('ret-item','ret-hint');
 }
+// 手入力の画面の「工事」（2026/11/21）：場所に現場の置き場を選んだら工事を合わせる
+function formSyncJob(locSelId, jobSelId){
+  const v=(document.getElementById(locSelId)||{}).value||''; const id=v.indexOf('loc:')===0?v.slice(4):v;
+  const l=locations.find(x=>x.id===id); const js=document.getElementById(jobSelId);
+  if(js&&l&&l.locType==='site'&&l.jobId) js.value=l.jobId;
+}
+// 選んだ工事。場所が現場の置き場ならその工事。ok=false は「選んでいない」
+function formJob(jobSelId, locId){
+  const l=locId?locations.find(x=>x.id===locId):null;
+  const v=(document.getElementById(jobSelId)||{}).value||'';
+  const jid=(l&&l.locType==='site'&&l.jobId)?l.jobId:v;
+  const j=jsJobs().find(x=>x.id===jid);
+  if(j) return {ok:true, code:j.id, name:j.name};
+  if(v==='__none__') return {ok:true, code:'', name:''};
+  return {ok:!!(l), code:'', name:''};
+}
 function openOut(preItemId,preLocId){
   const item=preItemId?items.find(i=>String(i.id)===String(preItemId)):null;
   const locId=preLocId||(item?locations.find(l=>(item.stocks[l.id]||0)>0)?.id:null)||locations[0]?.id;
@@ -1670,15 +1725,16 @@ function openOut(preItemId,preLocId){
     <select class="form-select" id="out-item" onchange="showPriceHint('out-item','out-hint')">${itemOptsForLoc(locId,preItemId)}</select>
     <div class="price-hint" id="out-hint">${item?`基準単価: ${yen(item.basePrice||0)}/${item.unit}`:''}</div>
     <label class="form-label">③ 搬入先（現場・移動先）</label>
-    <select class="form-select" id="out-dest-sel" onchange="onDestSelect('out-dest-sel','out-dest-inp')">${destOpts('',locId)}</select>
+    <select class="form-select" id="out-dest-sel" onchange="onDestSelect('out-dest-sel','out-dest-inp');formSyncJob('out-dest-sel','out-job')">${destOpts('',locId)}</select>
     <input class="form-input" type="text" id="out-dest-inp" placeholder="新規現場名を入力" style="display:none"/>
     <div style="color:#555;font-size:10px;margin:-6px 0 8px">💡 場所一覧から選ぶと搬入先の在庫に自動加算されます</div>
     <div class="form-row">
       <div><label class="form-label">数量</label><input class="form-input" type="number" id="out-qty" placeholder="0" min="1"/></div>
       <div><label class="form-label">単価（税抜）</label><input class="form-input" type="number" id="out-price" value="${item?item.basePrice||0:''}"/></div>
     </div>
-    <label class="form-label">作業名</label><input class="form-input" type="text" id="out-job" placeholder="例: 玄関リフォーム工事"/>
-    <label class="form-label">メモ</label><input class="form-input" type="text" id="out-memo" placeholder=""/>
+    <label class="form-label">工事（原価に入る現場）</label><select class="form-select" id="out-job">${jobSelectOpts('','','なし（倉庫どうしの移動など）')}</select>
+    <div style="color:#666;font-size:10px;margin:-6px 0 8px">現場の置き場を搬入先に選ぶと、工事も自動で合わせます</div>
+    <label class="form-label">メモ（作業の内容など）</label><input class="form-input" type="text" id="out-memo" placeholder=""/>
     <div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">キャンセル</button><button class="btn-confirm blue" onclick="doOut()">出庫する</button></div>
   </div>`);
 }
@@ -1689,10 +1745,11 @@ function doOut(){
   const destLocId=getDestLocId('out-dest-sel'); // 場所一覧から選んだ場合のlocId
   const qty=parseFloat(document.getElementById('out-qty').value);
   const unitPrice=parseFloat(document.getElementById('out-price').value)||0;
-  const job=document.getElementById('out-job').value.trim();
+  const jobPick=formJob('out-job', destLocId);
   const memo=document.getElementById('out-memo').value.trim();
   if(!fromId||!qty||qty<=0)return alert('数量と出庫元を入力してください');
   if(!dest)return alert('搬入先を選択または入力してください');
+  if(!jobPick.ok)return alert('搬入先が置き場の一覧にないときは、原価に入れる「工事」を台帳から選んでください（現場でなければ「なし」）');
   const item=items.find(i=>String(i.id)===String(itemId));if(!item)return;
   if((item.stocks[fromId]||0)<qty)return alert(`在庫不足（現在: ${item.stocks[fromId]||0}${item.unit}）`);
   // 出庫元から減算
@@ -1704,7 +1761,7 @@ function doOut(){
     item.stocks[destLocId]=qty;
   }
   const loc=locations.find(l=>l.id===fromId);
-  history.unshift({id:Date.now(),date:today(),type:'out',itemId,itemName:item.name,stockId:item.stockId||'',qty,locName:loc?.name||'',destName:dest,destLocId:destLocId||'',jobName:job,supplier:'',memo,unitPrice});
+  history.unshift({id:Date.now(),date:today(),type:'out',itemId,itemName:item.name,stockId:item.stockId||'',qty,locName:loc?.name||'',destName:dest,destLocId:destLocId||'',jobName:jobPick.name,jobCode:jobPick.code,supplier:'',memo,unitPrice});
   save();closeModalForce();render();
 }
 
@@ -1716,7 +1773,7 @@ function openUse(preItemId,preLocId){
     <div class="sheet-title" style="color:#e8b050">🪚 使用記録</div>
     <div class="sheet-desc">作業で使用した量を記録します</div>
     <label class="form-label">① 使用した場所を先に選択</label>
-    <select class="form-select" id="use-loc" onchange="refreshUseItems()">${locOpts(locId)}</select>
+    <select class="form-select" id="use-loc" onchange="refreshUseItems();formSyncJob('use-loc','use-job')">${locOpts(locId)}</select>
     <label class="form-label">② 品目（選択場所の在庫品のみ表示）</label>
     <select class="form-select" id="use-item" onchange="showPriceHint('use-item','use-hint')">${itemOptsForLoc(locId,preItemId)}</select>
     <div class="price-hint" id="use-hint">${item?`基準単価: ${yen(item.basePrice||0)}/${item.unit}`:''}</div>
@@ -1724,29 +1781,27 @@ function openUse(preItemId,preLocId){
       <div><label class="form-label">使用数量</label><input class="form-input" type="number" id="use-qty" placeholder="0" min="1"/></div>
       <div><label class="form-label">単価（税抜）</label><input class="form-input" type="number" id="use-price" value="${item?item.basePrice||0:''}"/></div>
     </div>
-    <label class="form-label">作業名 ＊</label><input class="form-input" type="text" id="use-job" placeholder="例: 玄関框取付け"/>
-    <label class="form-label">現場名</label>
-    <select class="form-select" id="use-site-sel" onchange="onDestSelect('use-site-sel','use-site-inp')">${destOpts('')}</select>
-    <input class="form-input" type="text" id="use-site-inp" placeholder="新規現場名を入力" style="display:none"/>
-    <label class="form-label">メモ</label><input class="form-input" type="text" id="use-memo" placeholder=""/>
+    <label class="form-label">工事（原価に入る現場） ＊</label><select class="form-select" id="use-job">${jobSelectOpts('','','なし（現場に関係ない）')}</select>
+    <label class="form-label">メモ（作業の内容など）</label><input class="form-input" type="text" id="use-memo" placeholder="例: 玄関框取付け"/>
     <div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">キャンセル</button><button class="btn-confirm gold" onclick="doUse()">記録する</button></div>
   </div>`);
+  formSyncJob('use-loc','use-job');
 }
 function doUse(){
   const itemId=String(document.getElementById('use-item').value);
   const locId=document.getElementById('use-loc').value;
   const qty=parseFloat(document.getElementById('use-qty').value);
   const unitPrice=parseFloat(document.getElementById('use-price').value)||0;
-  const job=document.getElementById('use-job').value.trim();
-  const site=getDestVal('use-site-sel','use-site-inp');
+  const jobPick=formJob('use-job', locId);
   const memo=document.getElementById('use-memo').value.trim();
   if(!locId||!qty||qty<=0)return alert('数量と使用場所を入力してください');
-  if(!job)return alert('作業名を入力してください');
+  if(!jobPick.code&&document.getElementById('use-job').value!=='__none__')return alert('工事を台帳から選んでください（現場に関係ないときは「なし」）');
+  const site=jobPick.name;
   const item=items.find(i=>String(i.id)===String(itemId));if(!item)return;
   if((item.stocks[locId]||0)<qty)return alert(`在庫不足（現在: ${item.stocks[locId]||0}${item.unit}）`);
   item.stocks[locId]-=qty;
   const loc=locations.find(l=>l.id===locId);
-  history.unshift({id:Date.now(),date:today(),type:'use',itemId,itemName:item.name,stockId:item.stockId||'',qty,locName:loc?.name||'',destName:site,jobName:job,supplier:'',memo,unitPrice});
+  history.unshift({id:Date.now(),date:today(),type:'use',itemId,itemName:item.name,stockId:item.stockId||'',qty,locName:loc?.name||'',destName:site,jobName:jobPick.name,jobCode:jobPick.code,supplier:'',memo,unitPrice});
   save();closeModalForce();render();
 }
 
@@ -1758,7 +1813,7 @@ function openRet(preItemId,preLocId){
     <div class="sheet-title" style="color:#c870e8">↩️ 返却登録</div>
     <div class="sheet-desc">現場の余り材を倉庫へ戻します</div>
     <label class="form-label">① 返却元（現場）を先に選択</label>
-    <select class="form-select" id="ret-from" onchange="refreshRetItems()">${locOpts(locId)}</select>
+    <select class="form-select" id="ret-from" onchange="refreshRetItems();formSyncJob('ret-from','ret-job')">${locOpts(locId)}</select>
     <label class="form-label">② 品目（選択場所の在庫品のみ表示）</label>
     <select class="form-select" id="ret-item" onchange="showPriceHint('ret-item','ret-hint')">${itemOptsForLoc(locId,preItemId)}</select>
     <div class="price-hint" id="ret-hint">${item?`基準単価: ${yen(item.basePrice||0)}/${item.unit}`:''}</div>
@@ -1768,10 +1823,11 @@ function openRet(preItemId,preLocId){
       <div><label class="form-label">返却数量</label><input class="form-input" type="number" id="ret-qty" placeholder="0" min="1"/></div>
       <div><label class="form-label">単価（税抜）</label><input class="form-input" type="number" id="ret-price" value="${item?item.basePrice||0:''}"/></div>
     </div>
-    <label class="form-label">作業名</label><input class="form-input" type="text" id="ret-job" placeholder="例: 〇〇邸工事 完了"/>
+    <label class="form-label">工事（返した材料の現場）</label><select class="form-select" id="ret-job">${jobSelectOpts('','','なし')}</select>
     <label class="form-label">メモ</label><input class="form-input" type="text" id="ret-memo" placeholder="例: 余り材"/>
     <div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">キャンセル</button><button class="btn-confirm purple" onclick="doRet()">返却する</button></div>
   </div>`);
+  formSyncJob('ret-from','ret-job');
 }
 function doRet(){
   const itemId=String(document.getElementById('ret-item').value);
@@ -1779,7 +1835,7 @@ function doRet(){
   const toId=document.getElementById('ret-to').value;
   const qty=parseFloat(document.getElementById('ret-qty').value);
   const unitPrice=parseFloat(document.getElementById('ret-price').value)||0;
-  const job=document.getElementById('ret-job').value.trim();
+  const jobPick=formJob('ret-job', fromId);
   const memo=document.getElementById('ret-memo').value.trim();
   if(!fromId||!toId||!qty||qty<=0)return alert('数量・返却元・返却先を入力してください');
   if(fromId===toId)return alert('返却元と返却先が同じです');
@@ -1787,7 +1843,7 @@ function doRet(){
   if((item.stocks[fromId]||0)<qty)return alert(`在庫不足（現在: ${item.stocks[fromId]||0}${item.unit}）`);
   item.stocks[fromId]-=qty;item.stocks[toId]=(item.stocks[toId]||0)+qty;
   const fl=locations.find(l=>l.id===fromId);const tl=locations.find(l=>l.id===toId);
-  history.unshift({id:Date.now(),date:today(),type:'ret',itemId,itemName:item.name,stockId:item.stockId||'',qty,locName:fl?.name||'',destName:tl?.name||'',jobName:job,supplier:'',memo,unitPrice});
+  history.unshift({id:Date.now(),date:today(),type:'ret',itemId,itemName:item.name,stockId:item.stockId||'',qty,locName:fl?.name||'',destName:tl?.name||'',jobName:jobPick.name,jobCode:jobPick.code,supplier:'',memo,unitPrice});
   save();closeModalForce();render();
 }
 
@@ -2084,11 +2140,16 @@ function openAddLocationModal(){
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#e8d5a3">📍 場所を追加</div>
     <label class="form-label">場所の種類</label>
-    <select class="form-select" id="al-type">
+    <select class="form-select" id="al-type" onchange="alTypeChange()">
       <option value="warehouse">🏠 倉庫・保管場所</option>
       <option value="site">🏗️ 現場</option>
     </select>
-    <label class="form-label">場所名</label><input class="form-input" type="text" id="al-name" placeholder="例: 現場C、北倉庫"/>
+    <div id="al-name-box"><label class="form-label">場所名</label><input class="form-input" type="text" id="al-name" placeholder="例: 北倉庫、作業場"/></div>
+    <div id="al-job-box" style="display:none">
+      <label class="form-label">工事（日報アプリの工事台帳から選ぶ）</label>
+      <select class="form-select" id="al-job">${alJobOpts()}</select>
+      <div style="color:#888;font-size:10px;line-height:1.6;margin:-4px 0 10px">現場の置き場は、工事台帳の工事と同じ名前で作ります。施工中・予定の工事は、ここで作らなくても自動で置き場に出ています。<br>新しい現場は、先に日報アプリの「台帳」で工事を登録してください。<a href="daiku-nippo-v5.html" style="color:#c8962a">日報アプリを開く →</a></div>
+    </div>
     <label class="form-label">アイコンを選択</label>
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">${iconPickerHtml('al-icon','🏠')}</div>
     <input type="hidden" id="al-icon" value="🏠"/>
@@ -2099,12 +2160,42 @@ function openAddLocationModal(){
     <div class="btn-row"><button class="btn-cancel" onclick="closeModalForce()">キャンセル</button><button class="btn-confirm green" onclick="doAddLoc()">追加する</button></div>
   </div>`);
 }
+// 現場の置き場：台帳の工事から選ぶ（2026/11/21）。置き場がまだない工事・しまった現場の工事を出す
+function alJobOpts(){
+  const js=jsJobs().slice().sort((a,b)=>(a.status==='done')-(b.status==='done'));
+  const live=js.filter(j=>!locations.some(l=>l.jobId===j.id&&!l.archived));
+  const hidden=js.filter(j=>locations.some(l=>l.jobId===j.id&&l.archived));
+  return '<option value="">-- 工事を選ぶ --</option>'
+    +(live.length?'<optgroup label="置き場がまだない工事">'+live.map(j=>`<option value="${esc(j.id)}">${esc(jobLabel(j))}</option>`).join('')+'</optgroup>':'')
+    +(hidden.length?'<optgroup label="終わった現場にしまった工事（もう一度出す）">'+hidden.map(j=>`<option value="${esc(j.id)}">${esc(jobLabel(j))}</option>`).join('')+'</optgroup>':'')
+    +(!live.length&&!hidden.length?'<option value="" disabled>台帳の工事は、すべて置き場に出ています</option>':'');
+}
+function alTypeChange(){
+  const site=document.getElementById('al-type').value==='site';
+  document.getElementById('al-name-box').style.display=site?'none':'';
+  document.getElementById('al-job-box').style.display=site?'':'none';
+}
 function doAddLoc(){
+  const type=document.getElementById('al-type').value;
+  if(type==='site'){
+    const jid=document.getElementById('al-job').value;
+    const j=jsJobs().find(x=>x.id===jid);
+    if(!j)return alert('工事台帳から工事を選んでください。\n新しい現場は、先に日報アプリの「台帳」で工事を登録してください。');
+    const ex=locations.find(l=>l.jobId===j.id);
+    if(ex){ ex.archived=false; delete ex.userHidden; delete ex.needJob; save();closeModalForce();render(); alert('「'+ex.name+'」を現場の置き場に戻しました。'); return; }
+    locations.push({id:'loc-'+j.id,name:j.name,icon:document.getElementById('al-icon').value||'🏗️',color:document.getElementById('al-color').value,address:document.getElementById('al-addr').value.trim()||j.address||'',locType:'site',prefix:'',memo:'',jobId:j.id,fromJob:true});
+    save();closeModalForce();render();return;
+  }
   const name=document.getElementById('al-name').value.trim();
   if(!name)return alert('場所名を入力してください');
-  const nl={id:'loc'+Date.now(),name,icon:document.getElementById('al-icon').value,color:document.getElementById('al-color').value,address:document.getElementById('al-addr').value.trim(),locType:document.getElementById('al-type').value};
+  if(locations.some(l=>l.name===name))return alert('「'+name+'」という場所がすでにあります');
+  const simL=similarLocs(name), simJ=similarJobs(name);
+  if(simL.length||simJ.length){
+    if(!confirm('似た名前がすでにあります：\n'+simL.map(l=>'・置き場 '+l.name).concat(simJ.map(j=>'・工事 '+jobLabel(j))).slice(0,8).join('\n')+'\n\n同じ場所・現場なら「キャンセル」を押して、そちらを使ってください。\n現場の置き場は「場所の種類：現場」から工事を選んで作ります。\n\nそれでも「'+name+'」を倉庫・保管場所として作りますか？'))return;
+  }
+  const nl={id:'loc'+Date.now(),name,icon:document.getElementById('al-icon').value,color:document.getElementById('al-color').value,address:document.getElementById('al-addr').value.trim(),locType:type};
   locations.push(nl);
-  // 倉庫は全品目の欄を作る（これまでどおり）。現場は空のまま（台帳に工事として登録される）
+  // 倉庫は全品目の欄を作る（これまでどおり）
   if((nl.locType||'warehouse')!=='site') items.forEach(i=>{i.stocks[nl.id]=0;});
   save();try{siteSync();}catch(e){}closeModalForce();render();
 }
@@ -2114,10 +2205,15 @@ function editLocModal(locId){
   showModal(`<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-title" style="color:#e8d5a3">✏️ 場所を編集</div>
     <label class="form-label">場所の種類</label>
-    <select class="form-select" id="el-type">
+    <select class="form-select" id="el-type" onchange="document.getElementById('el-job-box').style.display=this.value==='site'?'':'none'">
       <option value="warehouse"${(loc.locType||'warehouse')==='warehouse'?' selected':''}>🏠 倉庫・保管場所</option>
       <option value="site"${loc.locType==='site'?' selected':''}>🏗️ 現場</option>
     </select>
+    <div id="el-job-box" style="${loc.locType==='site'?'':'display:none'}">
+      <label class="form-label">工事（工事台帳）</label>
+      <select class="form-select" id="el-job">${jobSelectOpts(locJob(loc)?loc.jobId:'', loc.name)}</select>
+      ${loc.locType==='site'&&!locJob(loc)?'<div style="color:#e8b050;font-size:11px;margin:-4px 0 10px">⚠️ この現場は工事台帳の工事とつながっていません。ここに置いた材料は原価に入りません。工事を選んでください。</div>':'<div style="color:#666;font-size:10px;margin:-4px 0 10px">現場の名前は台帳の工事名になります。名前を変えるときは日報アプリの台帳で変えてください。</div>'}
+    </div>
     <label class="form-label">場所名</label><input class="form-input" type="text" id="el-name" value="${esc(loc.name)}"/>
     <label class="form-label">品番プレフィックス（例: N1, E1, M1）</label>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:9px">
@@ -2142,13 +2238,35 @@ function editLocModal(locId){
 function doEditLoc(locId){
   const loc=locations.find(l=>l.id===locId);if(!loc)return;
   const oldName=loc.name;
-  loc.name=document.getElementById('el-name').value.trim()||loc.name;
+  const newType=document.getElementById('el-type').value;
+  // 現場は台帳の工事とつなぐ（2026/11/21）
+  if(newType==='site'){
+    const jid=(document.getElementById('el-job')||{}).value||'';
+    const j=jsJobs().find(x=>x.id===jid);
+    if(!j)return alert('現場の置き場は、工事台帳の工事を選んでください。\n新しい現場は、先に日報アプリの「台帳」で工事を登録してください。');
+    const other=locations.find(l=>l.id!==locId&&l.jobId===j.id);
+    if(other){
+      if(!confirm('「'+j.name+'」の置き場はすでにあります（'+other.name+'）。\nこの置き場の材料と履歴を、そちらにまとめますか？'))return;
+      items.forEach(i=>{ const q=parseFloat((i.stocks||{})[locId])||0; if(q){ i.stocks[other.id]=(parseFloat(i.stocks[other.id])||0)+q; } delete i.stocks[locId]; });
+      jsRenameLocHist(loc.name, other.name);
+      other.archived=false; delete other.userHidden;
+      locations.splice(locations.findIndex(l=>l.id===locId),1);
+      save();closeModalForce();render();alert('「'+other.name+'」にまとめました。');return;
+    }
+    if(loc.jobId!==j.id){ loc.jobId=j.id; delete loc.needJob; jsRenameLocHist(loc.name, j.name); loc.name=j.name; var justLinked=true; }
+  }
+  const typed=document.getElementById('el-name').value.trim();
+  if(typed&&typed!==loc.name&&newType!=='site'){
+    const simL=similarLocs(typed,locId);
+    if(simL.length&&!confirm('似た名前の置き場があります：\n'+simL.map(l=>'・'+l.name).join('\n')+'\n\nそれでも「'+typed+'」にしますか？'))return;
+  }
+  if(!justLinked) loc.name=typed||loc.name;   // 工事とつないだときは台帳の工事名のまま
   // 名前を変えたら履歴の置き場名も合わせる。台帳とつながった現場なら台帳・日報の工事名も（2026/11/11）
-  if(oldName!==loc.name){ jsRenameLocHist(oldName, loc.name); if(loc.jobId) jsRenameJob(loc.jobId, loc.name); }
+  if(oldName!==loc.name&&!justLinked){ jsRenameLocHist(oldName, loc.name); if(loc.jobId) jsRenameJob(loc.jobId, loc.name); }
   loc.icon=document.getElementById('el-icon').value;
   loc.color=document.getElementById('el-color').value;
   loc.address=document.getElementById('el-addr').value.trim();
-  loc.locType=document.getElementById('el-type').value;
+  loc.locType=newType;
   loc.prefix=document.getElementById('el-prefix').value.trim().replace(/[-_\s]+$/,'');
   save();closeModalForce();render();
 }
@@ -2934,7 +3052,10 @@ function coFindJob(name){
   var js = coJobs();
   // 前の名前（台帳で工事名を変える前）でも見つける（2026/11/11）
   var names = function(j){ return [j.name].concat(j.oldNames||[]); };
-  return js.find(function(j){ return names(j).some(function(x){ return tmNorm(x)===tmNorm(name); }); }) || js.find(function(j){ return names(j).some(function(x){ var n=norm(x); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }); }) || null;
+  var ex = js.find(function(j){ return names(j).some(function(x){ return tmNorm(x)===tmNorm(name); }); }); if(ex) return ex;
+  // 一部が合う工事が2つ以上あるときは決めない（確認画面で選び直してもらう 2026/11/21）
+  var part = js.filter(function(j){ return names(j).some(function(x){ var n=norm(x); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }); });
+  return part.length===1 ? part[0] : null;
 }
 function coParseLine(s){
   var n = s; try{ n = s.normalize('NFKC'); }catch(e){}
@@ -3028,12 +3149,11 @@ function coLocSel(cls, selId, item, allowText, mode, textName){
 }
 function coOpenConfirm(){
   var r = _coState, job = coFindJob(r.job);
-  var jobOpts = '<option value="">-- 現場（工事）を選ぶ --</option>' + coJobs().slice().sort(function(a,b){ return (a.status==='done')-(b.status==='done'); }).map(function(j){ return '<option value="'+esc(j.id)+'"'+(job&&job.id===j.id?' selected':'')+'>'+esc((j.code?j.code+' ':'')+j.name)+'</option>'; }).join('')
-    + '<option value="__none__"'+(!r.job?' selected':'')+'>現場なし（倉庫の整理など）</option>';
+  var jobOpts = jobSelectOpts(job ? job.id : (!r.job ? '__none__' : ''), r.job, '現場なし（倉庫の整理など）');
   var html = '<div class="sheet" onclick="event.stopPropagation()" style="max-height:90vh;overflow-y:auto">'
     + '<div class="sheet-title">📥 在庫操作の確認</div>'
-    + '<div class="sheet-desc">品目・数量・場所を確かめて「反映する」を押してください。'+(r.job&&!job?'<br><span style="color:#e8b050">「'+esc(r.job)+'」は工事台帳に見つかりませんでした。選んでください。</span>':'')+'</div>'
-    + '<div style="display:flex;gap:6px"><input class="form-input" type="date" id="co-date" value="'+esc(r.date)+'" style="width:150px"/><select class="form-select" id="co-job" style="flex:1">'+jobOpts+'</select></div>';
+    + '<div class="sheet-desc">品目・数量・場所を確かめて「反映する」を押してください。'+(r.job&&!job?'<br><span style="color:#e8b050;font-weight:700">⚠️ 「'+esc(r.job)+'」は工事台帳の名前と合いません。右の一覧の「名前の似た工事」から選んでください（選ばないと反映できません）。</span>':'')+'</div>'
+    + '<div style="display:flex;gap:6px"><input class="form-input" type="date" id="co-date" value="'+esc(r.date)+'" style="width:150px"/><select class="form-select" id="co-job" style="flex:1" onchange="coOnJob()">'+jobOpts+'</select></div>';
   var newIn = {};   // 同じ貼り付けの入庫で新しく作る品目（後ろの持出・使用で選べるように）
   r.ops.forEach(function(o, i){
     var ex = tmExact(o.name);
@@ -3046,12 +3166,18 @@ function coOpenConfirm(){
       : ex.length===1 ? '' : ref!=null ? '上の入庫で新しく登録する品目を使います'
       : (o.type==='in' ? '在庫品目にありません。近いものを選ぶか、新しい品目として登録します' : '同じ名前の品目がありません。近いものから選ぶか、品名で探してください');
     var fromLoc = coFindLoc(o.from), toLoc = coFindLoc(o.to);
+    // 台帳の工事名で書いた現場は、その工事の置き場にする（2026/11/21）
+    var jobLoc = function(nm){ var j = coFindJob(nm); return j ? (locations.find(function(l){ return l.jobId===j.id && !l.archived; }) || null) : null; };
+    if(!toLoc && o.to && o.type!=='in') toLoc = jobLoc(o.to);
+    if(!fromLoc && o.from && o.type!=='in') fromLoc = jobLoc(o.from);
     // 入庫で元に書いた名前が現場（工事）なら「元の現場（余りの回収）」にする
     var fromJob = o.type==='in' ? (coFindJob(o.from) || (o.back ? job : null)) : null;
     if(o.type==='in' && fromJob) fromLoc = null;
-    var noLoc = function(nm){ var k = tmNorm(nm); return k && !locations.some(function(l){ var n = tmNorm(l.name); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }); };
+    // 台帳の工事に似た名前（現場名）は、新しい置き場として作らない（2026/11/21）
+    var noLoc = function(nm){ var k = tmNorm(nm); return k && !similarJobs(nm).length && !locations.some(function(l){ var n = tmNorm(l.name); return n && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }); };
+    o._siteName = (o.to && o.type!=='in' && !toLoc && similarJobs(o.to).length) ? 'to' : (o.from && o.type!=='in' && !fromLoc && similarJobs(o.from).length) ? 'from' : '';
     var fromSel = fromLoc ? 'loc:'+fromLoc.id : (o.from && o.type!=='in' && !coFindJob(o.from) && noLoc(o.from) ? 'new:'+o.from : (sel && (o.type==='use'||o.type==='out') && tmAutoLoc(sel) ? 'loc:'+tmAutoLoc(sel) : ''));
-    var toSel = toLoc ? 'loc:'+toLoc.id : (o.type==='out' && o.to ? (coFindJob(o.to) || !noLoc(o.to) ? (coFindJob(o.to) ? 'txt:'+o.to : '') : 'new:'+o.to) : (o.type==='in' && o.to && noLoc(o.to) ? 'new:'+o.to : (o.type==='in' && locations.length===1 ? 'loc:'+locations[0].id : '')));
+    var toSel = toLoc ? 'loc:'+toLoc.id : (o.type==='out' && o.to ? (coFindJob(o.to) || !noLoc(o.to) ? '' : 'new:'+o.to) : (o.type==='in' && o.to && noLoc(o.to) ? 'new:'+o.to : (o.type==='in' && locations.length===1 ? 'loc:'+locations[0].id : '')));
     o._toText = (o.type==='out' && o.to && !toLoc) ? o.to : '';
     html += '<div class="co-row tm-row" data-i="'+i+'" style="background:#161614;border:1px solid #2e2e28;border-left:3px solid '+CO_COLOR[o.type]+';border-radius:10px;padding:10px;margin-bottom:8px;'+(o.already?'opacity:.55':'')+'">'
       + '<div style="display:flex;justify-content:space-between;gap:6px"><span style="color:'+CO_COLOR[o.type]+';font-size:11px;font-weight:700">'+CO_TYPES[o.type]+'</span>'
@@ -3084,6 +3210,18 @@ function coOpenConfirm(){
   showModal(html);
   r.ops.forEach(function(o, i){ coOnItem(i); });
 }
+// 工事を選んだら、現場名で書いた行の場所をその工事の置き場にする（2026/11/21）
+function coOnJob(){
+  var el = document.getElementById('co-job'); el.style.borderColor = '';
+  var j = coJobs().find(function(x){ return x.id===el.value; }); if(!j) return;
+  var l = locations.find(function(x){ return x.jobId===j.id && !x.archived; }); if(!l) return;
+  _coState.ops.forEach(function(o, i){
+    if(!o._siteName) return;
+    var row = tmRow(i), s = row && row.querySelector(o._siteName==='to' ? '.co-to' : '.co-from'); if(!s) return;
+    if(!s.querySelector('option[value="loc:'+l.id+'"]')) return;
+    s.value = 'loc:'+l.id;
+  });
+}
 function coItemOf(i){
   var row = tmRow(i), id = row.querySelector('.tm-item').value;
   for(var k=0;k<items.length;k++){ if(String(items[k].id)===String(id)) return items[k]; }
@@ -3111,6 +3249,8 @@ function coOnLoc(sel){
     if(!nm){ sel.value=''; return; }
     var ex = coFindLoc(nm);
     if(ex){ sel.value = 'loc:'+ex.id; return; }
+    var simL = similarLocs(nm), simJ = similarJobs(nm);
+    if((simL.length||simJ.length) && !confirm('似た名前がすでにあります：\n'+simL.map(function(l){ return '・置き場 '+l.name; }).concat(simJ.map(function(j){ return '・工事 '+jobLabel(j); })).slice(0,8).join('\n')+'\n\n現場なら台帳の工事の置き場を選んでください。それでも「'+nm+'」を倉庫・保管場所として作りますか？')){ sel.value=''; return; }
     var op = document.createElement('option'); op.value = 'new:'+nm; op.textContent = '＋「'+nm+'」を新しい置き場として作る';
     sel.insertBefore(op, sel.lastElementChild); sel.value = 'new:'+nm; return;
   }
@@ -3126,7 +3266,12 @@ function coApply(){
   var r = _coState, date = document.getElementById('co-date').value || today();
   var jobSel = document.getElementById('co-job').value;
   var job = coJobs().find(function(j){ return j.id===jobSel; });
-  var jobName = job ? job.name : (jobSel==='__none__' ? '' : r.job||'');
+  // 台帳にない現場名のまま保存しない（2026/11/21）
+  if(!job && jobSel!=='__none__'){
+    var js = document.getElementById('co-job'); js.style.borderColor = '#e87050'; js.scrollIntoView({behavior:'smooth', block:'center'});
+    alert('現場（工事）を工事台帳から選んでください。\n倉庫の整理など現場に関係ないときは「現場なし」を選んでください。'); return;
+  }
+  var jobName = job ? job.name : '';
   var jobCode = job ? job.id : '';
   var plan = [], bad = 0;
   // 上の行から順に反映したときの在庫で足りるかを見る（持出してから使う、など）
@@ -3394,6 +3539,18 @@ function stRenderCount(){
     + '<div style="color:#666;font-size:10px;padding:2px 16px 4px">並び：'+(stHasShelf(stLoc)?(l.shelfManual?'手で設定した棚の順':'前回数えた順'):'種類ごと（寸法順）')+'　<a href="#" style="color:#c8962a" onclick="stOpenOrder(\''+l.id+'\');return false">↕️ 並び・区切りを直す</a>'
     + (stFilter==='busy'?'<br>最近3か月で3回以上出入りした品目です。':stFilter==='prev'?'<br>前の棚卸しで数が違った品目です。':'')+'</div>';
   h += shown ? body : '<div class="empty-msg2">'+(stFilter==='todo'?'まだの品目はありません':stFilter==='diff'?'違う品目はありません':'当てはまる品目はありません')+'</div>';
+  // 絞り込み中は、一覧にない品目（在庫0・ほかの置き場）も出す（2026/11/21）
+  if(String(stSearch||'').trim()){
+    var inList = {}; ord.forEach(function(e){ if(e.sec==null) inList[String(e.id)] = 1; });
+    var outs = items.filter(function(i){ return !inList[String(i.id)] && stockMatch(i, stSearch); });
+    if(outs.length){
+      h += '<div class="section-label">一覧にない品目（在庫0・ほかの置き場）'+outs.length+'件</div>';
+      h += outs.slice(0,12).map(function(i){
+        var where = locations.filter(function(x){ return stBook(i, x.id)>0; }).map(function(x){ return x.name+' '+stNum(stBook(i, x.id)); }).join('、');
+        return '<div class="card" style="padding:9px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center"><div><div style="color:#c8c8b0;font-size:12px;font-weight:700">'+esc(i.name)+'</div><div style="color:#666;font-size:10px">'+(where?esc(where)+esc(i.unit||''):'在庫0（どこにもない）')+'</div></div><button class="btn-sm" style="color:#70d0c8;white-space:nowrap" onclick="stQuickAddExisting(\''+esc(String(i.id))+'\')">＋ ここで見つけた</button></div>';
+      }).join('');
+    }
+  }
   h += '<div class="section-label">リストにない物（この置き場で見つけた物）</div>';
   h += d.extras.map(function(x, i){ return '<div class="card" style="padding:9px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center"><div><div style="color:#e8d5a3;font-size:12px;font-weight:700">'+esc(x.name)+'　'+stNum(x.qty)+esc(x.unit||'')+'</div><div style="color:#666;font-size:10px">'+(x.itemId?'登録済みの品目に入れる':'新しい品目として登録')+(x.memo?'・'+esc(x.memo):'')+'</div></div><button class="btn-sm" style="color:#e87050" onclick="stDelExtra('+i+')">削除</button></div>'; }).join('');
   h += '<div style="padding:4px 12px"><button class="btn-sm" style="width:100%;padding:9px;background:none;border:1px dashed #4a4a38;color:#c8962a" onclick="stAddExtra()">＋ リストにない物を追加</button></div>';
@@ -3830,7 +3987,8 @@ function stQuickFind(text){
   var words = stWords(text); if(!words.length) return {words:words, here:[], other:[], near:[]};
   var locIt = stLocItems(stLoc), ids = {}; locIt.forEach(function(i){ ids[String(i.id)] = 1; });
   var here = stRank(locIt.filter(function(i){ return stMatchAll(i, words); }), words, text);
-  var other = here.length ? [] : stRank(items.filter(function(i){ return !ids[String(i.id)] && stMatchAll(i, words); }), words, text);
+  // ほかの置き場の品目・在庫0の品目も、この置き場で見つかったときのために出す（2026/11/21）
+  var other = stRank(items.filter(function(i){ return !ids[String(i.id)] && stMatchAll(i, words); }), words, text);
   var near = (here.length || other.length) ? [] : tmCandidates(stVoiceNorm(text), 5);
   return {words:words, here:here, other:other, near:near};
 }
@@ -3859,7 +4017,7 @@ function stCandRow(i, p, k, kind){
   }
   var where = locations.filter(function(l){ return stBook(i, l.id)>0; }).map(function(l){ return l.name+' '+stNum(stBook(i, l.id)); }).join('、');
   return '<div style="display:flex;gap:5px;align-items:center;margin-top:5px"><button class="btn-sm" style="flex:1;text-align:left;padding:8px" onclick="stQuickAddExisting(\''+id+'\')">'
-    + '<b style="color:#c8c8b0">'+esc(i.name)+'</b><span style="color:#888"> '+(where?esc(where)+u:'在庫なし')+'</span><span style="color:#70d0c8"> ＋ ここで見つけた</span></button></div>';
+    + '<b style="color:#c8c8b0">'+esc(i.name)+'</b><span style="color:#888"> '+(where?esc(where)+u:'在庫0')+'</span><span style="color:#70d0c8"> ＋ ここで見つけた</span></button></div>';
 }
 function stQuickShow(){
   var box = document.getElementById('st-qc'); if(!box) return;
@@ -3871,6 +4029,10 @@ function stQuickShow(){
   if(f.here.length){
     h += '<div style="color:#888;font-size:10px;margin-top:5px">この置き場で '+f.here.length+'件 '+wl+(f.here.length>8?'・言葉を足すと絞れます':'')+'</div>';
     h += f.here.slice(0,8).map(function(i,k){ return stCandRow(i, p, k, 'here'); }).join('');
+    if(f.other.length){
+      h += '<div style="color:#888;font-size:10px;margin-top:6px">この置き場の一覧にない品目（在庫0・ほかの置き場）'+f.other.length+'件</div>';
+      h += f.other.slice(0,4).map(function(i){ return stCandRow(i, p, 0, 'other'); }).join('');
+    }
   } else if(f.other.length){
     h += '<div style="color:#e8a050;font-size:11px;margin-top:5px">この置き場の一覧にはありません。ほかの置き場の品目に '+f.other.length+'件 '+wl+'</div>';
     h += f.other.slice(0,6).map(function(i){ return stCandRow(i, p, 0, 'other'); }).join('');
@@ -4114,7 +4276,8 @@ function stFlags(locId){
 // 現場の連携（2026/11/11）
 //  ・現場の大もとは日報アプリの工事台帳（nip_jobs）
 //  ・台帳の「施工中・予定」の現場は、在庫アプリの置き場（🏗️ 現場）として自動で出る
-//  ・在庫アプリで作った現場の置き場は、台帳にも工事として登録する（次の工事コードつき）
+//  ・（2026/11/21 変更）在庫アプリから台帳に工事を作ることはしない。現場の置き場は台帳の工事から選んで作る
+//    台帳とつながっていない現場の置き場は、名前が台帳の工事1件とだけ合うときにつなぐ。合わなければ「工事を選ぶ」まで原価に入らないことを知らせる
 //  ・台帳で名前を変えたら置き場の名前も変える（履歴に書いた置き場名も合わせる）
 //  ・台帳で完工にした現場：材料が残っていれば片付けを促す。残っていなければ「終わった現場」にしまう（履歴は残る）
 // ============================================================
@@ -4134,6 +4297,42 @@ function jsFindJob(js, name){
   var part = js.filter(function(j){ return names(j).some(function(x){ var n = jsNorm(x); return n && (n===nk || n.indexOf(nk)>=0 || nk.indexOf(n)>=0); }); });
   return part.length===1 ? part[0] : null;
 }
+// ===== 似た名前の判定（2026/11/21） =====
+// 施主の名字の部分（「川島様☆雨漏り修繕工事」「川島様邸」→「川島」）
+function ownerKey(s){
+  var t = String(s||''); try{ t = t.normalize('NFKC'); }catch(e){}
+  t = t.replace(/[\s　]+/g,'').replace(/^\d{4}-\d+/,'');
+  var m = t.match(/^(.+?)(?:様|邸|宅|さん|☆|★|・|[(（]|\/)/);
+  return m ? m[1] : t.replace(/(新築|リフォーム|改修|修繕|雨漏り|屋根|外壁|工事|現場).*$/,'');
+}
+function nameLike(a, b){
+  var k = ownerKey(a), k2 = ownerKey(b);
+  if(k && k2 && (k===k2 || (k.length>=2 && k2.length>=2 && (k.indexOf(k2)===0 || k2.indexOf(k)===0)))) return true;
+  var n = jsNorm(a), n2 = jsNorm(b);
+  return n.length>=3 && n2.length>=3 && (n.indexOf(n2)>=0 || n2.indexOf(n)>=0);   // 「倉庫」など短い言葉だけの一致は数えない
+}
+// 名前の似た工事（台帳）。完工は後ろ
+function similarJobs(name, exceptId){
+  if(!String(name||'').trim()) return [];
+  return jsJobs().filter(function(j){ return j.id!==exceptId && [j.name, j.client||''].concat(j.oldNames||[]).some(function(x){ return x && nameLike(name, x); }); })
+    .sort(function(a,b){ return (a.status==='done')-(b.status==='done'); });
+}
+// 名前の似た置き場
+function similarLocs(name, exceptId){
+  return locations.filter(function(l){ return l.id!==exceptId && nameLike(name, l.name); });
+}
+function jobLabel(j){ return (j.code?j.code+' ':'')+j.name+(j.status==='done'?'（完工）':''); }
+// 工事（台帳）を選ぶ選択肢。hint の名前に似た工事を上に出す。none を渡すと「なし」の選択肢を付ける
+function jobSelectOpts(selId, hint, none){
+  var js = jsJobs().slice().sort(function(a,b){ return (a.status==='done')-(b.status==='done'); });
+  var sim = hint ? similarJobs(hint) : [], used = false;
+  var op = function(j){ var on = !used && j.id===selId; if(on) used = true; return '<option value="'+esc(j.id)+'"'+(on?' selected':'')+'>'+esc(jobLabel(j))+'</option>'; };
+  var h = '<option value="">-- 工事を選ぶ（工事台帳） --</option>';
+  if(sim.length) h += '<optgroup label="名前の似た工事">'+sim.map(op).join('')+'</optgroup>';
+  h += '<optgroup label="工事台帳">'+js.map(op).join('')+'</optgroup>';
+  if(none) h += '<option value="__none__"'+(selId==='__none__'?' selected':'')+'>'+esc(none)+'</option>';
+  return h;
+}
 function locStock(lid){ return items.reduce(function(s,i){ return s + Math.max(0, parseFloat((i.stocks||{})[lid])||0); }, 0); }
 function locJob(l){ return l && l.jobId ? jsJobs().find(function(j){ return j.id===l.jobId; }) || null : null; }
 // 置き場の名前を変えたとき、履歴に書いた置き場名も合わせる（履歴は名前で置き場を探すため）
@@ -4148,12 +4347,8 @@ function siteSync(){
     var j = l.jobId ? js.find(function(x){ return x.id===l.jobId; }) : null;
     if(!j && !l.jobId){
       j = jsFindJob(js, l.name);
-      if(!j){
-        j = {id:'job-'+Date.now()+'-'+Math.floor(Math.random()*1000), code: jsNextCode(js), name: l.name, client:'', address: l.address||'', status:'active',
-             memo:'在庫アプリの現場から登録', createdAt: now, updatedAt: now};
-        js.unshift(j); jobsChanged = true;
-      }
-      l.jobId = j.id; changed = true;
+      if(!j){ if(!l.needJob){ l.needJob = true; changed = true; } return; }   // 台帳の工事は作らない（2026/11/21）
+      l.jobId = j.id; delete l.needJob; changed = true;
     }
     if(!j) return;   // 台帳から消された工事：置き場はそのまま残す
     if(j.name && l.name!==j.name){ jsRenameLocHist(l.name, j.name); l.name = j.name; changed = true; }
