@@ -1074,7 +1074,7 @@ function refreshCaseSelect() {
   cases.forEach(c => {
     if (c.jobGone && c.id !== cur) return;   // 台帳から削除した工事は、新しい書類の案件には出さない（2026/11/21）
     const o = document.createElement('option');
-    o.value = c.id; o.textContent = c.name + (c.jobGone ? '（台帳から削除）' : '');
+    o.value = c.id; o.textContent = c.name + (c.jobGone ? (c.jobCode ? '（台帳から削除）' : '（台帳にない）') : '');
     sel.appendChild(o);
   });
   if (cur) sel.value = cur;
@@ -2097,7 +2097,7 @@ function renderBudget(){
     const withB = cases.find(c=>docs.some(d=>d.dtype==='budget'&&d.caseId===c.id));
     budSel = (withB||cases[cases.length-1]||{}).id || '';
   }
-  sel.innerHTML = cases.length ? cases.slice().sort((a,b)=>(caseDone(a)+(a.jobGone?2:0))-(caseDone(b)+(b.jobGone?2:0))).map(c=>`<option value="${c.id}"${c.id===budSel?' selected':''}>${bEsc(c.name)}${c.jobGone?'（台帳から削除）':caseDone(c)?'（完工）':''}${docs.some(d=>d.dtype==='budget'&&d.caseId===c.id)?'　📊':''}</option>`).join('') : '<option value="">案件がありません</option>';
+  sel.innerHTML = cases.length ? cases.slice().sort((a,b)=>(caseDone(a)+(a.jobGone?2:0))-(caseDone(b)+(b.jobGone?2:0))).map(c=>`<option value="${c.id}"${c.id===budSel?' selected':''}>${bEsc(c.name)}${c.jobGone?(c.jobCode?'（台帳から削除）':'（台帳にない）'):caseDone(c)?'（完工）':''}${docs.some(d=>d.dtype==='budget'&&d.caseId===c.id)?'　📊':''}</option>`).join('') : '<option value="">案件がありません</option>';
   const box = document.getElementById('bud-body');
   const c = cases.find(x=>x.id===budSel);
   if(!c){ box.innerHTML = '<div class="empty"><span>📊</span>案件がありません</div>'; return; }
@@ -2575,12 +2575,14 @@ function budAutoCases(){
   // 台帳で削除された工事（2026/11/21）：書類も予算もない案件は一覧から消す。書類がある案件は残して「台帳から削除」と出す
   if(js.length){
     const ids = new Set(js.map(j=>j.id));
-    const gone = cases.filter(c=>c.jobCode && !ids.has(c.jobCode));
+    // 台帳の工事とつながっていない案件も、名前が台帳のどの工事とも合わなければ同じ扱い（工事IDを持たずに残った案件 2026/11/21）
+    const names = new Set(js.flatMap(j=>[j.name, ...(j.oldNames||[])]).filter(Boolean));
+    const gone = cases.filter(c=>c.jobCode ? !ids.has(c.jobCode) : !caseNames(c).some(x=>names.has(x)));
     gone.forEach(c=>{
       if(!docs.some(d=>d.caseId===c.id)){ cases = cases.filter(x=>x.id!==c.id); n++; }
       else if(!c.jobGone){ c.jobGone = true; c.updatedAt = now; n++; }
     });
-    cases.forEach(c=>{ if(c.jobGone && c.jobCode && ids.has(c.jobCode)){ delete c.jobGone; c.updatedAt = now; n++; } });
+    cases.forEach(c=>{ if(c.jobGone && ((c.jobCode && ids.has(c.jobCode)) || (!c.jobCode && caseNames(c).some(x=>names.has(x))))){ delete c.jobGone; c.updatedAt = now; n++; } });
   }
   return n;
 }
