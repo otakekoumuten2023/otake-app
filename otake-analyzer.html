@@ -2678,7 +2678,7 @@ async function loadFromGASManual(){ return OtakeSync.syncNow('genka'); }
     if(document.getElementById('_inbox_back')) return;
     var b = document.createElement('a'); b.id = '_inbox_back'; b.href = 'index.html?inbox=open';
     b.textContent = '↩ 貼り付けの一覧へ';
-    b.style.cssText = 'position:fixed;left:10px;bottom:84px;z-index:2147483000;background:#c8962a;color:#1a1a16;font-weight:700;font-size:12px;padding:9px 13px;border-radius:20px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.5);font-family:sans-serif';
+    b.style.cssText = 'position:fixed;left:10px;bottom:84px;z-index:250;background:#c8962a;color:#1a1a16;font-weight:700;font-size:12px;padding:9px 13px;border-radius:20px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.5);font-family:sans-serif';
     document.body.appendChild(b);
   }
   (window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(function(){ setTimeout(function(){
