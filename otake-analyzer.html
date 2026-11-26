@@ -1432,7 +1432,8 @@ function importJSON() {
       const r = budApplyImport(parsed);
       if (r.error) { msg.style.color='var(--danger)'; msg.textContent='⚠️ '+r.error; return; }
       budSel = r.caseId; persist(); renderAll();
-      msg.style.color='var(--sell)'; msg.textContent='✅ '+r.msg; toast('✅ '+r.msg,'ok');
+      const _ib1 = window._inboxDone && window._inboxDone();
+      msg.style.color='var(--sell)'; msg.textContent='✅ '+r.msg; toast('✅ '+r.msg+(_ib1?'（左下「↩ 貼り付けの一覧へ」で戻れます）':''),'ok');
       setTimeout(() => closeImportModal(), 1500);
       return;
     }
@@ -1500,7 +1501,8 @@ function importJSON() {
     msg.style.color = 'var(--sell)';
     msg.textContent = `✅ インポート完了！（書類${docCount}件${skipped?`・重複のため${skipped}件を飛ばしました`:''}）`;
     setTimeout(() => closeImportModal(), 1500);
-    toast(`✅ ${docCount}件の書類をインポートしました`,'ok');
+    const _ib2 = docCount>0 && window._inboxDone && window._inboxDone();
+    toast(`✅ ${docCount}件の書類をインポートしました`+(_ib2?'（左下「↩ 貼り付けの一覧へ」で戻れます）':''),'ok');
   } catch(e) {
     msg.style.color = 'var(--danger)';
     msg.textContent = '⚠️ JSONの形式が正しくありません';
@@ -2894,6 +2896,16 @@ async function loadFromGASManual(){ return OtakeSync.syncNow('genka'); }
     b.style.cssText = 'position:fixed;left:10px;bottom:84px;z-index:250;background:#c8962a;color:#1a1a16;font-weight:700;font-size:12px;padding:9px 13px;border-radius:20px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.5);font-family:sans-serif';
     document.body.appendChild(b);
   }
+  // 保存できたら一覧に「✓ 保存しました」と出す（2026/11/27 日報とそろえた）
+  function inboxMark(field){
+    var l = []; try{ l = JSON.parse(localStorage.getItem('otake_inbox')||'[]'); }catch(e){}
+    var t = l.find(function(x){ return x.id===id; }); if(!t) return;
+    t[field] = new Date().toISOString();
+    try{ localStorage.setItem('otake_inbox', JSON.stringify(l)); }catch(e){}
+  }
+  window._inboxMarkSaved = function(){ inboxMark('saved'); };
+  // 取り込みが成功したときに呼ぶ。貼り付けの一覧から開いたときだけ true を返す
+  window._inboxDone = function(){ if(!window._inboxActive) return false; window._inboxMarkSaved(); window._inboxActive = false; return true; };
   (window.OtakeSync ? OtakeSync.ready : Promise.resolve()).then(function(){ setTimeout(function(){
     var list = []; try{ list = JSON.parse(localStorage.getItem('otake_inbox')||'[]'); }catch(e){}
     var it = list.find(function(x){ return x.id===id; });
@@ -2904,6 +2916,7 @@ async function loadFromGASManual(){ return OtakeSync.syncNow('genka'); }
     catch(e){ alert('貼り付けた内容を開けませんでした：'+e.message); return; }
     it.opened = new Date().toISOString();
     try{ localStorage.setItem('otake_inbox', JSON.stringify(list)); }catch(e){}
+    window._inboxActive = true;
   }, 400); });
 })();
 </script>
