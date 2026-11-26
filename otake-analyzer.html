@@ -2050,9 +2050,11 @@ function budActuals(c){
   const carp = groups.find(g=>/大工/.test(g.kouji));
   const office = groups.find(g=>/諸経費|経費|現場管理/.test(g.kouji));
   if(!catTo[BUD_OFFICE_CAT] && office) catTo[BUD_OFFICE_CAT] = office.kouji;
+  // 画面で選んだ「区分 → 工種」（2026/11/26）。いちばん強い
+  Object.entries(c.labTo||{}).forEach(([cat,k])=>{ if(k && per[k]) catTo[cat] = k; });
   Object.keys(lab.byCat).forEach(cat=>{
     const v = lab.byCat[cat]; if(!v.ninku) return;
-    if(budIsK(cat)) catTo[cat] = per[budCatLabel(cat)] ? budCatLabel(cat) : '';
+    if(budIsK(cat) && !(c.labTo && c.labTo[cat] && per[c.labTo[cat]])) catTo[cat] = per[budCatLabel(cat)] ? budCatLabel(cat) : '';
     const k = budIsK(cat) ? catTo[cat] : (catTo[cat] || (carp&&carp.kouji) || '');
     const slot = k?per[k]:un; slot.labor.push({cat, ...v}); slot.total += v.amount;
   });
@@ -2140,7 +2142,7 @@ function renderBudget(){
     const kopts = sel0 => `<option value="">-- 工種を選ぶ --</option>`+A.groups.map(g=>`<option${g.kouji===sel0?' selected':''}>${bEsc(g.kouji)}</option>`).join('');
     U.buy.forEach(({doc:d})=>{ h += `<div class="bud-act"><div style="cursor:pointer" onclick="openDetail('${d.id}')"><b>${bEsc(d.date||'')}　${bEsc(d.party||'')}</b><div class="ps" style="margin:0">${bEsc(d.name||'')}${d.wtype?'・'+bEsc(d.wtype):''}</div></div><div class="num">${budYen(d.amount)}</div><select onchange="budSetKouji('${d.id}',this.value)">${kopts('')}</select></div>`; });
     if(U.inv) h += `<div class="bud-act"><div style="cursor:pointer" onclick="budShowLedger('${c.id}','inv','__none__')"><b>${bEsc(U.inv.party)} 在庫振替 ▸</b><div class="ps" style="margin:0">${U.inv.entries.length}件・押すと日付ごと</div></div><div class="num">${budYen(U.inv.amount)}</div><select onchange="budSetInvKouji(this.value,'')">${kopts('')}</select></div>`;
-    U.labor.forEach(l=>{ h += `<div class="bud-act"><div style="cursor:pointer" onclick="budShowLedger('${c.id}','labor','__none__')"><b>日報の人工：${bEsc(budCatLabel(l.cat))} ▸</b><div class="ps" style="margin:0">${l.ninku.toFixed(1)}人工・押すと日付ごと</div></div><div class="num">${budYen(l.amount)}</div><span class="ps" style="margin:0">「大工工事」の工種を作ると自動で入ります</span></div>`; });
+    U.labor.forEach(l=>{ h += `<div class="bud-act"><div style="cursor:pointer" onclick="budShowLedger('${c.id}','labor','__none__')"><b>日報の人工：${bEsc(budCatLabel(l.cat))} ▸</b><div class="ps" style="margin:0">${l.ninku.toFixed(1)}人工・押すと日付ごと</div></div><div class="num">${budYen(l.amount)}</div><select onchange="budSetLabKouji('${c.id}','${bEsc(l.cat)}',this.value)">${kopts('')}<option value="__new__">＋「大工工事」を作って入れる</option><option value="__other__">＋ 別の名前の工種を作って入れる…</option></select></div>`; });
     h += `</div></div>`;
   }
   // 工種が決まっていない業者見積
@@ -2150,6 +2152,8 @@ function renderBudget(){
     uq.forEach(q=>{ h += `<div class="bud-act"><div style="cursor:pointer" onclick="openDetail('${q.id}')"><b>${bEsc(q.party||'')}　${bEsc(q.date||'')}</b><div class="ps" style="margin:0">${bEsc(q.name||'')}・${(q.materials||[]).length}行・${bEsc(q.status||'検討中')}</div></div><div class="num">${budYen(q.amount)}</div><select onchange="setQuoteKouji('${q.id}',this.value)"><option value="">-- 工種を選ぶ --</option>${A.groups.map(g=>`<option>${bEsc(g.kouji)}</option>`).join('')}</select></div>`; });
     h += `</div></div>`;
   }
+  // 材料・仕入れの一覧（2026/11/26）
+  h += budMatsCard(c, A);
   // 日報の人工（大工の区分ごと）
   if(A.lab.ninku){
     h += `<div class="card"><div class="card-t">👷 日報の人工（大工の区分ごと・${A.lab.days}日分）</div><table class="tbl"><thead><tr><th>区分</th><th>人工</th><th>金額</th><th>日数</th></tr></thead><tbody>`;
@@ -2214,7 +2218,8 @@ function budDetailHtml(c, g, act){
     h += `</div>`;
   }
   act.labor.forEach(l=>{ const lk='lab|'+g.id+'|'+l.cat, lop=!!budOpen[lk];
-    h += `<div class="bud-act2" onclick="event.stopPropagation()"><div class="bud-l2" style="cursor:pointer" onclick="budToggleKey('${lk}')"><span><b>${lop?'▾':'▸'} 日報の人工：${bEsc(budCatLabel(l.cat))}</b>　${l.ninku.toFixed(2)}人工・${l.days}日</span><b>${budYen(l.amount)}</b></div>`;
+    h += `<div class="bud-act2" onclick="event.stopPropagation()"><div class="bud-l2" style="cursor:pointer" onclick="budToggleKey('${lk}')"><span><b>${lop?'▾':'▸'} 日報の人工：${bEsc(budCatLabel(l.cat))}</b>　${l.ninku.toFixed(2)}人工・${l.days}日</span><b>${budYen(l.amount)}</b></div>
+      <div style="margin-top:4px"><select onchange="budSetLabKouji('${c.id}','${bEsc(l.cat)}',this.value)" style="font-size:11px;padding:4px 6px;width:auto"><option value="">工種を変える…</option>${budGroups(c.id).filter(x=>x.kouji!==g.kouji).map(x=>`<option>${bEsc(x.kouji)}</option>`).join('')}<option value="__auto__">自動に戻す</option></select></div>`;
     if(lop) h += `<div style="display:flex;flex-direction:column;gap:5px;margin-top:6px">${budLaborEntries(l.entries)}</div>`;
     h += `</div>`; });
   if(act.total) h += `<div style="margin-top:6px"><button class="btn btn-q btn-sm" onclick="event.stopPropagation();budShowLedger('${c.id}','all','${bEsc(g.kouji)}')">この工種の実績を日付順に見る</button></div>`;
@@ -2343,8 +2348,157 @@ function budShowInv(cid, hid, back){
       <option value="__base__"${!(c.invOv && c.invOv[e.id]!=null)?' selected':''}>現場全体の設定に合わせる（${bEsc(c.invKouji||'工種なし')}）</option>
       ${budGroups(cid).map(g=>`<option value="${bEsc(g.kouji)}"${c.invOv && c.invOv[e.id]===g.kouji?' selected':''}>${bEsc(g.kouji)}</option>`).join('')}
       <option value=""${c.invOv && c.invOv[e.id]===''?' selected':''}>工種なし</option></select></div>
-    <div class="ps" style="margin-top:6px">数量や単価を直すときは、在庫アプリの「📋 履歴」でこの記録を編集してください。</div>
+    ${(e.kind==='use'||e.kind==='out-ext') && !e.nippoId ? `<div class="fg" style="margin-top:6px"><label>工事（この記録を別の工事へ付け替える）</label><select onchange="budInvMoveJob('${cid}','${String(e.id)}',this.value)">
+      <option value="">${bEsc(c.name)}（いま）</option>${cases.filter(x=>x.id!==cid && !x.jobGone).map(x=>`<option value="${x.id}">${bEsc(x.name)}${caseDone(x)?'（完工）':''}</option>`).join('')}</select></div>` : ''}
+    <div class="ps" style="margin-top:6px">数量や単価を直すときは、在庫アプリの「📋 履歴」でこの記録を編集してください。${e.nippoId?'この記録は日報の【材料】から入ったので、工事を変えるときは日報を直してください。':''}${e.kind==='out'||e.kind==='back'||e.kind==='ret'?'現場の置き場への出し入れなので、工事を変えるときは在庫アプリで搬入先を直してください。':''}</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${budBackBtn(back)}${e.nippoId?`<button class="btn btn-q btn-sm" onclick="budShowNippo('${e.nippoId}',${back?1:0})">この日の日報を見る</button>`:''}<a class="btn btn-q btn-sm" href="daiku-otake-v14.html" target="_blank" style="text-decoration:none">在庫アプリを開く</a></div>`);
+}
+// ===== 日報の人工の工種を選ぶ（2026/11/26） =====
+function budSetLabKouji(cid, cat, v){
+  const c = cases.find(x=>x.id===cid); if(!c || !v) return;
+  c.labTo = c.labTo || {};
+  if(v==='__auto__'){ delete c.labTo[cat]; }
+  else {
+    let k = v;
+    if(v==='__new__' || v==='__other__'){
+      k = v==='__new__' ? '大工工事' : (prompt('新しい工種の名前', '大工工事')||'').trim();
+      if(!k) { renderBudget(); return; }
+      const gs = budGroups(c.id);
+      if(!gs.some(g=>g.kouji===k)) docs.push({id:budId('bud'), dtype:'budget', caseId:c.id, kouji:k, order:(gs.length?Math.max(...gs.map(g=>g.order||0)):0)+1, lines:[], estTotal:0, note:'日報の人工から追加', createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()});
+    }
+    c.labTo[cat] = k;
+  }
+  c.updatedAt = new Date().toISOString(); persist(); renderBudget(); renderHeader();
+  toast('✅ 日報の人工の工種を変えました','ok');
+}
+
+// ===== 材料・仕入れの一覧（レシート・請求書の明細と、在庫の記録）2026/11/26 =====
+function budMatRows(c, A){
+  const rows = [];
+  docs.filter(d=>d.dtype==='buy'&&d.caseId===c.id).forEach(d=>{
+    const k = budAutoKouji(d, A.groups) || '';
+    const ms = (d.materials||[]).filter(m=>m && (m.name||m.amount));
+    if(!ms.length){ rows.push({src:'buy', date:String(d.date||'').slice(0,10), name:d.name||d.doctype||'書類', qty:null, unit:'', price:0, amount:+d.amount||0, kouji:k, how:`${d.doctype||'書類'}・${d.party||''}`, docId:d.id, idx:-1}); return; }
+    (d.materials||[]).forEach((m,i)=>{ if(!m || !(m.name||m.amount)) return;
+      rows.push({src:'buy', date:String(d.date||'').slice(0,10), name:m.name||'', qty:+m.qty||0, unit:m.unit||'', price:+m.unitPrice||0, amount:+m.amount||0, kouji:k,
+        how:`${d.doctype||'書類'}・${d.party||''}`, docId:d.id, idx:i, back:+m.returnedQty||0}); });
+  });
+  invEntries().filter(e=>e.caseId===c.id).forEach(e=>{
+    const k = invKoujiOf(c, e);
+    rows.push({src:'inv', date:e.date, name:e.itemName, qty:e.qty, unit:e.unit||'', price:e.unitPrice, amount:e.amount, kouji:(k && A.per[k]) ? k : '', how:`${budInvType(e)}・${budInvSrc(e)}`, hid:String(e.id)});
+  });
+  return rows.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+}
+function budMatsCard(c, A){
+  const rows = budMatRows(c, A);
+  if(!rows.length) return '';
+  const buy = rows.filter(r=>r.src==='buy').reduce((s,r)=>s+r.amount,0);
+  const invOut = rows.filter(r=>r.src==='inv'&&r.amount>0).reduce((s,r)=>s+r.amount,0);
+  const invBack = rows.filter(r=>r.src==='inv'&&r.amount<0).reduce((s,r)=>s+r.amount,0);
+  const op = !!budOpen['mats'];
+  let h = `<div class="card"><div class="card-t" style="cursor:pointer" onclick="budToggleKey('mats')">${op?'▾':'▸'} 🧾 材料・仕入れの一覧（${rows.length}行）　${budYen(buy+invOut+invBack)}</div>
+    <div class="ps" style="padding:8px 14px 0;margin:0">レシート・請求書 ${budYen(buy)}　在庫から ${budYen(invOut)}　在庫へ戻し ${budYen(invBack)}</div>`;
+  if(!op){ h += `<div style="padding:8px 14px 12px"><button class="btn btn-q btn-sm" onclick="budToggleKey('mats')">一覧を開く</button></div></div>`; return h; }
+  h += `<div class="ps" style="padding:6px 14px 0;margin:0">行を押すと、工種・工事の付け替えや「在庫に戻す」ができます。</div><div style="padding:8px 14px 12px;display:flex;flex-direction:column;gap:5px">`;
+  rows.forEach(r=>{
+    const tag = r.src==='buy' ? '<span class="tag tag-e">書類</span>' : '<span class="tag tag-b">在庫</span>';
+    const open = r.src==='buy' ? `budMatEdit('${c.id}','${r.docId}',${r.idx})` : `budShowInv('${c.id}','${r.hid}')`;
+    h += `<div class="bud-line" onclick="event.stopPropagation();${open}">
+      <div class="bud-l2" style="margin:0"><span><b>${bEsc(r.date||'日付なし')}</b>　${tag} ${bEsc(r.name)}${r.qty!=null?`　${budNk(r.qty)}${bEsc(r.unit)}`:''}</span><b style="${r.amount<0?'color:var(--sell)':''}">${budYen(r.amount)}</b></div>
+      <div class="bud-l3">${bEsc(r.how)}${r.price?`・単価 ${budYen(r.price)}`:''}　<span style="color:var(--text3)">→ ${bEsc(r.kouji||'工種なし')}</span>${r.back?`　<span style="color:var(--sell)">（${budNk(r.back)}${bEsc(r.unit)}を在庫へ戻し済み）</span>`:''}</div></div>`;
+  });
+  h += `</div></div>`;
+  return h;
+}
+function budZaikoLoad(){
+  const g = k => { try{ return JSON.parse(localStorage.getItem(k)||'[]')||[]; }catch(e){ return []; } };
+  return {items:g('dk_items'), locs:g('dk_loc'), hist:g('dk_hist')};
+}
+function budNormName(s){ let t = String(s||''); try{ t = t.normalize('NFKC'); }catch(e){} return t.replace(/[\s　]/g,'').toLowerCase(); }
+// レシート・請求書の明細1行
+function budMatEdit(cid, docId, idx){
+  const c = cases.find(x=>x.id===cid), d = docs.find(x=>x.id===docId); if(!c || !d) return;
+  const m = idx>=0 ? (d.materials||[])[idx] : null;
+  const row = (k,v) => v!=null && v!=='' ? `<div class="bud-l2"><span style="color:var(--text2)">${k}</span><span>${bEsc(v)}</span></div>` : '';
+  const gs = budGroups(cid);
+  let h = `<h3>🧾 ${bEsc(d.doctype||'書類')}の明細　${bEsc(d.date||'')}</h3>
+    ${row('取引先', d.party)}${m?row('品名', m.name)+row('数量', budNk(m.qty)+(m.unit||''))+row('単価（税抜）', budYen(m.unitPrice))+row('金額', budYen(m.amount)):row('金額', budYen(d.amount))}
+    ${m && m.returnedQty ? row('在庫へ戻し済み', budNk(m.returnedQty)+(m.unit||'')) : ''}
+    <div class="fg" style="margin-top:10px"><label>工種（この書類まるごと）</label><select onchange="if(this.value!=='__keep__'){budSetKouji('${d.id}',this.value);budMatEdit('${cid}','${docId}',${idx});}">
+      <option value="__keep__">${bEsc(budAutoKouji(d, gs)||'工種なし')}（いま）</option>${gs.map(g=>`<option>${bEsc(g.kouji)}</option>`).join('')}<option value="__none__">工種なし</option></select></div>
+    <div class="fg"><label>工事（この書類まるごと別の工事へ移す）</label><select onchange="budMoveDoc('${d.id}',this.value)">
+      <option value="">${bEsc(c.name)}（いま）</option>${cases.filter(x=>x.id!==cid && !x.jobGone).map(x=>`<option value="${x.id}">${bEsc(x.name)}${caseDone(x)?'（完工）':''}</option>`).join('')}</select></div>`;
+  if(m && (+m.qty||0) > 0){
+    const Z = budZaikoLoad();
+    const left = Math.max(0, (+m.qty||0) - (+m.returnedQty||0));
+    const nn = budNormName(m.name);
+    const same = Z.items.filter(i=>budNormName(i.name)===nn);
+    const near = Z.items.filter(i=>!same.includes(i) && nn.length>=2 && (budNormName(i.name).includes(nn) || nn.includes(budNormName(i.name)))).slice(0,8);
+    const whs = Z.locs.filter(l=>l.locType!=='site' && !l.archived);
+    h += `<div class="bud-sub" style="margin-top:14px">📦 余った分を在庫に戻す</div>
+      <div class="ps" style="margin:0 0 6px">在庫アプリに「入庫（元の現場：${bEsc(c.name)}）」として入り、この工事の原価から 数量×単価 が引かれます。</div>
+      <div class="fg"><label>戻す数量（${bEsc(m.unit||'')}・まだ戻していない分 ${budNk(left)}）</label><input type="number" id="bm-qty" value="${left}" min="0" step="any"></div>
+      <div class="fg"><label>戻す場所</label><select id="bm-loc">${whs.map(l=>`<option value="${bEsc(l.id)}">${bEsc(l.name)}</option>`).join('') || '<option value="">（倉庫がありません）</option>'}</select></div>
+      <div class="fg"><label>在庫の品目</label><select id="bm-item">
+        ${same.map(i=>`<option value="${bEsc(String(i.id))}">${bEsc(i.name)}（同じ名前）</option>`).join('')}
+        <option value="__new__"${same.length?'':' selected'}>＋ 新しい品目「${bEsc(m.name)}」として登録</option>
+        ${near.length?`<optgroup label="名前の近い品目">${near.map(i=>`<option value="${bEsc(String(i.id))}">${bEsc(i.name)}</option>`).join('')}</optgroup>`:''}</select></div>
+      <button class="btn btn-b btn-sm" style="margin-top:4px" onclick="budReturnToStock('${cid}','${docId}',${idx})">在庫に戻す</button>`;
+  }
+  h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-q btn-sm" onclick="budClose();openDetail('${d.id}')">書類を開いて品名・数量・金額を直す</button></div>`;
+  budModal(h);
+}
+function budMoveDoc(docId, toCase){
+  const d = docs.find(x=>x.id===docId), to = cases.find(x=>x.id===toCase); if(!d || !to) return;
+  if(!confirm(`この書類（${d.party||''} ${budYen(d.amount)}）を「${to.name}」へ移しますか？\n工種は移した先で選び直してください。`)) return;
+  d.caseId = to.id; d.kouji = ''; budTouch(d); persist(); budClose(); renderBudget(); renderHeader();
+  toast('✅ 書類を「'+to.name+'」へ移しました','ok');
+}
+function budReturnToStock(cid, docId, idx){
+  const c = cases.find(x=>x.id===cid), d = docs.find(x=>x.id===docId); const m = d && (d.materials||[])[idx];
+  if(!c || !m) return;
+  const qty = parseFloat((document.getElementById('bm-qty')||{}).value)||0;
+  const locId = (document.getElementById('bm-loc')||{}).value||'';
+  const itemSel = (document.getElementById('bm-item')||{}).value||'';
+  if(qty<=0) return alert('戻す数量を入れてください');
+  if(!locId) return alert('戻す場所（倉庫）を選んでください。在庫アプリに倉庫がありません。');
+  const left = (+m.qty||0) - (+m.returnedQty||0);
+  if(qty > left + 1e-9 && !confirm(`レシートの数量（まだ戻していない分 ${budNk(left)}${m.unit||''}）より多く戻します。よろしいですか？`)) return;
+  const Z = budZaikoLoad();
+  const loc = Z.locs.find(l=>l.id===locId); if(!loc) return alert('戻す場所が見つかりません。在庫アプリを一度開いてから、やり直してください。');
+  const price = +m.unitPrice || ((+m.amount||0)/((+m.qty)||1));
+  let it = itemSel && itemSel!=='__new__' ? Z.items.find(i=>String(i.id)===itemSel) : null;
+  const now = Date.now();
+  if(!it){
+    const stocks = {}; Z.locs.forEach(l=>{ if(l.locType!=='site') stocks[l.id] = 0; });
+    it = {id:now, stockId:'', name:m.name, category:'その他', unit:m.unit||'個', minStock:0, basePrice:Math.round(price*100)/100, stocks};
+    Z.items.push(it);
+  }
+  it.stocks = it.stocks || {};
+  it.stocks[locId] = (parseFloat(it.stocks[locId])||0) + qty;
+  const t = new Date(), ds = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  Z.hist.unshift({id:now+1, date:ds, type:'in', itemId:it.id, itemName:it.name, stockId:it.stockId||'', qty, locName:loc.name, destName:'', jobName:c.name,
+    supplier:d.party||'', memo:`余りの回収（原価アプリ：${d.doctype||'書類'} ${d.date||''}）`, unitPrice:Math.round(price*100)/100,
+    fromJobCode:c.jobCode||'', fromJobName:c.name, fromDocId:d.id});
+  // 在庫アプリのデータに書く（保存すると自動で同期される）
+  localStorage.setItem('dk_items', JSON.stringify(Z.items));
+  localStorage.setItem('dk_hist', JSON.stringify(Z.hist));
+  m.returnedQty = Math.round(((+m.returnedQty||0) + qty)*1000)/1000;
+  // 戻した分は、レシートと同じ工種から引く
+  const rk = budAutoKouji(d, budGroups(cid)) || '';
+  c.invOv = c.invOv || {}; if(rk) c.invOv[String(now+1)] = rk; c.updatedAt = new Date().toISOString();
+  budTouch(d); persist(); budClose(); renderBudget(); renderHeader();
+  toast(`✅ ${it.name} ${budNk(qty)}${it.unit||''} を「${loc.name}」に戻しました（原価から ${budYen(qty*price)} 引きました）`,'ok');
+}
+// 在庫の記録（使用・置き場にない現場への持出）を別の工事へ。在庫アプリの記録を書き換える（同期で他の端末にも入る）
+function budInvMoveJob(cid, hid, toCase){
+  const to = cases.find(x=>x.id===toCase); if(!to) return;
+  const Z = budZaikoLoad(); const h = Z.hist.find(x=>String(x.id)===String(hid)); if(!h) return alert('在庫の記録が見つかりません');
+  if(!confirm(`この記録（${h.itemName||''} ${h.qty||''}${h.unit||''}）を「${to.name}」の原価へ付け替えますか？`)) return;
+  h.jobCode = to.jobCode || ''; h.jobName = to.name; if(h.type==='use' || !h.destLocId) h.destName = to.name;
+  h.editedAt = new Date().toISOString(); h.editNote = '原価アプリで工事を付け替え';
+  localStorage.setItem('dk_hist', JSON.stringify(Z.hist));
+  budClose(); renderBudget(); renderHeader(); toast('✅ 「'+to.name+'」へ付け替えました','ok');
 }
 function budSetInvOv(cid, hid, k, back){
   const c = cases.find(x=>x.id===cid); if(!c) return;
