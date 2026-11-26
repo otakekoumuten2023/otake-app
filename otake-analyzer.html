@@ -1200,7 +1200,7 @@ function invEntries() {
     const n = h.nippoId ? nipById[h.nippoId] : null;
     // 工事コード → 作業名 → 搬入先の名前 の順に案件を探す（作業名が台帳にない言葉でも、搬入先が現場名なら拾う 2026/11/21）
     const jobCase = () => caseFor(n ? n.jobCode : (h.jobCode || ''), n ? n.jobName : (h.jobName || h.destName || '')) || (!n && h.jobName && h.destName ? caseFor('', h.destName) : null);
-    const add = (c, sign, kind, place) => { if (c) out.push({ c, sign, kind, place, h, qty, price }); };
+    const add = (c, sign, kind, place) => { if (c) out.push({ c, sign, kind, place, h, qty, price, u: it ? (it.unit || '') : '' }); };
     const t = h.type;
     if (t === 'out' || t === 'ret' || t === 'move') {
       if (!to && t === 'out') { add(jobCase(), 1, 'out-ext', h.locName || ''); return; }   // 場所一覧にない現場へ
@@ -1217,7 +1217,7 @@ function invEntries() {
   return out.map(e => {
     const h = e.h;
     return { caseId: e.c.id, id: String(h.id), date: String(h.date || '').slice(0, 10), type: h.type, kind: e.kind, place: e.place,
-      itemName: h.itemName || '', qty: e.sign * e.qty, unit: h.unit || '', unitPrice: e.price, amount: e.sign * e.qty * e.price,
+      itemName: h.itemName || '', qty: e.sign * e.qty, unit: h.unit || e.u || '', unitPrice: e.price, amount: e.sign * e.qty * e.price,
       locName: h.locName || '', destName: h.destName || '', jobName: h.jobName || '', nippoId: h.nippoId || '', memo: h.memo || '', chat: !!h.chatKey };
   }).sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
@@ -2351,7 +2351,65 @@ function budShowInv(cid, hid, back){
     ${(e.kind==='use'||e.kind==='out-ext') && !e.nippoId ? `<div class="fg" style="margin-top:6px"><label>工事（この記録を別の工事へ付け替える）</label><select onchange="budInvMoveJob('${cid}','${String(e.id)}',this.value)">
       <option value="">${bEsc(c.name)}（いま）</option>${cases.filter(x=>x.id!==cid && !x.jobGone).map(x=>`<option value="${x.id}">${bEsc(x.name)}${caseDone(x)?'（完工）':''}</option>`).join('')}</select></div>` : ''}
     <div class="ps" style="margin-top:6px">数量や単価を直すときは、在庫アプリの「📋 履歴」でこの記録を編集してください。${e.nippoId?'この記録は日報の【材料】から入ったので、工事を変えるときは日報を直してください。':''}${e.kind==='out'||e.kind==='back'||e.kind==='ret'?'現場の置き場への出し入れなので、工事を変えるときは在庫アプリで搬入先を直してください。':''}</div>
+    ${budInvReturnHtml(c, e)}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${budBackBtn(back)}${e.nippoId?`<button class="btn btn-q btn-sm" onclick="budShowNippo('${e.nippoId}',${back?1:0})">この日の日報を見る</button>`:''}<a class="btn btn-q btn-sm" href="daiku-otake-v14.html" target="_blank" style="text-decoration:none">在庫アプリを開く</a></div>`);
+}
+// ===== 持っていったが使わなかった材料を在庫に戻す（2026/11/26） =====
+// この記録から戻した数（戻しの記録には retOf にこの記録のIDを入れている）
+function budInvReturned(hist, hid){ return hist.filter(x=>String(x.retOf)===String(hid)).reduce((s,x)=>s+(parseFloat(x.qty)||0),0); }
+function budInvReturnHtml(c, e){
+  if(!(e.amount>0) || ['out','use','nippo','out-ext'].indexOf(e.kind)<0) return '';
+  const Z = budZaikoLoad(); const h = Z.hist.find(x=>String(x.id)===String(e.id)); if(!h) return '';
+  const done = budInvReturned(Z.hist, e.id), left = Math.max(0, Math.round((e.qty - done)*1000)/1000);
+  const whs = Z.locs.filter(l=>l.locType!=='site' && !l.archived);
+  const it = Z.items.find(i=>String(i.id)===String(h.itemId)) || Z.items.find(i=>i.name===h.itemName);
+  const site = e.kind==='out' ? ((h.destLocId && Z.locs.find(l=>l.id===h.destLocId)) || Z.locs.find(l=>l.name===h.destName)) : null;
+  const atSite = site && it ? (parseFloat((it.stocks||{})[site.id])||0) : null;
+  const defLoc = (Z.locs.find(l=>l.name===h.locName && l.locType!=='site') || whs[0] || {}).id;
+  const how = e.kind==='out'
+    ? `現場の置き場「${bEsc(site?site.name:h.destName)}」から倉庫へ「返却」します（いま置き場に ${budNk(atSite||0)}${bEsc(e.unit||(it&&it.unit)||'')}）。`
+    : `在庫アプリに「入庫（元の現場：${bEsc(c.name)}）」として入ります。`;
+  return `<div class="bud-sub" style="margin-top:14px">📦 使わなかった分を在庫に戻す</div>
+    <div class="ps" style="margin:0 0 6px">${how}この工事の原価から 数量×単価（${budYen(e.unitPrice)}）が引かれます。${done?`<br>この記録から戻した分：${budNk(done)}`:''}</div>
+    ${left>0 ? `<div class="fg"><label>戻す数量（まだ戻していない分 ${budNk(left)}）</label><input type="number" id="bi-qty" value="${left}" min="0" step="any"></div>
+    <div class="fg"><label>戻す場所</label><select id="bi-loc">${whs.map(l=>`<option value="${bEsc(l.id)}"${l.id===defLoc?' selected':''}>${bEsc(l.name)}</option>`).join('')}</select></div>
+    <button class="btn btn-b btn-sm" onclick="budInvReturn('${c.id}','${String(e.id)}')">在庫に戻す</button>` : `<div class="ps" style="margin:0">この記録の分は、すべて戻してあります。</div>`}`;
+}
+function budInvReturn(cid, hid){
+  const c = cases.find(x=>x.id===cid); const e = invEntries().find(x=>x.caseId===cid && String(x.id)===String(hid));
+  if(!c || !e) return;
+  const qty = parseFloat((document.getElementById('bi-qty')||{}).value)||0;
+  const locId = (document.getElementById('bi-loc')||{}).value||'';
+  if(qty<=0) return alert('戻す数量を入れてください');
+  const Z = budZaikoLoad(); const h = Z.hist.find(x=>String(x.id)===String(hid)); if(!h) return alert('在庫の記録が見つかりません');
+  const wh = Z.locs.find(l=>l.id===locId); if(!wh) return alert('戻す場所を選んでください');
+  const it = Z.items.find(i=>String(i.id)===String(h.itemId)) || Z.items.find(i=>i.name===h.itemName);
+  if(!it) return alert('在庫アプリにこの品目がありません（消された可能性があります）。在庫アプリで品目を作ってから「入庫」で戻してください。');
+  const left = e.qty - budInvReturned(Z.hist, hid);
+  if(qty > left + 1e-9 && !confirm(`この記録の数（まだ戻していない分 ${budNk(left)}）より多く戻します。よろしいですか？`)) return;
+  it.stocks = it.stocks || {};
+  const now = Date.now(), t = new Date(), ds = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  let rec;
+  if(e.kind==='out'){
+    const site = (h.destLocId && Z.locs.find(l=>l.id===h.destLocId)) || Z.locs.find(l=>l.name===h.destName);
+    if(!site) return alert('現場の置き場が見つかりません。在庫アプリの「返却」で戻してください。');
+    const have = parseFloat(it.stocks[site.id])||0;
+    if(have < qty && !confirm(`在庫アプリでは、現場の置き場「${site.name}」に ${budNk(have)}${it.unit||''} しかありません。\nそれでも ${budNk(qty)}${it.unit||''} 戻しますか？（置き場の数は0にします）`)) return;
+    it.stocks[site.id] = Math.max(0, have - qty);
+    rec = {id:now, date:ds, type:'ret', itemId:it.id, itemName:it.name, stockId:it.stockId||'', qty, locName:site.name, destName:wh.name, destLocId:wh.id,
+      jobName:c.name, jobCode:c.jobCode||'', supplier:'', memo:'使わなかった分を返却（原価アプリ）', unitPrice:e.unitPrice, retOf:String(hid)};
+  } else {
+    rec = {id:now, date:ds, type:'in', itemId:it.id, itemName:it.name, stockId:it.stockId||'', qty, locName:wh.name, destName:'', jobName:c.name,
+      supplier:'', memo:'使わなかった分を在庫へ戻し（原価アプリ）', unitPrice:e.unitPrice, fromJobCode:c.jobCode||'', fromJobName:c.name, retOf:String(hid)};
+  }
+  it.stocks[wh.id] = (parseFloat(it.stocks[wh.id])||0) + qty;
+  Z.hist.unshift(rec);
+  localStorage.setItem('dk_items', JSON.stringify(Z.items));
+  localStorage.setItem('dk_hist', JSON.stringify(Z.hist));
+  // 戻した分は、元の記録と同じ工種から引く
+  const k = invKoujiOf(c, e); c.invOv = c.invOv || {}; if(k) c.invOv[String(now)] = k; c.updatedAt = new Date().toISOString();
+  persist(); budClose(); renderBudget(); renderHeader();
+  toast(`✅ ${it.name} ${budNk(qty)}${it.unit||''} を「${wh.name}」に戻しました（原価から ${budYen(qty*e.unitPrice)} 引きました）`,'ok');
 }
 // ===== 日報の人工の工種を選ぶ（2026/11/26） =====
 function budSetLabKouji(cid, cat, v){
@@ -2383,9 +2441,10 @@ function budMatRows(c, A){
       rows.push({src:'buy', date:String(d.date||'').slice(0,10), name:m.name||'', qty:+m.qty||0, unit:m.unit||'', price:+m.unitPrice||0, amount:+m.amount||0, kouji:k,
         how:`${d.doctype||'書類'}・${d.party||''}`, docId:d.id, idx:i, back:+m.returnedQty||0}); });
   });
+  const zh = budZaikoLoad().hist;
   invEntries().filter(e=>e.caseId===c.id).forEach(e=>{
     const k = invKoujiOf(c, e);
-    rows.push({src:'inv', date:e.date, name:e.itemName, qty:e.qty, unit:e.unit||'', price:e.unitPrice, amount:e.amount, kouji:(k && A.per[k]) ? k : '', how:`${budInvType(e)}・${budInvSrc(e)}`, hid:String(e.id)});
+    rows.push({src:'inv', date:e.date, name:e.itemName, qty:e.qty, unit:e.unit||'', price:e.unitPrice, amount:e.amount, kouji:(k && A.per[k]) ? k : '', how:`${budInvType(e)}・${budInvSrc(e)}`, hid:String(e.id), back:e.amount>0 ? budInvReturned(zh, e.id) : 0});
   });
   return rows.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
 }
@@ -2399,7 +2458,7 @@ function budMatsCard(c, A){
   let h = `<div class="card"><div class="card-t" style="cursor:pointer" onclick="budToggleKey('mats')">${op?'▾':'▸'} 🧾 材料・仕入れの一覧（${rows.length}行）　${budYen(buy+invOut+invBack)}</div>
     <div class="ps" style="padding:8px 14px 0;margin:0">レシート・請求書 ${budYen(buy)}　在庫から ${budYen(invOut)}　在庫へ戻し ${budYen(invBack)}</div>`;
   if(!op){ h += `<div style="padding:8px 14px 12px"><button class="btn btn-q btn-sm" onclick="budToggleKey('mats')">一覧を開く</button></div></div>`; return h; }
-  h += `<div class="ps" style="padding:6px 14px 0;margin:0">行を押すと、工種・工事の付け替えや「在庫に戻す」ができます。</div><div style="padding:8px 14px 12px;display:flex;flex-direction:column;gap:5px">`;
+  h += `<div class="ps" style="padding:6px 14px 0;margin:0">行を押すと、工種・工事の付け替えや「在庫に戻す」（レシートの余り・持っていったが使わなかった材料）ができます。</div><div style="padding:8px 14px 12px;display:flex;flex-direction:column;gap:5px">`;
   rows.forEach(r=>{
     const tag = r.src==='buy' ? '<span class="tag tag-e">書類</span>' : '<span class="tag tag-b">在庫</span>';
     const open = r.src==='buy' ? `budMatEdit('${c.id}','${r.docId}',${r.idx})` : `budShowInv('${c.id}','${r.hid}')`;
